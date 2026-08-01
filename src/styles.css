@@ -1,0 +1,500 @@
+:root {
+  --bg: #12141c;
+  --panel: #1a1d28;
+  --panel-raised: #222635;
+  --border: #2e3346;
+  --text: #eef0f6;
+  --text-muted: #99a0b5;
+  --accent: #e8543f;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  /* The map handles its own gestures; never let the page rubber-band or
+     double-tap-zoom underneath it. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* 100dvh keeps the layout correct while mobile browser chrome hides/shows. */
+  height: 100dvh;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* Fixed height on purpose: the selection chip appears and disappears as you
+     tap around, and a header that resized would shift the map underneath it. */
+  min-height: calc(68px + env(safe-area-inset-top));
+  padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app__logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff5ee;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+
+.app__header h1 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+}
+
+.app__header p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.app__selection {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  max-width: 55%;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app__selection span {
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* --------------------------------------------------------------------- map */
+
+.app__main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.map,
+.map__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.map__canvas {
+  overflow: hidden;
+  /* Hand every gesture to our pointer handlers: no browser pan, no pinch-zoom,
+     no double-tap zoom. This is what makes the map feel native on mobile. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+  background: #0e1017;
+}
+
+.map__canvas--panning {
+  cursor: grabbing;
+}
+
+.map__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map__connector {
+  fill: none;
+  stroke: #3c4255;
+  stroke-width: 16;
+  stroke-linecap: round;
+  stroke-dasharray: 26 18;
+}
+
+.map__building {
+  fill: #171a24;
+  stroke: #333a4f;
+  /* Constant on-screen stroke weight: without this, borders thicken with the
+     zoom level and swallow the shapes they outline. */
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.map__building-label {
+  fill: #6f778f;
+  font-weight: 600;
+  /* em units so the tracking tracks the (zoom-compensated) font size. */
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.map__room {
+  cursor: pointer;
+  outline: none;
+}
+
+.map__room-shape {
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 120ms ease, filter 120ms ease;
+}
+
+.map__room:hover .map__room-shape {
+  filter: brightness(1.25);
+}
+
+.map__room--selected .map__room-shape {
+  stroke-width: 4;
+  filter: brightness(1.35);
+}
+
+.map__room:focus-visible .map__room-shape {
+  stroke: #ffffff;
+  stroke-width: 4;
+}
+
+.map__room-label,
+.map__room-sublabel {
+  /* Labels must never swallow a tap meant for the room shape underneath. */
+  pointer-events: none;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.map__room-label {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+.map__room-sublabel {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.map__controls {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map__controls button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(26, 29, 40, 0.92);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.map__controls button:active {
+  background: var(--panel-raised);
+}
+
+.map__zoom-readout {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(26, 29, 40, 0.92);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ legend */
+
+.legend {
+  position: absolute;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.legend__toggle {
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(26, 29, 40, 0.92);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.legend__list {
+  margin: 0;
+  padding: 12px 14px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(26, 29, 40, 0.96);
+  font-size: 13px;
+  backdrop-filter: blur(6px);
+}
+
+.legend__list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 0;
+  white-space: nowrap;
+}
+
+.legend__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid;
+  flex: 0 0 auto;
+}
+
+/* -------------------------------------------------------------------- hint */
+
+.hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 24px);
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(26, 29, 40, 0.94);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  backdrop-filter: blur(6px);
+}
+
+.hint span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint button {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ dialog */
+
+.dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 7, 11, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  width: min(440px, 100%);
+  max-height: min(80vh, 640px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dialog__tag {
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+.dialog__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dialog__title {
+  margin: 14px 0 4px;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.dialog__location {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.dialog__description {
+  margin: 14px 0 0;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.dialog__highlights {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialog__highlights li {
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.dialog__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.button {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.button--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff5ee;
+  font-weight: 600;
+}
+
+.dialog__note {
+  margin: 16px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* Phone layout: the dialog becomes a bottom sheet. */
+@media (max-width: 560px) {
+  .dialog__backdrop {
+    place-items: end center;
+    padding: 0;
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: 84vh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .map__controls {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

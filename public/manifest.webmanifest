@@ -1,0 +1,19 @@
+{
+  "name": "Gen Con Trip",
+  "short_name": "Gen Con",
+  "description": "Interactive venue map and trip planner for Gen Con.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12141c",
+  "theme_color": "#12141c",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
