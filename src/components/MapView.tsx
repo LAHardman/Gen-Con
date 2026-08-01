@@ -1,263 +1,288 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import L from 'leaflet';
 import {
-  BUILDINGS,
   CATEGORY_STYLES,
-  CONNECTORS,
-  PRIMARY_AREA,
+  CONNECTIONS,
   ROOMS,
   ROOMS_BY_ID,
-  WORLD_HEIGHT,
-  WORLD_WIDTH,
+  VENUES,
+  VENUES_BY_ID,
+  roomBounds,
+  venueBounds,
   type Room,
-} from '../data/mapData';
-import { usePanZoom, type TapInfo } from '../hooks/usePanZoom';
-import { fittingFontPx } from '../utils/text';
+} from '../data/venues';
+import { boundsCentre } from '../utils/geo';
+import { BASEMAPS, type BasemapId } from '../data/basemaps';
 
 interface Props {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string | null) => void;
   onOpenRoom: (room: Room) => void;
-  /** Set by the parent when it wants the map to frame a specific room. */
   focusRequest: { room: Room; token: number } | null;
+  basemapId: BasemapId;
+  /** Rooms with at least one event, for the "has events" map badge. */
+  eventCounts: Map<string, number>;
+  /** Optional georeferenced floor-plan image drawn over the basemap. */
+  floorplanUrl?: string;
 }
 
-/**
- * Labels are sized in *screen* pixels, not world units, so they stay legible at
- * every zoom level instead of shrinking into noise when zoomed out and
- * ballooning when zoomed in. Each one is drawn only if it actually fits inside
- * its room at the current zoom, which is what makes the map declutter itself as
- * you zoom out.
- */
-const LABEL_MIN_PX = 11;
-const LABEL_MAX_PX = 21;
-/** Type styles, mirroring the CSS so measurement matches what gets drawn. */
-const ROOM_LABEL_TYPE = { weight: 600 };
-const ROOM_DETAIL_TYPE = { weight: 400, trackingEm: 0.06, uppercase: true };
-const BUILDING_TYPE = { weight: 600, trackingEm: 0.14, uppercase: true };
+/** Label visibility: room names only make sense once you're zoomed into a venue. */
+const ROOM_LABEL_MIN_ZOOM = 17;
 
-/** Finds the room under a tap. Uses hit-testing because pointer capture retargets events. */
-function roomIdAtPoint(clientX: number, clientY: number): string | null {
-  const element = document.elementFromPoint(clientX, clientY);
-  const owner = element?.closest('[data-room-id]');
-  return owner?.getAttribute('data-room-id') ?? null;
+function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
+  return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
 }
 
-export function MapView({ selectedRoomId, onSelectRoom, onOpenRoom, focusRequest }: Props) {
-  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+export function MapView({
+  selectedRoomId,
+  onSelectRoom,
+  onOpenRoom,
+  focusRequest,
+  basemapId,
+  eventCounts,
+  floorplanUrl,
+}: Props) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const roomLayersRef = useRef(new Map<string, L.Rectangle>());
+  const floorplanRef = useRef<L.ImageOverlay | null>(null);
 
-  const handleTap = useCallback(
-    (tap: TapInfo) => {
-      onSelectRoom(roomIdAtPoint(tap.clientX, tap.clientY));
-    },
-    [onSelectRoom],
-  );
+  // Latest callbacks, so the one-time map setup never captures a stale closure.
+  const handlers = useRef({ onSelectRoom, onOpenRoom });
+  handlers.current = { onSelectRoom, onOpenRoom };
 
-  const handleDoubleTap = useCallback(
-    (tap: TapInfo) => {
-      const roomId = roomIdAtPoint(tap.clientX, tap.clientY);
-      if (!roomId) return;
-      const room = ROOMS_BY_ID[roomId];
-      if (!room) return;
-      onSelectRoom(roomId);
-      onOpenRoom(room);
-    },
-    [onSelectRoom, onOpenRoom],
-  );
+  const allBounds = useMemo(() => {
+    const bounds = L.latLngBounds([]);
+    for (const venue of VENUES) bounds.extend(toLatLngBounds(venueBounds(venue)));
+    return bounds;
+  }, []);
 
-  const { containerRef, transform, isPanning, zoomBy, fitToView, focusOnRect, handlers } =
-    usePanZoom({
-      worldWidth: WORLD_WIDTH,
-      worldHeight: WORLD_HEIGHT,
-      primaryArea: PRIMARY_AREA,
-      onTap: handleTap,
-      onDoubleTap: handleDoubleTap,
+  /* ------------------------------------------------------------ map creation */
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      zoomControl: false,
+      attributionControl: true,
+      // Double-click is reserved for opening room details, so it must not zoom.
+      doubleClickZoom: false,
+      // Leaflet's own gesture handling covers all three platforms: drag to pan,
+      // wheel to zoom on desktop, pinch to zoom on touch.
+      dragging: true,
+      scrollWheelZoom: true,
+      touchZoom: true,
+      maxZoom: 21,
+      minZoom: 13,
     });
 
-  // The parent bumps `token` each time it wants a fresh framing, so repeated
-  // requests for the same room still take effect.
-  const focusToken = focusRequest?.token ?? null;
-  const focusRoom = focusRequest?.room ?? null;
+    map.fitBounds(allBounds, { padding: [40, 40] });
+    map.on('click', () => handlers.current.onSelectRoom(null));
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.scale({ position: 'bottomleft', imperial: true, metric: true }).addTo(map);
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      roomLayersRef.current.clear();
+    };
+  }, [allBounds]);
+
+  /* --------------------------------------------------------------- basemap */
   useEffect(() => {
-    if (!focusRoom) return;
-    focusOnRect(focusRoom);
-    // `focusToken` is the trigger; the room is read at fire time.
+    const map = mapRef.current;
+    if (!map) return;
+
+    const basemap = BASEMAPS[basemapId] ?? BASEMAPS.dark;
+    tileLayerRef.current?.remove();
+    const layer = L.tileLayer(basemap.url, {
+      attribution: basemap.attribution,
+      maxZoom: 21,
+      // Real tiles usually stop around z19–20; keep zooming by upscaling the
+      // last real tile rather than showing blank squares.
+      maxNativeZoom: basemap.maxNativeZoom,
+      subdomains: basemap.subdomains ?? 'abc',
+      className: basemap.filtered ? 'map__tiles map__tiles--filtered' : 'map__tiles',
+    });
+    layer.addTo(map);
+    layer.bringToBack();
+    tileLayerRef.current = layer;
+  }, [basemapId]);
+
+  /* ------------------------------------------------- optional floor-plan image */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    floorplanRef.current?.remove();
+    floorplanRef.current = null;
+    if (!floorplanUrl) return;
+
+    const overlay = L.imageOverlay(floorplanUrl, toLatLngBounds(venueBounds(VENUES_BY_ID.icc)), {
+      opacity: 0.85,
+      interactive: false,
+      className: 'map__floorplan',
+    });
+    overlay.addTo(map);
+    floorplanRef.current = overlay;
+  }, [floorplanUrl]);
+
+  /* ------------------------------------------------------- venues and rooms */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const layers: L.Layer[] = [];
+
+    // Skywalk links between venues, drawn under everything else.
+    for (const link of CONNECTIONS) {
+      const from = VENUES_BY_ID[link.from];
+      const to = VENUES_BY_ID[link.to];
+      if (!from || !to) continue;
+      const a = boundsCentre(venueBounds(from));
+      const b = boundsCentre(venueBounds(to));
+      const line = L.polyline(
+        [
+          [a.lat, a.lng],
+          [b.lat, b.lng],
+        ],
+        { className: 'map__link', interactive: false },
+      );
+      line.addTo(map);
+      layers.push(line);
+    }
+
+    // Venue outlines.
+    for (const venue of VENUES) {
+      const outline = L.rectangle(toLatLngBounds(venueBounds(venue)), {
+        className: 'map__venue',
+        interactive: false,
+      });
+      outline.addTo(map);
+      layers.push(outline);
+
+      // Anchor the name to the top edge rather than binding it to the rectangle:
+      // a tooltip bound to a shape hangs off its centre, which drops the label
+      // into the middle of the building on top of its own rooms.
+      const [nw, se] = venueBounds(venue);
+      const label = L.tooltip({
+        permanent: true,
+        direction: 'top',
+        className: 'map__venue-label',
+        offset: [0, -4],
+      })
+        .setLatLng([nw.lat, (nw.lng + se.lng) / 2])
+        .setContent(venue.shortName ?? venue.name);
+      label.addTo(map);
+      layers.push(label);
+    }
+
+    // Rooms.
+    for (const room of ROOMS) {
+      const style = CATEGORY_STYLES[room.category];
+      const rectangle = L.rectangle(toLatLngBounds(roomBounds(room)), {
+        className: 'map__room',
+        color: style.stroke,
+        fillColor: style.fill,
+        fillOpacity: 0.55,
+        weight: 2,
+      });
+
+      rectangle.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        handlers.current.onSelectRoom(room.id);
+      });
+      rectangle.on('dblclick', (event) => {
+        L.DomEvent.stopPropagation(event);
+        handlers.current.onSelectRoom(room.id);
+        handlers.current.onOpenRoom(room);
+      });
+
+      rectangle.addTo(map);
+      layers.push(rectangle);
+      roomLayersRef.current.set(room.id, rectangle);
+    }
+
+    return () => {
+      for (const layer of layers) layer.remove();
+      roomLayersRef.current.clear();
+    };
+  }, []);
+
+  /* ----------------------------------------------- labels, counts, selection */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const applyLabels = () => {
+      const showLabels = map.getZoom() >= ROOM_LABEL_MIN_ZOOM;
+      for (const room of ROOMS) {
+        const layer = roomLayersRef.current.get(room.id);
+        if (!layer) continue;
+
+        layer.unbindTooltip();
+        if (!showLabels) continue;
+
+        const count = eventCounts.get(room.id) ?? 0;
+        const label = room.shortName ?? room.name;
+        layer.bindTooltip(
+          count > 0
+            ? `<span class="map__room-name">${label}</span><span class="map__room-count">${count}</span>`
+            : `<span class="map__room-name">${label}</span>`,
+          {
+            permanent: true,
+            direction: 'center',
+            className: 'map__room-label',
+            opacity: 1,
+          },
+        );
+      }
+    };
+
+    applyLabels();
+    map.on('zoomend', applyLabels);
+    return () => {
+      map.off('zoomend', applyLabels);
+    };
+  }, [eventCounts]);
+
+  useEffect(() => {
+    for (const [roomId, layer] of roomLayersRef.current) {
+      const element = layer.getElement();
+      element?.classList.toggle('map__room--selected', roomId === selectedRoomId);
+    }
+  }, [selectedRoomId]);
+
+  /* -------------------------------------------------------- focus requests */
+  const focusToken = focusRequest?.token ?? null;
+  useEffect(() => {
+    const map = mapRef.current;
+    const room = focusRequest?.room;
+    if (!map || !room) return;
+    map.flyToBounds(toLatLngBounds(roomBounds(room)), { padding: [80, 80], maxZoom: 20 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusToken]);
-
-  const { k } = transform;
 
   return (
     <div className="map">
       <div
         ref={containerRef}
-        className={`map__canvas${isPanning ? ' map__canvas--panning' : ''}`}
+        className="map__canvas"
         role="application"
         aria-label="Gen Con venue map. Drag to pan, scroll or pinch to zoom, double-click a room for details."
-        {...handlers}
+      />
+      <button
+        type="button"
+        className="map__fit"
+        onClick={() => mapRef.current?.fitBounds(allBounds, { padding: [40, 40] })}
       >
-        <svg className="map__svg" aria-hidden="false">
-          <defs>
-            <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
-              <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#1c1f2b" strokeWidth="1" />
-            </pattern>
-          </defs>
-
-          <g transform={`translate(${transform.x} ${transform.y}) scale(${k})`}>
-            <rect
-              x={-WORLD_WIDTH}
-              y={-WORLD_HEIGHT}
-              width={WORLD_WIDTH * 3}
-              height={WORLD_HEIGHT * 3}
-              fill="url(#grid)"
-            />
-
-            {CONNECTORS.map((connector) => (
-              <polyline
-                key={connector.id}
-                className="map__connector"
-                points={connector.points.map(([x, y]) => `${x},${y}`).join(' ')}
-              >
-                <title>{connector.label}</title>
-              </polyline>
-            ))}
-
-            {BUILDINGS.map((building) => {
-              // Buildings sit shoulder to shoulder, so a label that overflows
-              // its own footprint runs straight into its neighbour's.
-              const namePx = Math.min(
-                12,
-                fittingFontPx(building.name, building.width * k - 24, BUILDING_TYPE),
-              );
-              const showName = namePx >= 9;
-              return (
-                <g key={building.id}>
-                  <rect
-                    className="map__building"
-                    x={building.x}
-                    y={building.y}
-                    width={building.width}
-                    height={building.height}
-                    rx={building.radius ?? 16}
-                  />
-                  {showName && (
-                    <text
-                      className="map__building-label"
-                      x={building.x + 12 / k}
-                      y={building.y - 9 / k}
-                      fontSize={namePx / k}
-                    >
-                      {building.name}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-
-            {ROOMS.map((room) => {
-              const style = CATEGORY_STYLES[room.category];
-              const isSelected = room.id === selectedRoomId;
-              const isHovered = room.id === hoveredRoomId;
-              const screenWidth = room.width * k;
-              const screenHeight = room.height * k;
-              const centerX = room.x + room.width / 2;
-              const centerY = room.y + room.height / 2;
-
-              // Bigger rooms carry bigger type, within a range that stays
-              // readable and never dominates the shape. A label too wide for its
-              // room shrinks to fit first and is only dropped once shrinking
-              // would make it illegible.
-              const label = room.shortName ?? room.name;
-              const available = screenWidth - 10;
-              const labelPx = Math.min(
-                LABEL_MAX_PX,
-                Math.max(LABEL_MIN_PX, screenWidth / 9),
-                fittingFontPx(label, available, ROOM_LABEL_TYPE),
-              );
-              const detailPx = Math.min(
-                labelPx * 0.7,
-                fittingFontPx(style.label, available, ROOM_DETAIL_TYPE),
-              );
-              const showLabel = labelPx >= LABEL_MIN_PX && screenHeight >= labelPx * 1.6;
-              const showDetail =
-                showLabel && detailPx >= 9 && screenHeight >= (labelPx + detailPx) * 1.9;
-
-              // Divide by the map scale to convert a screen size back to world
-              // units, cancelling out the parent <g>'s scale().
-              const labelSize = labelPx / k;
-              const detailSize = detailPx / k;
-
-              return (
-                <g
-                  key={room.id}
-                  data-room-id={room.id}
-                  className={`map__room${isSelected ? ' map__room--selected' : ''}`}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`${room.name}, ${style.label}`}
-                  onMouseEnter={() => setHoveredRoomId(room.id)}
-                  onMouseLeave={() => setHoveredRoomId((id) => (id === room.id ? null : id))}
-                  onFocus={() => onSelectRoom(room.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onSelectRoom(room.id);
-                      onOpenRoom(room);
-                    }
-                  }}
-                >
-                  <rect
-                    className="map__room-shape"
-                    x={room.x}
-                    y={room.y}
-                    width={room.width}
-                    height={room.height}
-                    rx={10}
-                    fill={style.fill}
-                    stroke={isSelected || isHovered ? '#f2f4f8' : style.stroke}
-                  />
-                  {showLabel && (
-                    <text
-                      className="map__room-label"
-                      x={centerX}
-                      y={showDetail ? centerY - detailSize * 0.7 : centerY}
-                      fontSize={labelSize}
-                    >
-                      {label}
-                    </text>
-                  )}
-                  {showDetail && (
-                    <text
-                      className="map__room-sublabel"
-                      x={centerX}
-                      y={centerY + labelSize * 0.85}
-                      fontSize={detailSize}
-                      fill={style.stroke}
-                    >
-                      {style.label}
-                    </text>
-                  )}
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-      </div>
-
-      <div className="map__controls">
-        <button type="button" onClick={() => zoomBy(1.4)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => zoomBy(1 / 1.4)} aria-label="Zoom out">
-          &minus;
-        </button>
-        <button type="button" onClick={fitToView} aria-label="Fit map to screen" title="Fit to screen">
-          ⤢
-        </button>
-      </div>
-
-      <div className="map__zoom-readout" aria-live="off">
-        {Math.round(k * 100)}%
-      </div>
+        Fit all venues
+      </button>
     </div>
   );
 }
+
+export { ROOMS_BY_ID };

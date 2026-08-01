@@ -1,99 +1,152 @@
 # Gen Con Trip
 
-A trip planner for the Gen Con convention. This first cut is the venue map:
-an interactive floor plan you can pan and zoom, with a detail pop-up for every
-room.
+A trip planner for the Gen Con convention: a real map of downtown Indianapolis
+with the convention venues on it, and the event schedule attached to the rooms
+those events happen in. Double-click a room to see what's on there and when.
 
 ## Running it
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run events:sample   # placeholder schedule so the UI has data (optional)
+npm run dev             # http://localhost:5173
 ```
-
-Other scripts:
 
 | Command | What it does |
 | --- | --- |
+| `npm run dev` | Dev server, bound to all interfaces so you can open it on a phone |
 | `npm run build` | Type-checks, then builds to `dist/` |
-| `npm run preview` | Serves the production build locally |
-| `npm run typecheck` | Type-check only |
+| `npm run preview` | Serves the production build |
+| `npm run fetch:events` | Imports the real schedule from the event database |
+| `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
+| `npm run events:sample` | Writes an obviously-fake schedule for offline development |
 
-`npm run dev` binds to all interfaces, so you can open the printed network URL
-on a phone on the same Wi-Fi to test touch gestures on real hardware.
+One web app covers iOS, Android and desktop, and installs to the home screen or
+dock via its web app manifest. If it ever needs app-store distribution or native
+APIs, the same codebase wraps with Capacitor.
 
-## Cross-platform approach
+## The map
 
-It's one web app, not three native ones. That covers iOS, Android, desktop
-browsers, and — because it ships a web app manifest — installs to the home
-screen or dock as a standalone app with no browser chrome. If this later needs
-app-store distribution or native APIs (offline event data, push notifications
-for ticket drops), the same codebase can be wrapped with Capacitor without a
-rewrite.
-
-## Map interactions
+The basemap is real: live tiles of downtown Indianapolis, with real streets and
+buildings, rendered through [Leaflet](https://leafletjs.com/). Three key-free
+providers are wired up (CARTO dark, CARTO light, OpenStreetMap standard) and
+switchable from the header. Each carries the attribution its terms require —
+Leaflet renders it in the corner, and it must not be removed.
 
 | Gesture | Result |
 | --- | --- |
 | Drag / one-finger drag | Pan |
-| Scroll wheel or trackpad | Zoom, anchored at the cursor |
-| Pinch | Zoom, anchored at the midpoint between the fingers |
-| Two-finger drag | Pan while pinching |
-| Double-click / double-tap a room | Open its info pop-up |
-| Single click / tap a room | Select it (shown in the header) |
-| Tab + Enter | Keyboard equivalent of selecting and opening a room |
+| Scroll wheel or trackpad | Zoom |
+| Pinch | Zoom |
+| Double-click / double-tap a room | Open its details and schedule |
+| Single click / tap a room | Select it |
 
-Everything runs through Pointer Events, so mouse, touch and pen share one code
-path rather than three. The map surface sets `touch-action: none`, which hands
-every gesture to the app — that's what stops mobile browsers from page-zooming
-or double-tap-zooming on top of the map's own gestures.
+Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
+reserved for opening room details.
 
-A few details worth knowing if you touch this code:
+### How venues are positioned
 
-- **Gestures are tracked in client (viewport) coordinates, not
-  container-relative ones.** Surrounding layout can shift mid-gesture — a
-  toolbar appearing, mobile browser chrome collapsing — and a container-relative
-  delta would silently absorb that shift and jump the map.
-- **The transform is applied to an SVG `<g>`, not a CSS transform on a div.**
-  Shapes stay vector-crisp at every zoom level instead of being rasterised and
-  scaled.
-- **Labels are sized in screen pixels and measured, not estimated.** A label too
-  wide for its room shrinks to fit, and is dropped only when shrinking would
-  make it illegible — which is what makes the map declutter itself as you zoom
-  out. `src/utils/text.ts` measures text with a canvas context rather than
-  guessing from a characters-per-em ratio, because guessing makes labels spill
-  over their shapes and collide.
-- **Strokes use `vector-effect: non-scaling-stroke`,** so borders don't thicken
-  with the zoom level and swallow the shapes they outline.
+Each venue in `src/data/venues.ts` carries an `anchor`: the real latitude and
+longitude of its north-west corner, plus its real size in metres. Its rooms are
+authored in a simple local grid and projected onto the map from that anchor
+(`src/utils/geo.ts`). Moving or resizing a venue moves everything inside it, so
+correcting the map is a change to one anchor rather than to every room.
+
+**Accuracy, stated plainly:** the basemap is real, and the venues are at
+approximately the right real-world coordinates. The **interior room layout is a
+schematic arrangement within each building's footprint, not a surveyed floor
+plan** — halls are in the right building and the right general part of it, but
+not at surveyed positions. The app says so in every room pop-up.
+
+To make the footprints exact, replace the `anchor` values with real coordinates
+(read them off OpenStreetMap, or from an official floor plan). Nothing else has
+to change.
+
+### Overlaying an official floor plan
+
+If you have an official floor-plan image, it can be drawn over the real map:
+
+```bash
+# put the image in public/, then:
+VITE_FLOORPLAN_URL=./icc-floorplan.png npm run dev
+```
+
+It is stretched to the convention centre's anchor bounds, so how well it lines
+up depends on the anchor being right. This is the path to a genuinely exact
+interior map.
+
+## Event schedule
+
+Events come from the third-party [Gen Con event database](https://gencon.eventdb.us/).
+`npm run fetch:events` pulls them into `public/events.json`; the app loads that
+file and attaches each event to a room on the map.
+
+The app reads a generated file rather than calling the site directly for two
+reasons: a browser can't fetch it cross-origin, and a local file keeps the
+schedule working when convention centre Wi-Fi doesn't.
+
+### Matching events to rooms
+
+`src/data/events.ts` resolves each event's location text to a room. Every room
+matches on its own name, its short name, and any `aliases` listed in
+`src/data/venues.ts`. Matching is token-aware (so `201` doesn't match `2010`)
+and prefers the longest match, so `Exhibit Hall J` beats a bare `Hall`.
+
+When the real feed uses names the map doesn't recognise, the app logs them to
+the browser console on load:
+
+```
+[gen-con] 412 of 8000 events did not match a room on the map.
+Unrecognised locations (17): Crowne Plaza : Victoria Station C | ICC : Hall E ...
+```
+
+Add those strings to the relevant room's `aliases` and they'll resolve. This is
+the intended tuning loop — the alias lists shipped today are a first guess.
+
+### ⚠️ The importer has not been run against the live site
+
+The environment this was built in blocks all outbound network access except
+package registries, so `gencon.eventdb.us` was unreachable — the importer's
+parsing has **never executed against the real pages**. It is written to be
+generic rather than to guess at markup: it probes for a JSON export first, and
+otherwise finds the largest table on the page and maps columns by matching their
+header text (`scripts/lib/parse-events.mjs`), so it does not depend on any class
+name or DOM path.
+
+If an import comes back empty, this prints the page structure it actually found —
+tables, headers, row counts, links, filters, and which structured endpoints
+responded:
+
+```bash
+npm run fetch:events -- --inspect
+```
+
+Then adjust `COLUMN_PATTERNS` in `scripts/lib/parse-events.mjs` to match the real
+column headings. The importer rate-limits itself (700 ms between pages by
+default, `--delay` to change) and identifies itself in its user agent.
 
 ## Layout
 
 ```
 src/
-  data/mapData.ts        Rooms, buildings, connectors, categories — all map content
-  hooks/usePanZoom.ts    Pan/zoom/tap gesture handling
+  data/
+    venues.ts        Venues, anchors, rooms, categories, aliases
+    events.ts        Event types, room matching, schedule helpers
+    basemaps.ts      Tile providers and their attribution
+  hooks/useEventFeed.ts   Loads public/events.json
+  utils/geo.ts       Local-grid ↔ latitude/longitude projection
   components/
-    MapView.tsx          SVG rendering and hit-testing
-    RoomDialog.tsx       Room detail pop-up (bottom sheet on phones)
-    Legend.tsx           Category key
-  utils/text.ts          Text measurement for label fitting
-  App.tsx                Shell: header, selection state, hint
+    MapView.tsx      Leaflet map, venue/room layers, labels
+    RoomDialog.tsx   Room details and its schedule
+    Legend.tsx       Category key
+scripts/
+  fetch-events.mjs         Imports the real schedule
+  lib/parse-events.mjs     Generic listing-page parsing
+  make-sample-events.mjs   Fake schedule for offline development
 ```
-
-Everything the map draws comes from `src/data/mapData.ts`, in an abstract
-"world" coordinate space. Adding a room, correcting a position, or swapping in a
-different venue entirely is a data change, not a code change.
-
-## About the map data
-
-**The layout is a schematic approximation, not an official floor plan.** It
-captures how the venues relate to each other — which halls sit next to which,
-what connects to what by skywalk — at a level of detail useful for "where am I
-going next?" It is not surveyed geometry, and room assignments change every
-year. Check the official Gen Con program for exact rooms and events.
 
 ## Not built yet
 
-The map is step one. The natural next pieces for trip planning: a personal event
-schedule, search across rooms and events, walking times between venues, and
-offline support so the map works when the convention centre Wi-Fi doesn't.
+A personal schedule of the events you've got tickets for; search across events;
+walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
+for it); and offline caching of tiles so the map works without signal.

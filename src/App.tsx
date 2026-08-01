@@ -1,39 +1,65 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
-import { ROOMS_BY_ID, type Room } from './data/mapData';
+import { ROOMS_BY_ID, type Room } from './data/venues';
+import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
+import { useEventFeed } from './hooks/useEventFeed';
+import { isHappeningAt } from './data/events';
 
-const HINT_DISMISSED_KEY = 'genCon.hintDismissed';
-
-/** Coarse pointers (touch) get the pinch/tap wording, everything else mouse wording. */
-function usesTouch() {
-  return typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-}
+const SOURCE_URL = 'https://gencon.eventdb.us/';
+const BASEMAP_KEY = 'genCon.basemap';
+/** Optional: drop an official floor-plan image here and it overlays the ICC. */
+const FLOORPLAN_URL = import.meta.env.VITE_FLOORPLAN_URL as string | undefined;
 
 export default function App() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
-  const [hintVisible, setHintVisible] = useState(false);
+  const [basemapId, setBasemapId] = useState<BasemapId>('dark');
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const { status, feed, index } = useEventFeed();
 
   useEffect(() => {
     try {
-      setHintVisible(window.localStorage.getItem(HINT_DISMISSED_KEY) !== '1');
+      const stored = window.localStorage.getItem(BASEMAP_KEY);
+      if (stored && stored in BASEMAPS) setBasemapId(stored as BasemapId);
     } catch {
-      // Private browsing can block storage; showing the hint is the safe default.
-      setHintVisible(true);
+      // Storage can be blocked; the default basemap is fine.
     }
   }, []);
 
-  const dismissHint = useCallback(() => {
-    setHintVisible(false);
+  // Keep "on now" honest without re-rendering constantly.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const chooseBasemap = useCallback((id: BasemapId) => {
+    setBasemapId(id);
     try {
-      window.localStorage.setItem(HINT_DISMISSED_KEY, '1');
+      window.localStorage.setItem(BASEMAP_KEY, id);
     } catch {
-      // Non-fatal: the hint simply returns next visit.
+      // Non-fatal.
     }
   }, []);
+
+  const eventCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!index) return counts;
+    for (const [roomId, events] of index.byRoom) counts.set(roomId, events.length);
+    return counts;
+  }, [index]);
+
+  const liveCount = useMemo(() => {
+    if (!index) return 0;
+    let total = 0;
+    for (const events of index.byRoom.values()) {
+      total += events.filter((event) => isHappeningAt(event, nowMs)).length;
+    }
+    return total;
+  }, [index, nowMs]);
 
   const handleZoomToRoom = useCallback((room: Room) => {
     setFocusRequest({ room, token: Date.now() });
@@ -41,6 +67,7 @@ export default function App() {
   }, []);
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+  const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
 
   return (
     <div className="app">
@@ -51,19 +78,43 @@ export default function App() {
           </span>
           <div>
             <h1>Gen Con Trip</h1>
-            <p>Venue map</p>
+            <p>
+              {status === 'ready' && index
+                ? `${index.total.toLocaleString()} events${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
+                : status === 'absent'
+                  ? 'Venue map · no event data'
+                  : status === 'error'
+                    ? 'Venue map · event data failed to load'
+                    : 'Venue map'}
+            </p>
           </div>
         </div>
-        {selectedRoom && (
-          <button
-            type="button"
-            className="app__selection"
-            onClick={() => setOpenRoom(selectedRoom)}
-          >
-            {selectedRoom.name}
-            <span>Details</span>
-          </button>
-        )}
+
+        <div className="app__tools">
+          <div className="app__basemaps" role="group" aria-label="Basemap style">
+            {BASEMAP_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`app__basemap${id === basemapId ? ' app__basemap--active' : ''}`}
+                aria-pressed={id === basemapId}
+                onClick={() => chooseBasemap(id)}
+              >
+                {BASEMAPS[id].label}
+              </button>
+            ))}
+          </div>
+          {selectedRoom && (
+            <button
+              type="button"
+              className="app__selection"
+              onClick={() => setOpenRoom(selectedRoom)}
+            >
+              {selectedRoom.shortName ?? selectedRoom.name}
+              <span>Details</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="app__main">
@@ -72,26 +123,20 @@ export default function App() {
           onSelectRoom={setSelectedRoomId}
           onOpenRoom={setOpenRoom}
           focusRequest={focusRequest}
+          basemapId={basemapId}
+          eventCounts={eventCounts}
+          floorplanUrl={FLOORPLAN_URL}
         />
         <Legend />
-
-        {hintVisible && (
-          <div className="hint" role="note">
-            <span>
-              {usesTouch()
-                ? 'Drag to pan · pinch to zoom · double-tap a room for details'
-                : 'Drag to pan · scroll wheel to zoom · double-click a room for details'}
-            </span>
-            <button type="button" onClick={dismissHint} aria-label="Dismiss hint">
-              ✕
-            </button>
-          </div>
-        )}
       </main>
 
       {openRoom && (
         <RoomDialog
           room={openRoom}
+          events={openRoomEvents}
+          feedStatus={status}
+          sourceUrl={feed?.source.url ?? SOURCE_URL}
+          nowMs={nowMs}
           onClose={() => setOpenRoom(null)}
           onZoomToRoom={handleZoomToRoom}
         />

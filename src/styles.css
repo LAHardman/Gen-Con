@@ -56,6 +56,10 @@ body {
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
+  /* Leaflet's panes sit at z-index 400 and its controls at 800; anything of
+     ours that must stay above the map needs to clear those. */
+  position: relative;
+  z-index: 1000;
 }
 
 .app__brand {
@@ -92,12 +96,46 @@ body {
   color: var(--text-muted);
 }
 
+.app__tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app__basemaps {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.app__basemap {
+  padding: 7px 11px;
+  border: 0;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app__basemap + .app__basemap {
+  border-left: 1px solid var(--border);
+}
+
+.app__basemap--active {
+  background: var(--accent);
+  color: #fff5ee;
+  font-weight: 600;
+}
+
 .app__selection {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  max-width: 55%;
+  max-width: 220px;
   padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -134,136 +172,152 @@ body {
 }
 
 .map__canvas {
-  overflow: hidden;
-  /* Hand every gesture to our pointer handlers: no browser pan, no pinch-zoom,
-     no double-tap zoom. This is what makes the map feel native on mobile. */
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  cursor: grab;
   background: #0e1017;
+  /* Leaflet handles the gestures; this stops the page itself from panning or
+     double-tap-zooming underneath the map on touch devices. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.map__canvas--panning {
-  cursor: grabbing;
+/* Tiles ------------------------------------------------------------------ */
+
+.map__tiles--filtered {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
 }
 
-.map__svg {
-  display: block;
-  width: 100%;
-  height: 100%;
+.map__floorplan {
+  /* Official floor plans are printed on white; blend them into the dark map. */
+  mix-blend-mode: screen;
 }
 
-.map__connector {
+/* Venue and room geometry ------------------------------------------------ */
+
+.map__link {
+  stroke: #4c5470;
+  stroke-width: 3;
+  stroke-dasharray: 7 7;
   fill: none;
-  stroke: #3c4255;
-  stroke-width: 16;
-  stroke-linecap: round;
-  stroke-dasharray: 26 18;
 }
 
-.map__building {
-  fill: #171a24;
-  stroke: #333a4f;
-  /* Constant on-screen stroke weight: without this, borders thicken with the
-     zoom level and swallow the shapes they outline. */
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-}
-
-.map__building-label {
-  fill: #6f778f;
-  font-weight: 600;
-  /* em units so the tracking tracks the (zoom-compensated) font size. */
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  pointer-events: none;
+.map__venue {
+  stroke: #5d6688;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  fill: none;
 }
 
 .map__room {
   cursor: pointer;
-  outline: none;
+  transition: fill-opacity 120ms ease, stroke-width 120ms ease;
 }
 
-.map__room-shape {
-  stroke-width: 2;
-  vector-effect: non-scaling-stroke;
-  transition: stroke 120ms ease, filter 120ms ease;
+.map__room:hover {
+  fill-opacity: 0.75;
 }
 
-.map__room:hover .map__room-shape {
-  filter: brightness(1.25);
+.map__room--selected {
+  stroke: #ffffff !important;
+  stroke-width: 4 !important;
+  fill-opacity: 0.85;
 }
 
-.map__room--selected .map__room-shape {
-  stroke-width: 4;
-  filter: brightness(1.35);
-}
+/* Labels ----------------------------------------------------------------- */
 
-.map__room:focus-visible .map__room-shape {
-  stroke: #ffffff;
-  stroke-width: 4;
-}
-
-.map__room-label,
-.map__room-sublabel {
-  /* Labels must never swallow a tap meant for the room shape underneath. */
+.leaflet-tooltip.map__room-label,
+.leaflet-tooltip.map__venue-label {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  font-family: inherit;
+  white-space: nowrap;
+  /* Labels must never intercept a click meant for the room underneath. */
   pointer-events: none;
-  text-anchor: middle;
-  dominant-baseline: middle;
+}
+
+.leaflet-tooltip.map__room-label::before,
+.leaflet-tooltip.map__venue-label::before {
+  display: none;
 }
 
 .map__room-label {
-  fill: var(--text);
-  font-weight: 600;
-}
-
-.map__room-sublabel {
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-/* ---------------------------------------------------------------- controls */
-
-.map__controls {
-  position: absolute;
-  right: calc(12px + env(safe-area-inset-right));
-  bottom: calc(76px + env(safe-area-inset-bottom));
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 5px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.7);
 }
 
-.map__controls button {
-  width: 44px;
-  height: 44px;
+.map__room-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff5ee;
+  font-size: 10px;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.map__venue-label {
+  color: #aeb6cc;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.8);
+}
+
+/* Leaflet chrome --------------------------------------------------------- */
+
+.leaflet-container {
+  background: #0e1017;
+  font-family: inherit;
+}
+
+.leaflet-control-attribution {
+  background: rgba(18, 20, 28, 0.85) !important;
+  color: var(--text-muted) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #9fb4d8 !important;
+}
+
+.leaflet-bar a,
+.leaflet-control-zoom a {
+  background: rgba(26, 29, 40, 0.94) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+.leaflet-bar a:hover {
+  background: var(--panel-raised) !important;
+}
+
+.leaflet-control-scale-line {
+  background: rgba(26, 29, 40, 0.85);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.map__fit {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  padding: 8px 14px;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(26, 29, 40, 0.92);
+  border-radius: 999px;
+  background: rgba(26, 29, 40, 0.94);
   color: var(--text);
-  font-size: 20px;
-  line-height: 1;
+  font: inherit;
+  font-size: 12.5px;
   cursor: pointer;
   backdrop-filter: blur(6px);
-}
-
-.map__controls button:active {
-  background: var(--panel-raised);
-}
-
-.map__zoom-readout {
-  position: absolute;
-  right: calc(12px + env(safe-area-inset-right));
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(26, 29, 40, 0.92);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
 }
 
 /* ------------------------------------------------------------------ legend */
@@ -271,9 +325,11 @@ body {
 .legend {
   position: absolute;
   left: calc(12px + env(safe-area-inset-left));
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  top: 12px;
+  /* Above Leaflet's own panes, which climb to z-index 800. */
+  z-index: 500;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 8px;
   align-items: flex-start;
 }
@@ -317,42 +373,138 @@ body {
   flex: 0 0 auto;
 }
 
-/* -------------------------------------------------------------------- hint */
 
-.hint {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: calc(100% - 24px);
-  padding: 8px 8px 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(26, 29, 40, 0.94);
-  color: var(--text-muted);
-  font-size: 12.5px;
-  backdrop-filter: blur(6px);
+/* ---------------------------------------------------------------- schedule */
+
+.schedule {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
 }
 
-.hint span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.schedule__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.schedule h3 {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.schedule__live {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff5ee;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.schedule__empty {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.schedule__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.schedule__day {
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.schedule__day--active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.schedule__list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.schedule__item {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.schedule__item:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.schedule__item--live {
+  background: rgba(232, 84, 63, 0.14);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.schedule__item--past {
+  opacity: 0.5;
+}
+
+.schedule__time {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.hint button {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 50%;
-  background: var(--panel-raised);
+.schedule__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.schedule__body a {
+  color: var(--text);
+}
+
+.schedule__meta {
   color: var(--text-muted);
-  font-size: 11px;
-  cursor: pointer;
+  font-size: 11.5px;
+}
+
+.schedule__badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff5ee;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.schedule__source {
+  display: inline-block;
+  margin-top: 14px;
+  color: #9fb4d8;
+  font-size: 12.5px;
 }
 
 /* ------------------------------------------------------------------ dialog */
@@ -360,7 +512,8 @@ body {
 .dialog__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  /* Above Leaflet's panes (400), popups (700) and controls (800). */
+  z-index: 2000;
   display: grid;
   place-items: center;
   padding: 20px;
@@ -476,6 +629,10 @@ body {
 
 /* Phone layout: the dialog becomes a bottom sheet. */
 @media (max-width: 560px) {
+  .app__basemaps {
+    display: none;
+  }
+
   .dialog__backdrop {
     place-items: end center;
     padding: 0;

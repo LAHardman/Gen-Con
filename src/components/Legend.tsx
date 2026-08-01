@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CATEGORY_STYLES, type RoomCategory } from '../data/mapData';
+import { CATEGORY_STYLES, type RoomCategory } from '../data/venues';
 
 const ORDER: RoomCategory[] = [
   'exhibit',
