@@ -80,12 +80,21 @@ export function useEventFeed(url = './events.json'): EventFeedState {
   // match how the source actually names things.
   useEffect(() => {
     if (!index || index.unmatched.length === 0) return;
-    const names = [...new Set(index.unmatched.map((event) => event.locationText))].sort();
+    // Both halves, because the source splits them: the location names the
+    // building and the room names the space, and either one can be what the
+    // map doesn't recognise.
+    const names = [
+      ...new Set(
+        index.unmatched.map((event) =>
+          [event.locationText, event.roomText].filter(Boolean).join(' : '),
+        ),
+      ),
+    ].sort();
     console.info(
       `[gen-con] ${index.unmatched.length} of ${index.total} events did not match a room on the map. ` +
         `Unrecognised locations (${names.length}): ${names.slice(0, 25).join(' | ')}` +
         (names.length > 25 ? ' …' : '') +
-        '\nAdd these to the matching room\'s `aliases` in src/data/venues.ts.',
+        '\nAdd the building to a venue\'s `aliases`, or the room to a room\'s, in src/data/venues.ts.',
     );
   }, [index]);
 

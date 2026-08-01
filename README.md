@@ -19,6 +19,8 @@ npm run dev             # http://localhost:5173
 | `npm run preview` | Serves the production build |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
+| `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
+| `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
 
 One web app covers iOS, Android and desktop, and installs to the home screen or
@@ -46,21 +48,37 @@ reserved for opening room details.
 
 ### How venues are positioned
 
-Each venue in `src/data/venues.ts` carries an `anchor`: the real latitude and
-longitude of its north-west corner, plus its real size in metres. Its rooms are
-authored in a simple local grid and projected onto the map from that anchor
-(`src/utils/geo.ts`). Moving or resizing a venue moves everything inside it, so
-correcting the map is a change to one anchor rather than to every room.
+Every venue is drawn as its **real building footprint, surveyed in
+OpenStreetMap**. `src/data/footprints.ts` holds the outer ring of each building
+as latitude/longitude pairs, pulled from Overpass and simplified to a 2 m
+tolerance; the OSM way or relation each one came from is named in a comment
+above it. Each venue's `anchor` in `src/data/venues.ts` — the north-west corner
+and the size in metres — is the bounding box of that footprint, and rooms are
+authored in a local grid and projected from the anchor (`src/utils/geo.ts`).
 
-**Accuracy, stated plainly:** the basemap is real, and the venues are at
-approximately the right real-world coordinates. The **interior room layout is a
-schematic arrangement within each building's footprint, not a surveyed floor
-plan** — halls are in the right building and the right general part of it, but
-not at surveyed positions. The app says so in every room pop-up.
+To refresh a footprint, re-run its Overpass query and replace the ring:
 
-To make the footprints exact, replace the `anchor` values with real coordinates
-(read them off OpenStreetMap, or from an official floor plan). Nothing else has
-to change.
+```
+[out:json]; relation(9680937); out geom;     # Indiana Convention Center
+```
+
+**Accuracy, stated plainly:** the basemap is real, and so are the venue
+outlines — those are the mapped shapes of the actual buildings, not estimates.
+Buildings whose interiors the map doesn't break out (the hotels, Lucas Oil
+Stadium) are drawn as that footprint directly. What remains approximate is the
+**interior of the convention center: its room layout is a schematic arrangement
+inside the real footprint, not a surveyed floor plan** — halls are in the right
+building and the right general part of it, but not at surveyed positions. The
+app says so in every room pop-up.
+
+The convention center's grid is measured in metres, so a room's `rect` reads as
+a real distance from the building's north-west corner. Note that its footprint's
+bounding box is taller than the building: the convention center proper occupies
+the first 265 m, and the rest of the box is the thin skywalk arm running south
+to Lucas Oil. Rooms have to stay inside the part the footprint actually covers.
+
+To make the interior exact, overlay an official floor plan (below) or replace
+the room rectangles with surveyed ones. Nothing else has to change.
 
 ### Overlaying an official floor plan
 
@@ -85,45 +103,83 @@ The app reads a generated file rather than calling the site directly for two
 reasons: a browser can't fetch it cross-origin, and a local file keeps the
 schedule working when convention centre Wi-Fi doesn't.
 
+### How the source is laid out
+
+The source publishes each event in two places, and the importer reads both:
+
+| Page | What it gives | Cost |
+| --- | --- | --- |
+| `index.php` | one `category.php` link per event type | 1 request |
+| `dayTimeList.php` | the convention's days, with real dates | 1 request |
+| `categoryAll.php?EventType=…` | every event in a category: title, code, day, time, cost, tickets — **but no location** | 1 per event type |
+| `event.php?GameCode=…` | one event's full record, and the **only** page that says where it happens | 1 per event |
+
+There is no listing table anywhere on the site, and no JSON or CSV export
+(`--inspect` probes for six likely endpoints; all 404). The event page holds its
+record as a two-column table of label/value rows — `Title`, `Start Date`,
+`Location`, `Room`, `Table` — so `scripts/lib/parse-events.mjs` maps fields by
+matching those **row labels**, not by column position or DOM path. `--inspect`
+prints the labels the site is actually using and how `FIELD_PATTERNS` resolves
+each one; that is the list to adjust if the source ever renames them.
+
+The catalogue pass is cheap. The detail pass is not — roughly 27,000 requests
+for a full year — so detail pages are cached in `.cache/event-details.jsonl` and
+the crawl is resumable: only the first run pays for them. Use `--limit` to
+spread that over several runs, `--no-details` to skip locations entirely, and
+`--delay` / `--concurrency` to control how hard it leans on a hobbyist's server.
+
 ### Matching events to rooms
 
-`src/data/events.ts` resolves each event's location text to a room. Every room
-matches on its own name, its short name, and any `aliases` listed in
-`src/data/venues.ts`. Matching is token-aware (so `201` doesn't match `2010`)
-and prefers the longest match, so `Exhibit Hall J` beats a bare `Hall`.
+The source separates *where* from *what*: `Location` names the building (`ICC`,
+`JW`, `Stadium`, `Crowne Plaza`) and `Room` names the space inside it
+(`Hall B : Orange`, `Sagamaore Ballroom 3--5`, `140`). `src/data/events.ts`
+resolves them in that order — venue first, then that venue's own rooms.
 
-When the real feed uses names the map doesn't recognise, the app logs them to
-the browser console on load:
+Resolving the venue first is what keeps the JW Marriott's room 103 apart from
+the convention center's: both number their meeting rooms the same way, and a
+single flat search cannot tell them apart. Within a venue, matching is
+token-aware (so `201` doesn't match `2010`) and prefers the longest match, so
+`Exhibit Hall J` beats a bare `Hall`. A building whose interior the map doesn't
+break out resolves to its single room, so its events still land on it.
+
+`Venue.aliases` therefore holds `Location` strings and `Room.aliases` holds
+`Room` strings. Both lists are tuned to what the site actually publishes,
+including its own misspellings — it writes `Sagamaore` for the Sagamore Ballroom
+on most records, and `HIlton` for the Hilton on some.
+
+When the feed uses names the map doesn't recognise, the app logs them to the
+browser console on load:
 
 ```
 [gen-con] 412 of 8000 events did not match a room on the map.
-Unrecognised locations (17): Crowne Plaza : Victoria Station C | ICC : Hall E ...
+Unrecognised locations (17): Le Meridien : Latitude | ICC : Exhibit Hall ...
 ```
 
 Add those strings to the relevant room's `aliases` and they'll resolve. This is
-the intended tuning loop — the alias lists shipped today are a first guess.
+the intended tuning loop.
 
-### ⚠️ The importer has not been run against the live site
+### What the importer was last verified against
 
-The environment this was built in blocks all outbound network access except
-package registries, so `gencon.eventdb.us` was unreachable — the importer's
-parsing has **never executed against the real pages**. It is written to be
-generic rather than to guess at markup: it probes for a JSON export first, and
-otherwise finds the largest table on the page and maps columns by matching their
-header text (`scripts/lib/parse-events.mjs`), so it does not depend on any class
-name or DOM path.
+The importer has been run against the live site, and the aliases above were
+tuned to it. It imports the full 2026 catalogue — **27,537 events across 19
+event types**, matching the total the site itself reports — with the days and
+times it publishes.
 
-If an import comes back empty, this prints the page structure it actually found —
-tables, headers, row counts, links, filters, and which structured endpoints
-responded:
+Of a 3,000-event sample spread evenly across all 19 types, **99.4% resolved to
+a room on the map**. The source uses 16 distinct `Location` values and several
+hundred `Room` values.
+
+The stragglers are small offsite venues OpenStreetMap has no building for (Le
+Meridien, Janus Lofts) and convention-center strings that name no particular
+hall (`Exhibit Hall`, `Exhibit Hall Booth #1229`, `Georgia Street Entrance`).
+
+If an import comes back empty, `--inspect` prints the structure it actually
+found — the event types linked, the convention's days, a catalogue page's yield,
+and an event page's row labels with the field each one maps to:
 
 ```bash
 npm run fetch:events -- --inspect
 ```
-
-Then adjust `COLUMN_PATTERNS` in `scripts/lib/parse-events.mjs` to match the real
-column headings. The importer rate-limits itself (700 ms between pages by
-default, `--delay` to change) and identifies itself in its user agent.
 
 ## Layout
 
@@ -131,7 +187,8 @@ default, `--delay` to change) and identifies itself in its user agent.
 src/
   data/
     venues.ts        Venues, anchors, rooms, categories, aliases
-    events.ts        Event types, room matching, schedule helpers
+    footprints.ts    Real building outlines, from OpenStreetMap
+    events.ts        Event types, venue/room matching, schedule helpers
     basemaps.ts      Tile providers and their attribution
   hooks/useEventFeed.ts   Loads public/events.json
   utils/geo.ts       Local-grid ↔ latitude/longitude projection
@@ -140,8 +197,8 @@ src/
     RoomDialog.tsx   Room details and its schedule
     Legend.tsx       Category key
 scripts/
-  fetch-events.mjs         Imports the real schedule
-  lib/parse-events.mjs     Generic listing-page parsing
+  fetch-events.mjs         Crawls the source and imports the real schedule
+  lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
   make-sample-events.mjs   Fake schedule for offline development
 ```
 
@@ -150,3 +207,8 @@ scripts/
 A personal schedule of the events you've got tickets for; search across events;
 walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
 for it); and offline caching of tiles so the map works without signal.
+
+Lucas Oil Stadium is the one venue whose interior would be worth breaking out:
+it takes about a fifth of the schedule, and the source already separates the
+field blocks, exhibit halls 1–2, the east concourse, the club lounges and the
+numbered meeting rooms. Today they all resolve to the stadium as a whole.

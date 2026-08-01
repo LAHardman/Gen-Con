@@ -10,6 +10,7 @@ import {
   roomBounds,
   venueBounds,
   type Room,
+  type Venue,
 } from '../data/venues';
 import { boundsCentre } from '../utils/geo';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
@@ -33,6 +34,11 @@ function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
   return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
 }
 
+/** OSM footprint rings are already [latitude, longitude], which is Leaflet's order. */
+function toLatLngs(footprint: Venue['footprint']) {
+  return footprint.map(([lat, lng]) => L.latLng(lat, lng));
+}
+
 export function MapView({
   selectedRoomId,
   onSelectRoom,
@@ -45,7 +51,8 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const roomLayersRef = useRef(new Map<string, L.Rectangle>());
+  // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
+  const roomLayersRef = useRef(new Map<string, L.Path>());
   const floorplanRef = useRef<L.ImageOverlay | null>(null);
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
@@ -155,16 +162,16 @@ export function MapView({
       layers.push(line);
     }
 
-    // Venue outlines.
+    // Venue outlines: the real building footprints, straight from OpenStreetMap.
     for (const venue of VENUES) {
-      const outline = L.rectangle(toLatLngBounds(venueBounds(venue)), {
+      const outline = L.polygon(toLatLngs(venue.footprint), {
         className: 'map__venue',
         interactive: false,
       });
       outline.addTo(map);
       layers.push(outline);
 
-      // Anchor the name to the top edge rather than binding it to the rectangle:
+      // Anchor the name to the top edge rather than binding it to the outline:
       // a tooltip bound to a shape hangs off its centre, which drops the label
       // into the middle of the building on top of its own rooms.
       const [nw, se] = venueBounds(venue);
@@ -180,30 +187,34 @@ export function MapView({
       layers.push(label);
     }
 
-    // Rooms.
+    // Rooms. A room that is its whole venue takes the building's real outline;
+    // the rest are rectangles in the venue's schematic interior grid.
     for (const room of ROOMS) {
       const style = CATEGORY_STYLES[room.category];
-      const rectangle = L.rectangle(toLatLngBounds(roomBounds(room)), {
+      const shape: L.PathOptions = {
         className: 'map__room',
         color: style.stroke,
         fillColor: style.fill,
         fillOpacity: 0.55,
         weight: 2,
-      });
+      };
+      const shapeLayer = room.fillsVenue
+        ? L.polygon(toLatLngs(VENUES_BY_ID[room.venueId].footprint), shape)
+        : L.rectangle(toLatLngBounds(roomBounds(room)), shape);
 
-      rectangle.on('click', (event) => {
+      shapeLayer.on('click', (event) => {
         L.DomEvent.stopPropagation(event);
         handlers.current.onSelectRoom(room.id);
       });
-      rectangle.on('dblclick', (event) => {
+      shapeLayer.on('dblclick', (event) => {
         L.DomEvent.stopPropagation(event);
         handlers.current.onSelectRoom(room.id);
         handlers.current.onOpenRoom(room);
       });
 
-      rectangle.addTo(map);
-      layers.push(rectangle);
-      roomLayersRef.current.set(room.id, rectangle);
+      shapeLayer.addTo(map);
+      layers.push(shapeLayer);
+      roomLayersRef.current.set(room.id, shapeLayer);
     }
 
     return () => {
