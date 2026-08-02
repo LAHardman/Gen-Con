@@ -1,0 +1,98 @@
+# Publishes the app to GitHub Pages, so it can be opened and installed on a
+# phone without anyone running a dev server.
+#
+# One-time setup: repository Settings → Pages → Build and deployment →
+# Source: "GitHub Actions". After that this runs itself.
+#
+# GitHub Pages only serves private repositories on a paid plan. On the free
+# plan the repository has to be public for this to work — see README.md, which
+# also lists the hosts that build a private repository for free.
+#
+# The schedule is imported here rather than committed, so the repository stays
+# free of a large generated file and the published site refreshes on its own.
+# Event detail pages are cached between runs, so only the first run pays the
+# full cost of fetching them.
+
+name: Deploy to GitHub Pages
+
+on:
+  # Any branch may be pushed; the build below only proceeds for the default
+  # one, whatever it happens to be called in this repository.
+  push:
+  # Refresh the schedule without pushing anything.
+  workflow_dispatch:
+    inputs:
+      event_pages:
+        description: 'Event pages to fetch this run (locations come from these)'
+        default: '4000'
+  # Weekly top-up. Cheap once the cache is warm: only events the cache has
+  # never seen are fetched.
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer push win, but don't cancel a deploy
+# that is already publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name != 'push' ||
+      github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Restore the event-page cache from whichever earlier run saved it last.
+      - name: Restore imported event pages
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache
+          key: event-details-${{ github.run_id }}
+          restore-keys: event-details-
+
+      # The source is one person's hobby site, so this is bounded and polite:
+      # a capped number of pages per run, spaced out, resuming from the cache.
+      # A failure here is not fatal — the app treats a missing schedule as a
+      # normal state and still works as a map.
+      - name: Import the schedule
+        continue-on-error: true
+        run: npm run fetch:events -- --limit ${{ inputs.event_pages || 4000 }} --delay 200
+
+      - name: Save imported event pages
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache
+          key: event-details-${{ github.run_id }}
+
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
