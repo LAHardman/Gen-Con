@@ -469,6 +469,9 @@ are; the arrangement is right in all of them, but the coordinates are still
 authored rather than read. Lucas Oil needs something else again: a plan that
 names its spaces, which none of the three published for it does.
 
-The convention centre itself is only mapped on levels 1 and 2, because those
-are the two sheets in `plans/`. Gen Con's own map offers levels B, 3 and 4 as
-well, so there are floors of that building the map has no rooms for at all.
+The convention centre needs no more floors: levels 1 and 2 are the two sheets
+in `plans/` and they are the whole of it. Gen Con's own map offers B, 1, 2, 3
+and 4, but those number the *event levels of the campus* rather than the floors
+of any one building — its level 3 is the JW's 3rd floor, the Hyatt's 3rd, the
+Embassy Suites' 5th and the Hilton's 9th all at once. Nothing of the convention
+centre is on them.
