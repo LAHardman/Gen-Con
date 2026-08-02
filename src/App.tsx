@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FloorPicker } from './components/FloorPicker';
 import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
-import { ROOMS_BY_ID, type Room } from './data/venues';
+import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
 import { isHappeningAt } from './data/events';
@@ -18,6 +19,10 @@ export default function App() {
   const [basemapId, setBasemapId] = useState<BasemapId>('dark');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showAmenities, setShowAmenities] = useState(true);
+  // The floor each building is showing, and the building the map is looking at.
+  // Only buildings moved off the floor they open on appear here.
+  const [levels, setLevels] = useState<Record<string, string>>({});
+  const [venueInView, setVenueInView] = useState<string | null>(null);
 
   const { status, feed, index } = useEventFeed();
 
@@ -61,6 +66,34 @@ export default function App() {
     return total;
   }, [index, nowMs]);
 
+  // Going to a room means going to its floor, however you got there: the room
+  // is on the 3rd and drawing it over the 1st would put it in the wrong
+  // building's worth of walls.
+  const showRoomsFloor = useCallback((room: Room) => {
+    setLevels((current) =>
+      current[room.venueId] === room.level ? current : { ...current, [room.venueId]: room.level },
+    );
+  }, []);
+
+  const handleSelectRoom = useCallback(
+    (roomId: string | null) => {
+      setSelectedRoomId(roomId);
+      const room = roomId ? ROOMS_BY_ID[roomId] : undefined;
+      if (room) showRoomsFloor(room);
+    },
+    [showRoomsFloor],
+  );
+
+  // Changing floor under a selected room leaves it a storey away and no longer
+  // drawn, so the selection goes with it.
+  const handlePickFloor = useCallback((venueId: string, level: string) => {
+    setLevels((current) => ({ ...current, [venueId]: level }));
+    setSelectedRoomId((current) => {
+      const room = current ? ROOMS_BY_ID[current] : undefined;
+      return room && room.venueId === venueId && room.level !== level ? null : current;
+    });
+  }, []);
+
   const handleZoomToRoom = useCallback((room: Room) => {
     setFocusRequest({ room, token: Date.now() });
     setOpenRoom(null);
@@ -69,11 +102,15 @@ export default function App() {
   // A search result takes you to the room and opens it, which is the whole
   // point of searching for one: the map flies there behind the dialog, so
   // closing it leaves you looking at the right place.
-  const handlePickSearchResult = useCallback((room: Room) => {
-    setSelectedRoomId(room.id);
-    setFocusRequest({ room, token: Date.now() });
-    setOpenRoom(room);
-  }, []);
+  const handlePickSearchResult = useCallback(
+    (room: Room) => {
+      setSelectedRoomId(room.id);
+      showRoomsFloor(room);
+      setFocusRequest({ room, token: Date.now() });
+      setOpenRoom(room);
+    },
+    [showRoomsFloor],
+  );
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
 
@@ -132,14 +169,21 @@ export default function App() {
       <main className="app__main">
         <MapView
           selectedRoomId={selectedRoomId}
-          onSelectRoom={setSelectedRoomId}
+          onSelectRoom={handleSelectRoom}
           onOpenRoom={setOpenRoom}
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
           showAmenities={showAmenities}
+          levels={levels}
+          onVenueInView={setVenueInView}
         />
         <Legend showAmenities={showAmenities} onToggleAmenities={() => setShowAmenities((on) => !on)} />
+        <FloorPicker
+          venueId={venueInView}
+          level={(venueInView && (levels[venueInView] ?? defaultLevel(venueInView))) ?? null}
+          onPick={handlePickFloor}
+        />
       </main>
 
       {openRoom && (

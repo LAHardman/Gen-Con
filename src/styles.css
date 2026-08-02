@@ -380,9 +380,6 @@ body {
 
 .legend__list {
   margin: 0;
-  /* The amenities note is a paragraph; without a cap the panel runs the
-     width of the map. */
-  max-width: 300px;
   padding: 12px 14px;
   list-style: none;
   border: 1px solid var(--border);
@@ -742,6 +739,70 @@ body {
   pointer-events: none;
 }
 
+/* ------------------------------------------------------------------ floors */
+
+/* On the right, clear of the legend and above Leaflet's own panes. Stacked
+   like a lift's buttons, top floor at the top. */
+.floors {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(26, 29, 40, 0.94);
+  backdrop-filter: blur(6px);
+  max-width: 40vw;
+}
+
+.floors__venue {
+  margin: 0 0 6px;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floors__level {
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.floors__level:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.floors__level--active {
+  border-color: var(--accent);
+  background: rgba(233, 76, 61, 0.18);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .floors {
+    top: auto;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------------ search */
 
 .search {
@@ -885,14 +946,6 @@ body {
   align-items: center;
   gap: 7px;
   cursor: pointer;
-}
-
-.legend__amenities small {
-  display: block;
-  margin-top: 5px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
 }
 
 /* The swatch in the legend is the same mark the map draws. */
