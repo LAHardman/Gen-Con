@@ -5,7 +5,7 @@ import { RoomDialog } from './components/RoomDialog';
 import { ROOMS_BY_ID, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
-import { floorplanFor, useFloorplans } from './hooks/useFloorplans';
+import { activeFloorplans, useFloorplans } from './hooks/useFloorplans';
 import { isHappeningAt } from './data/events';
 
 const SOURCE_URL = 'https://gencon.eventdb.us/';
@@ -20,10 +20,10 @@ export default function App() {
 
   const { status, feed, index } = useEventFeed();
 
-  // Real floor plans, if any have been supplied. The one drawn is the plan for
-  // the selected room's building and floor, so it follows what you're looking
-  // at rather than needing its own switcher.
-  const floorplans = useFloorplans();
+  // Real floor plans, where any have been supplied. Every building that has one
+  // shows it straight away; selecting a room only changes which floor of that
+  // building is drawn.
+  const floorplanManifest = useFloorplans();
 
   useEffect(() => {
     try {
@@ -72,9 +72,14 @@ export default function App() {
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
 
-  const plan = floorplanFor(floorplans, selectedRoom?.venueId, selectedRoom?.level);
-  const floorplan =
-    plan && selectedRoom ? { venueId: selectedRoom.venueId, plan } : undefined;
+  const floorplans = useMemo(
+    () =>
+      activeFloorplans(
+        floorplanManifest,
+        selectedRoom && { venueId: selectedRoom.venueId, level: selectedRoom.level },
+      ),
+    [floorplanManifest, selectedRoom],
+  );
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
 
   return (
@@ -133,7 +138,7 @@ export default function App() {
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
-          floorplan={floorplan}
+          floorplans={floorplans}
         />
         <Legend />
       </main>
