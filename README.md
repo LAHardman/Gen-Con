@@ -127,21 +127,27 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 ```
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
-outlines — those are the mapped shapes of the actual buildings, not estimates.
-The **convention centre's interior is real too**: its halls and meeting rooms
-are the outlines from its official floor plans, read into real coordinates and
-drawn as map geometry (below). Every other venue's interior is still a schematic arrangement inside its real
-footprint — rooms are in the right building and the right general part of it,
-but not at surveyed positions. The app says which you are looking at in every
-room pop-up. Three venues with no interior worth breaking out — the Indiana
-Rep, the Escape Room and Circle Centre — are drawn as their footprint directly.
+outlines — those are the shapes of the actual buildings, not estimates. The
+**convention centre's interior is real too**: its halls and meeting rooms are
+the outlines from its official floor plans, read into real coordinates and drawn
+as map geometry (below). Every other venue's interior is still a schematic
+arrangement inside its real footprint — rooms are in the right building and the
+right general part of it, but not at surveyed positions. The app says which you
+are looking at in every room pop-up. Three venues with no interior worth
+breaking out — the Indiana Rep, the Escape Room and Circle Centre — are drawn as
+their footprint directly.
 
-Every schematic room is checked to fall inside the building it belongs to.
-Rooms drawn from a floor plan are held to a different standard, because the
-plan and the OSM outline are two independent tracings of the same building: the
-convention centre has three whose walls cross the mapped outline, by at most
-3.5 m. That is the two sources disagreeing, not a room in the wrong place, and
-the plan is the better authority for where an interior wall is.
+**A building is outlined by the same source as its interior.** The convention
+centre used to be outlined by its OpenStreetMap footprint while its rooms came
+from the floor plans, and two independent tracings of one building never quite
+agree: the line sat a few metres off its own rooms, and ran on for another 90 m
+down the skywalk arm to the stadium, which no floor plan draws. Its outline is
+now traced around everything its plans draw, so the line and the rooms inside it
+can't disagree. Every other venue keeps its OSM footprint, which is also what
+`footprints.ts` still holds for all of them, the convention centre included.
+
+Every room is checked to fall inside the building it belongs to, and all of them
+are.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
 a real distance from the building's north-west corner; the other venues use a
@@ -196,6 +202,15 @@ along airwalls. `Room.plan` in `venues.ts` lists the labels a room covers:
 The three that aren't — registration, Gen Con Central and the food court — are
 services the plan doesn't letter, so they keep a schematic rectangle on the
 Level 1 concourse.
+
+**The outline comes from the plans too.** `plan-to-geometry.mjs` traces a line
+around everything a venue's sheets draw — every floor, since an upper storey
+that oversails is still part of the building — and the map draws that instead of
+the OSM footprint. It rasterises at half a metre, closes the raster by a wall's
+thickness so the hairline gaps where shapes meet don't read as holes, keeps the
+largest connected piece, follows its boundary, and simplifies. The alternative,
+unioning several hundred polygons exactly, is a lot of machinery for a line only
+ever needed to the nearest metre.
 
 **Georeferencing.** `plans/georeference.json` says where a venue's plans sit in
 the world, and `scripts/fit-plan.mjs` derives it: a plan is a scale drawing and
@@ -369,6 +384,7 @@ src/
   data/
     venues.ts        Venues, anchors, rooms, categories, aliases
     footprints.ts    Real building outlines, from OpenStreetMap
+    plan-geometry.ts Floor-plan geometry and outlines (generated)
     events.ts        Event types, venue/room matching, schedule helpers
     basemaps.ts      Tile providers and their attribution
   hooks/useEventFeed.ts   Loads public/events.json
@@ -377,7 +393,15 @@ src/
     MapView.tsx      Leaflet map, venue/room layers, labels
     RoomDialog.tsx   Room details and its schedule
     Legend.tsx       Category key
+plans/
+  *.pdf                    The venues' own floor plans
+  *.svg, *.labels.json     Converted drawing and printed labels
+  georeference.json        One page-to-world frame per venue
 scripts/
+  pdf-to-svg.py            Plan PDF to paths
+  plan-labels.py           Printed labels, with their positions
+  fit-plan.mjs             Fits a venue's frame to its OSM footprint
+  plan-to-geometry.mjs     Plans to map geometry (writes plan-geometry.ts)
   fetch-events.mjs         Crawls the source and imports the real schedule
   lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
   make-sample-events.mjs   Fake schedule for offline development

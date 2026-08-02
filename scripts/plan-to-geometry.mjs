@@ -280,6 +280,157 @@ function convertPlan(planId, plan, frame) {
 /** Labels are matched as printed, ignoring case and how the spacing fell. */
 const key = (text) => text.replace(/\s+/g, ' ').trim().toUpperCase();
 
+/* ------------------------------------------------------------- outline */
+
+/**
+ * The building's outline, traced around everything its plans draw.
+ *
+ * The venue outline used to come from OpenStreetMap while the interior came
+ * from the plans, and two independent tracings of one building never quite
+ * agree — the line sat a few metres off its own rooms, and ran on for another
+ * 90 m down the skywalk arm to the stadium, which no plan draws. An outline
+ * taken from the same drawing as the interior can't disagree with it.
+ *
+ * Union of every floor, not just the ground one: an upper floor that oversails
+ * is still part of the building's extent.
+ *
+ * Rasterising and tracing rather than unioning polygons directly, because the
+ * shapes number in the hundreds, meet along walls drawn as hairline gaps, and
+ * only the outer boundary is wanted. Closing the raster bridges those gaps;
+ * anything smaller than a wall is not a courtyard.
+ */
+const OUTLINE = {
+  /** Metres per raster cell. Finer than the wall thickness being bridged. */
+  cell: 0.5,
+  /** Morphological closing radius, in metres: a wall's drawn thickness. */
+  close: 1.5,
+  /** Simplification tolerance, in metres. Above the raster's own stair-stepping. */
+  tolerance: 0.8,
+};
+
+function traceOutline(ringsLatLng) {
+  const points = ringsLatLng.flat();
+  const lat0 = Math.max(...points.map((p) => p[0]));
+  const lng0 = Math.min(...points.map((p) => p[1]));
+  const perLat = 111320;
+  const perLng = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const toLocal = ([lat, lng]) => [(lng - lng0) * perLng, (lat0 - lat) * perLat];
+  const toWorld = ([x, y]) => [lat0 - y / perLat, lng0 + x / perLng];
+
+  const local = ringsLatLng.map((ring) => ring.map(toLocal));
+  const pad = OUTLINE.close * 2;
+  const flat = local.flat();
+  const maxX = Math.max(...flat.map((p) => p[0])) + pad;
+  const maxY = Math.max(...flat.map((p) => p[1])) + pad;
+  const w = Math.ceil((maxX + pad) / OUTLINE.cell);
+  const h = Math.ceil((maxY + pad) / OUTLINE.cell);
+  const at = (grid, x, y) => x >= 0 && y >= 0 && x < w && y < h && grid[y * w + x] === 1;
+
+  // Fill every shape.
+  const cellX = (i) => (i + 0.5) * OUTLINE.cell - pad;
+  const cellY = (j) => (j + 0.5) * OUTLINE.cell - pad;
+  let grid = new Uint8Array(w * h);
+  for (const ring of local) {
+    const xs = ring.map((p) => p[0]);
+    const ys = ring.map((p) => p[1]);
+    const i0 = Math.max(0, Math.floor((Math.min(...xs) + pad) / OUTLINE.cell));
+    const i1 = Math.min(w - 1, Math.ceil((Math.max(...xs) + pad) / OUTLINE.cell));
+    const j0 = Math.max(0, Math.floor((Math.min(...ys) + pad) / OUTLINE.cell));
+    const j1 = Math.min(h - 1, Math.ceil((Math.max(...ys) + pad) / OUTLINE.cell));
+    for (let i = i0; i <= i1; i += 1) {
+      for (let j = j0; j <= j1; j += 1) {
+        if (grid[j * w + i]) continue;
+        if (contains(ring, [cellX(i), cellY(j)])) grid[j * w + i] = 1;
+      }
+    }
+  }
+
+  // Close: grow by a wall's thickness to bridge the gaps between shapes, then
+  // shrink by the same, which leaves the outer boundary where it started.
+  const radius = Math.round(OUTLINE.close / OUTLINE.cell);
+  const morph = (source, grow) => {
+    const out = new Uint8Array(w * h);
+    for (let j = 0; j < h; j += 1) {
+      for (let i = 0; i < w; i += 1) {
+        let hit = false;
+        for (let dj = -radius; dj <= radius && !hit; dj += 1) {
+          for (let di = -radius; di <= radius && !hit; di += 1) {
+            // Dilating asks whether any neighbour is set; eroding, whether any
+            // is clear. Off the edge counts as clear either way.
+            if (at(source, i + di, j + dj) === grow) hit = true;
+          }
+        }
+        out[j * w + i] = (grow ? hit : !hit) ? 1 : 0;
+      }
+    }
+    return out;
+  };
+  grid = morph(morph(grid, true), false);
+
+  // Keep the largest connected piece: a plan can carry a detached canopy or a
+  // stray mark, and the building is not those.
+  const seen = new Uint8Array(w * h);
+  let best = null;
+  for (let start = 0; start < grid.length; start += 1) {
+    if (!grid[start] || seen[start]) continue;
+    const queue = [start];
+    const piece = [];
+    seen[start] = 1;
+    while (queue.length) {
+      const index = queue.pop();
+      piece.push(index);
+      const x = index % w;
+      const y = (index - x) / w;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!at(grid, nx, ny) || seen[ny * w + nx]) continue;
+        seen[ny * w + nx] = 1;
+        queue.push(ny * w + nx);
+      }
+    }
+    if (!best || piece.length > best.length) best = piece;
+  }
+  if (!best) return [];
+  const solid = new Uint8Array(w * h);
+  for (const index of best) solid[index] = 1;
+
+  // Moore-neighbour boundary following, clockwise from the topmost-leftmost
+  // cell, which is on the outer boundary by construction.
+  const around = [[-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1]];
+  let sx = -1;
+  let sy = -1;
+  for (let index = 0; index < solid.length && sy < 0; index += 1) {
+    if (solid[index]) {
+      sx = index % w;
+      sy = (index - sx) / w;
+    }
+  }
+  const contour = [];
+  let cx = sx;
+  let cy = sy;
+  let from = 0;
+  let guard = w * h * 4;
+  do {
+    contour.push([cellX(cx), cellY(cy)]);
+    let moved = false;
+    for (let step = 1; step <= 8; step += 1) {
+      const side = (from + step) % 8;
+      const nx = cx + around[side][0];
+      const ny = cy + around[side][1];
+      if (!at(solid, nx, ny)) continue;
+      cx = nx;
+      cy = ny;
+      from = (side + 4) % 8; // now facing back the way we came
+      moved = true;
+      break;
+    }
+    if (!moved) break;
+  } while ((cx !== sx || cy !== sy) && (guard -= 1) > 0);
+
+  return simplify([...contour, contour[0]], OUTLINE.tolerance).slice(0, -1).map(toWorld);
+}
+
 function ts(value) {
   return value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '.0');
 }
@@ -291,6 +442,7 @@ function main() {
   const shapesOut = [];
   const detailOut = [];
   const levelsOut = new Map();
+  const byVenue = new Map();
   const credits = new Set();
 
   // One frame per venue, shared by all its sheets, so two floors of the same
@@ -304,6 +456,10 @@ function main() {
     const { features } = convertPlan(planId, plan, venue.frame);
     if (venue.credit) credits.add(venue.credit);
     levelsOut.set(venue.venueId, [...(levelsOut.get(venue.venueId) ?? []), plan.level]);
+    byVenue.set(venue.venueId, [
+      ...(byVenue.get(venue.venueId) ?? []),
+      ...features.filter((feature) => feature.kind !== 'divider').map((feature) => feature.ring),
+    ]);
 
     // A key printed on more than one shape says nothing about which: every
     // hall is labelled "EXHIBIT", so that word can't stand for a room. Drop
@@ -334,6 +490,14 @@ function main() {
 
   const levels = [...levelsOut]
     .map(([venueId, list]) => `  '${venueId}': [${list.map((l) => `'${l}'`).join(', ')}],`)
+    .join('\n');
+
+  const outlines = [...byVenue]
+    .map(([venueId, venueRings]) => {
+      const traced = traceOutline(venueRings);
+      console.log(`  ${venueId}: outline traced, ${traced.length} points`);
+      return `  '${venueId}': [${traced.map(([lat, lng]) => `[${ts(lat)}, ${ts(lng)}]`).join(', ')}],`;
+    })
     .join('\n');
 
   const source = `/**
@@ -386,6 +550,18 @@ ${detailOut.join('\n')}
 /** The levels each venue has plans for, ground floor first. */
 export const PLAN_LEVELS: Record<string, readonly string[]> = {
 ${levels}
+};
+
+/**
+ * The building's outline, traced around everything its plans draw.
+ *
+ * Drawn instead of the OpenStreetMap footprint for a venue that has one, so the
+ * line around the building and the rooms inside it come from the same drawing
+ * and agree. The OSM outline stays in \`footprints.ts\` as the surveyed shape of
+ * the building from above, and is still what every other venue is drawn as.
+ */
+export const PLAN_OUTLINE: Record<string, PlanRing> = {
+${outlines}
 };
 
 /** Whose drawings these are. Named on the map, next to the basemap's credit. */

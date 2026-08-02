@@ -187,13 +187,6 @@ body {
 
 /* Venue and room geometry ------------------------------------------------ */
 
-.map__link {
-  stroke: #4c5470;
-  stroke-width: 3;
-  stroke-dasharray: 7 7;
-  fill: none;
-}
-
 .map__venue {
   stroke: #5d6688;
   stroke-width: 1.5;
