@@ -140,7 +140,7 @@ Every schematic room is checked to fall inside the building it belongs to.
 Rooms drawn from a floor plan are held to a different standard, because the
 plan and the OSM outline are two independent tracings of the same building: the
 convention centre has three whose walls cross the mapped outline, by at most
-2.7 m. That is the two sources disagreeing, not a room in the wrong place, and
+3.5 m. That is the two sources disagreeing, not a room in the wrong place, and
 the plan is the better authority for where an interior wall is.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
@@ -197,19 +197,30 @@ The three that aren't — registration, Gen Con Central and the food court — a
 services the plan doesn't letter, so they keep a schematic rectangle on the
 Level 1 concourse.
 
-**Georeferencing.** `plans/georeference.json` says where each plan's page sits
-in the world, and `scripts/fit-plan.mjs` derives it: the plan is a scale drawing
-and Web Mercator is conformal over a city block, so the only freedom is a
-uniform scale and an offset — three numbers, not four. It searches those for the
-best overlap with the building's OSM footprint, clipped to the building proper
+**Georeferencing.** `plans/georeference.json` says where a venue's plans sit in
+the world, and `scripts/fit-plan.mjs` derives it: a plan is a scale drawing and
+Web Mercator is conformal over a city block, so the only freedom is a uniform
+scale and an offset — three numbers, not four. It searches those for the best
+overlap with the building's OSM footprint, clipped to the building proper
 because the OSM way also carries the thin skywalk arm running south to Lucas Oil
 and no floor plan of the convention centre draws that.
 
-Both sheets settle at 0.726 Mercator metres per point — Level 1 at 0.7258 and
-Level 2 at 0.7267, agreeing to one part in a thousand, and on the building's
-west wall to 1.4 m. Two independently drawn plans, fitted independently, landing
-in the same place. Intersection over union against the OSM outline is 0.96, and
-98.8% of everything the plans draw falls inside the mapped building.
+**One frame per venue, not per sheet.** The floors of a building are one drawing
+issued floor by floor, and the convention centre's two put its walls at the same
+page coordinates to a tenth of a point — fitting Level 2's outline onto Level 1's
+gives scale 1.00000 and a one-point shift. So they share a single page-to-world
+transform and are fitted together, scored as the mean over sheets. Fitted
+separately they came out 0.12% apart in scale and 1.4 m apart on the west wall:
+small, but it meant two floors of the same room disagreed about where that room
+is, and the disagreement was free to grow with any refit. Sharing the frame
+makes it impossible rather than small — a page point maps to one place, whichever
+sheet it came off.
+
+The shared frame lands at 0.7275 Mercator metres per point. Intersection over
+union against the OSM outline is 0.9627 for Level 1 and 0.9666 for Level 2 —
+each within 0.002 of what it scored fitted alone, so agreeing costs neither
+floor anything measurable. 98.8% of everything the plans draw falls inside the
+mapped building, and the plans cover 93.9% of it.
 
 Drawing real floors has one consequence worth knowing: rooms genuinely stack.
 The convention centre's rooms 201-212 sit directly over 101-117, because that is
@@ -238,15 +249,18 @@ For the remaining venues, neither obvious source gives plans away:
 - **Gen Con's own plans** are drawn by a JavaScript map application rather than
   served as image files, and they are Gen Con's drawings, not open data.
 
-To add another venue, put its plan PDF in `plans/`, add an entry to
-`plans/georeference.json`, and run:
+To add another venue, put its plan PDFs in `plans/`, add a venue entry to
+`plans/georeference.json` listing its sheets, and run:
 
 ```
-python3 scripts/pdf-to-svg.py   plans/<name>.pdf plans/<name>.svg
-python3 scripts/plan-labels.py  plans/<name>.pdf plans/<name>.labels.json
-node scripts/fit-plan.mjs <name>          # reports the bounds to paste back
+python3 scripts/pdf-to-svg.py   plans/<sheet>.pdf plans/<sheet>.svg
+python3 scripts/plan-labels.py  plans/<sheet>.pdf plans/<sheet>.labels.json
+node scripts/fit-plan.mjs <venue-id>      # reports the frame to paste back
 node scripts/plan-to-geometry.mjs
 ```
+
+Add every sheet of a building under the same venue entry: they get one frame
+between them, and each extra floor is another vote on where that frame goes.
 
 Then set `Room.plan` on the rooms it letters. A plan whose colours don't match
 the convention centre's needs its legend added to `LEGEND` in

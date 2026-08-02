@@ -18,6 +18,10 @@
  * sit inside — which is what makes "Exhibit Hall D" on the map the actual
  * outline of Exhibit Hall D rather than a rectangle drawn where it roughly is.
  *
+ * Every sheet of a building is placed by one frame the whole venue shares, so
+ * two floors of the same room cannot disagree about where that room is. The
+ * frame comes from `plans/georeference.json`; `scripts/fit-plan.mjs` derives it.
+ *
  *     node scripts/plan-to-geometry.mjs
  *
  * Regenerates src/data/plan-geometry.ts from everything in plans/.
@@ -48,16 +52,6 @@ const LEGEND = {
 
 /** Thin stroked lines inside a hall: the airwalls it divides along. */
 const DIVIDER_STROKE = '#b9c4d3';
-
-/**
- * Where each plan prints its key. Nothing inside is part of the building, and
- * the swatches are drawn in the same colours as the thing they stand for, so
- * they have to be excluded by position rather than by colour. Page points.
- */
-const LEGEND_BOXES = {
-  'icc-level-1': [0, 25, 340, 125],
-  'icc-level-2': [0, 20, 250, 95],
-};
 
 /** Below this a shape is a door swing or a column, not a space. Square metres. */
 const MIN_AREA = 4;
@@ -225,17 +219,15 @@ function pointScale({ page: [x0, , x1], bounds }) {
   return metres / (x1 - x0);
 }
 
-/* ------------------------------------------------------------------ naming */
-
 /* ------------------------------------------------------------------- build */
 
-function convertPlan(planId, plan) {
+function convertPlan(planId, plan, frame) {
   const svg = readFileSync(join(PLANS, `${planId}.svg`), 'utf8');
   const labels = JSON.parse(readFileSync(join(PLANS, `${planId}.labels.json`), 'utf8'));
-  const project = projector(plan);
-  const scale = pointScale(plan);
-  const legendBox = LEGEND_BOXES[planId];
-  const page = plan.page;
+  const project = projector(frame);
+  const scale = pointScale(frame);
+  const legendBox = plan.legend;
+  const page = frame.page;
 
   const shapes = [];
   for (const { fill, stroke, points } of paths(svg)) {
@@ -301,11 +293,17 @@ function main() {
   const levelsOut = new Map();
   const credits = new Set();
 
-  for (const [planId, plan] of Object.entries(manifest)) {
-    if (planId.startsWith('__')) continue;
-    const { features } = convertPlan(planId, plan);
-    if (plan.credit) credits.add(plan.credit);
-    levelsOut.set(plan.venueId, [...(levelsOut.get(plan.venueId) ?? []), plan.level]);
+  // One frame per venue, shared by all its sheets, so two floors of the same
+  // room can never disagree about where that room is. See georeference.json.
+  const sheets = Object.values(manifest)
+    .filter((venue) => venue.venueId)
+    .flatMap((venue) =>
+      Object.entries(venue.plans).map(([planId, plan]) => ({ planId, plan, venue })));
+
+  for (const { planId, plan, venue } of sheets) {
+    const { features } = convertPlan(planId, plan, venue.frame);
+    if (venue.credit) credits.add(venue.credit);
+    levelsOut.set(venue.venueId, [...(levelsOut.get(venue.venueId) ?? []), plan.level]);
 
     // A key printed on more than one shape says nothing about which: every
     // hall is labelled "EXHIBIT", so that word can't stand for a room. Drop
@@ -326,12 +324,12 @@ function main() {
 
       const names = [...feature.keys].filter((name) => claims.get(name) === index).sort();
       for (const name of names) {
-        shapesOut.push(`  '${plan.venueId}/${plan.level}/${name}': RINGS[${at}],`);
+        shapesOut.push(`  '${venue.venueId}/${plan.level}/${name}': RINGS[${at}],`);
       }
       detail.push(`    { kind: '${feature.kind}', ring: RINGS[${at}], named: ${names.length > 0} },`);
     }
 
-    detailOut.push(`  '${plan.venueId}/${plan.level}': [\n${detail.join('\n')}\n  ],`);
+    detailOut.push(`  '${venue.venueId}/${plan.level}': [\n${detail.join('\n')}\n  ],`);
   }
 
   const levels = [...levelsOut]
