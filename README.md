@@ -239,9 +239,19 @@ mapped building, and the plans cover 93.9% of it.
 
 Drawing real floors has one consequence worth knowing: rooms genuinely stack.
 The convention centre's rooms 201-212 sit directly over 101-117, because that is
-where they are. Each building therefore draws one floor at a time — its ground
-floor until you select a room in it, then that room's floor — and selecting a
-room fades the rest of its building's floors.
+where they are. Each building therefore draws exactly one of its floors, and the
+switcher in the top-right corner picks which — stacked bottom-up like the panel
+in a lift, so the order on screen is the order in the building. Rooms on the
+other floors are off the map entirely, not faded behind it.
+
+The switcher drives one building at a time, because the levels are the
+building's own — `Level 2`, `3rd floor`, `Club level` — and there is no shared
+numbering to step them all through at once. It follows whatever you last
+touched: click a room, or anywhere inside a building, and the switcher is that
+building's. Each remembers its own floor, so leaving the convention centre on
+Level 2 and going to look at the stadium doesn't reset it. `Venue.levels` in
+`venues.ts` sets the order; a level a room claims that its venue doesn't list
+is still drawn, appended to the top of the stack.
 
 The JW Marriott's own floor plans set the arrangement of its rooms — the big
 halls west, the numbered rooms down the east side, floor by floor — but those
@@ -382,7 +392,7 @@ npm run fetch:events -- --inspect
 ```
 src/
   data/
-    venues.ts        Venues, anchors, rooms, categories, aliases
+    venues.ts        Venues, anchors, rooms, categories, aliases, floors
     footprints.ts    Real building outlines, from OpenStreetMap
     plan-geometry.ts Floor-plan geometry and outlines (generated)
     events.ts        Event types, venue/room matching, schedule helpers
@@ -392,6 +402,7 @@ src/
   components/
     MapView.tsx      Leaflet map, venue/room layers, labels
     RoomDialog.tsx   Room details and its schedule
+    FloorControl.tsx Floor switcher for the building in focus
     Legend.tsx       Category key
 plans/
   *.pdf                    The venues' own floor plans

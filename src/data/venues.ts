@@ -117,6 +117,16 @@ export interface Venue {
   /** The venue's own rectangle in its local grid; rooms are placed inside it. */
   grid: LocalRect;
   /**
+   * The building's floors, ground first — the order the floor switcher lists
+   * them in, and the order the map steps through them.
+   *
+   * Only needed where the rooms below don't already introduce the levels in
+   * physical order, which is most buildings with more than one. A level a room
+   * claims but this omits is still a floor (see `VENUE_LEVELS`); listing it
+   * here only fixes where it sits in the stack.
+   */
+  levels?: readonly string[];
+  /**
    * `Location` strings in the event data that mean "this venue". The importer
    * writes that field verbatim, so these are the source's own short forms.
    */
@@ -161,6 +171,9 @@ export const VENUES: Venue[] = [
     // y 20–258, and within the width the footprint actually covers at that
     // depth — roughly x 52–388 in the north half and x 128–408 in the south.
     grid: metresGrid(ICC_ANCHOR),
+    // The two sheets in `plans/`. Level 2's rooms sit directly over Level 1's,
+    // which is why the map draws one at a time.
+    levels: ['Level 1', 'Level 2'],
   },
   {
     id: 'lucas-oil',
@@ -174,6 +187,16 @@ export const VENUES: Venue[] = [
     },
     footprint: VENUE_FOOTPRINTS['lucas-oil'],
     grid: UNIT_GRID,
+    // A stadium bowl, bottom up: the field, the street-level halls around it,
+    // then the seating tiers the concourses serve.
+    levels: [
+      'Field level',
+      'Level 1',
+      'Concourse level',
+      'Club level',
+      'Suite level',
+      'Meeting level',
+    ],
   },
   {
     id: 'jw-marriott',
@@ -187,6 +210,8 @@ export const VENUES: Venue[] = [
     },
     footprint: VENUE_FOOTPRINTS['jw-marriott'],
     grid: UNIT_GRID,
+    // The rooms below introduce these out of order, so the stack is declared.
+    levels: ['1st floor', '2nd floor', '3rd floor'],
   },
   {
     id: 'marriott-downtown',
@@ -1174,6 +1199,31 @@ export const ROOMS: Room[] = [
 
 export const ROOMS_BY_ID: Record<string, Room> = Object.fromEntries(
   ROOMS.map((room) => [room.id, room]),
+);
+
+/**
+ * Every floor a venue has, ground first.
+ *
+ * `Venue.levels` sets the order where it's declared; any level a room claims
+ * that the venue doesn't list is appended rather than dropped, so a typo costs
+ * a floor its place in the stack and never costs a room its place on the map.
+ *
+ * A building with one entry here has one floor and no switching to do — which
+ * is every venue whose rooms all sit on a single 'Meeting floors' level.
+ */
+export const VENUE_LEVELS: Record<string, readonly string[]> = Object.fromEntries(
+  VENUES.map((venue) => {
+    const levels = [...(venue.levels ?? [])];
+    for (const room of ROOMS) {
+      if (room.venueId === venue.id && !levels.includes(room.level)) levels.push(room.level);
+    }
+    return [venue.id, levels];
+  }),
+);
+
+/** The floor each venue shows until someone changes it: its ground floor. */
+export const GROUND_LEVELS: Record<string, string> = Object.fromEntries(
+  VENUES.map((venue) => [venue.id, VENUE_LEVELS[venue.id][0]]),
 );
 
 /**

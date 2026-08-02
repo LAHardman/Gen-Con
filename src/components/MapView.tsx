@@ -14,17 +14,21 @@ import {
   type Room,
   type Venue,
 } from '../data/venues';
-import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
+import { PLAN_CREDIT, type PlanRing } from '../data/plan-geometry';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 
 interface Props {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string | null) => void;
   onOpenRoom: (room: Room) => void;
+  /** Clicking a building hands it to the floor switcher. */
+  onFocusVenue: (venueId: string) => void;
   focusRequest: { room: Room; token: number } | null;
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
+  /** The one floor each venue is showing, by venue id. */
+  activeLevels: Record<string, string>;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -39,26 +43,15 @@ function toLatLngs(ring: Venue['footprint'] | PlanRing) {
   return ring.map(([lat, lng]) => L.latLng(lat, lng));
 }
 
-/**
- * The floor of a building whose plan is drawn.
- *
- * Stacking every level at once turns a plan into noise, so each building shows
- * its ground floor until a room in it is selected, and then the floor that room
- * is on. Buildings other than the one selected are unaffected.
- */
-function activePlanLevel(venueId: string, selected: Room | undefined) {
-  const levels = PLAN_LEVELS[venueId] ?? [];
-  if (selected?.venueId === venueId && levels.includes(selected.level)) return selected.level;
-  return levels[0];
-}
-
 export function MapView({
   selectedRoomId,
   onSelectRoom,
   onOpenRoom,
+  onFocusVenue,
   focusRequest,
   basemapId,
   eventCounts,
+  activeLevels,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -67,8 +60,8 @@ export function MapView({
   const roomLayersRef = useRef(new Map<string, L.Path>());
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
-  const handlers = useRef({ onSelectRoom, onOpenRoom });
-  handlers.current = { onSelectRoom, onOpenRoom };
+  const handlers = useRef({ onSelectRoom, onOpenRoom, onFocusVenue });
+  handlers.current = { onSelectRoom, onOpenRoom, onFocusVenue };
 
   const allBounds = useMemo(() => {
     const bounds = L.latLngBounds([]);
@@ -155,11 +148,10 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
     const layers: L.Layer[] = [];
 
     for (const venue of VENUES) {
-      const level = activePlanLevel(venue.id, selected);
+      const level = activeLevels[venue.id];
       if (!level) continue;
 
       for (const shape of planDetail(venue.id, level)) {
@@ -180,7 +172,7 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [selectedRoomId]);
+  }, [activeLevels]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {
@@ -192,9 +184,17 @@ export function MapView({
     // Venue outlines: traced from the building's own floor plans where there
     // are any, and otherwise the real footprint straight from OpenStreetMap.
     for (const venue of VENUES) {
+      // Clickable, so a building can be handed to the floor switcher without
+      // first finding a room on the floor that happens to be showing. Rooms sit
+      // above this and stop propagation, so they still win their own clicks.
       const outline = L.polygon(toLatLngs(venueOutline(venue)), {
         className: 'map__venue',
-        interactive: false,
+        interactive: true,
+      });
+      outline.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        handlers.current.onSelectRoom(null);
+        handlers.current.onFocusVenue(venue.id);
       });
       outline.addTo(map);
       layers.push(outline);
@@ -260,15 +260,12 @@ export function MapView({
   /*
    * A flat map of a building with several floors stacks them: the convention
    * centre's rooms 201-212 sit directly over 101-117, because that is where
-   * they are. Selecting a room therefore drops the rest of its building's
-   * floors out of the way, matching the floor plan the map draws underneath.
+   * they are. So each building draws exactly one of its floors — the one the
+   * floor switcher has chosen, which is also the floor whose plan is drawn
+   * underneath — and the rest are off the map entirely rather than faded
+   * behind it. A venue with a single level always passes.
    */
-  const hiddenByFloor = (room: Room) => {
-    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
-    return Boolean(
-      selected && room.venueId === selected.venueId && room.level !== selected.level,
-    );
-  };
+  const onActiveLevel = (room: Room) => activeLevels[room.venueId] === room.level;
 
   /* ----------------------------------------------- labels, counts, selection */
   useEffect(() => {
@@ -282,7 +279,7 @@ export function MapView({
         if (!layer) continue;
 
         layer.unbindTooltip();
-        if (!showLabels || hiddenByFloor(room)) continue;
+        if (!showLabels || !onActiveLevel(room)) continue;
 
         const count = eventCounts.get(room.id) ?? 0;
         const label = room.shortName ?? room.name;
@@ -306,17 +303,17 @@ export function MapView({
       map.off('zoomend', applyLabels);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventCounts, selectedRoomId]);
+  }, [eventCounts, selectedRoomId, activeLevels]);
 
   useEffect(() => {
     for (const [roomId, layer] of roomLayersRef.current) {
       const room = ROOMS_BY_ID[roomId];
       const element = layer.getElement();
       element?.classList.toggle('map__room--selected', roomId === selectedRoomId);
-      element?.classList.toggle('map__room--other-floor', room ? hiddenByFloor(room) : false);
+      element?.classList.toggle('map__room--off-floor', room ? !onActiveLevel(room) : false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRoomId]);
+  }, [selectedRoomId, activeLevels]);
 
   /* -------------------------------------------------------- focus requests */
   const focusToken = focusRequest?.token ?? null;

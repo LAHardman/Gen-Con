@@ -191,7 +191,14 @@ body {
   stroke: #5d6688;
   stroke-width: 1.5;
   stroke-dasharray: 4 4;
-  fill: none;
+  /* Transparent rather than `none`: the building's interior is the hit area
+     that hands it to the floor switcher, and `fill: none` has no interior to
+     hit. `pointer-events: fill` claims that area however faintly it is
+     painted, instead of relying on a zero-alpha fill still counting as
+     painted. Rooms are drawn above this and stop their own clicks. */
+  fill: transparent;
+  pointer-events: fill;
+  cursor: pointer;
 }
 
 /* Floor-plan geometry ----------------------------------------------------- */
@@ -405,6 +412,72 @@ body {
   flex: 0 0 auto;
 }
 
+
+/* ------------------------------------------------------------ floor switch */
+
+/*
+ * Stacked bottom-up like the panel in a lift, so the order on screen is the
+ * order in the building: ground floor at the bottom, and up from there.
+ */
+.floors {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right));
+  top: 12px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  max-width: 44vw;
+}
+
+.floors__venue {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.floors__stack {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(26, 29, 40, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.floors__level {
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: right;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.floors__level + .floors__level {
+  border-top: 1px solid var(--border);
+}
+
+.floors__level:hover {
+  color: var(--text);
+}
+
+.floors__level--active {
+  background: var(--accent);
+  color: #fff5ee;
+  font-weight: 600;
+}
 
 /* ---------------------------------------------------------------- schedule */
 
@@ -665,6 +738,19 @@ body {
     display: none;
   }
 
+  /* Three controls can't share the top of a phone screen. The floor switcher
+     is the one you come back to, so it keeps the corner and "Fit all venues"
+     drops below it. */
+  .map__fit {
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .floors__level {
+    padding: 8px 11px;
+    font-size: 12px;
+  }
+
   .dialog__backdrop {
     place-items: end center;
     padding: 0;
@@ -688,11 +774,9 @@ body {
   }
 }
 
-/* Rooms on another floor of the building you have selected in. They stay on the
-   map so the building doesn't appear to empty out, but drop back far enough to
-   read as "not this floor" and stop swallowing clicks meant for the floor plan
-   underneath. */
-.map__room--other-floor {
-  opacity: 0.12;
-  pointer-events: none;
+/* Rooms on a floor of their building other than the one being shown. Floors
+   stack in reality, so drawing two at once draws one room on top of another:
+   these come off the map entirely until the floor switcher calls them up. */
+.map__room--off-floor {
+  display: none;
 }

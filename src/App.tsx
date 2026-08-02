@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FloorControl } from './components/FloorControl';
 import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
-import { ROOMS_BY_ID, type Room } from './data/venues';
+import { GROUND_LEVELS, ROOMS_BY_ID, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
 import { isHappeningAt } from './data/events';
@@ -10,12 +11,19 @@ import { isHappeningAt } from './data/events';
 const SOURCE_URL = 'https://gencon.eventdb.us/';
 const BASEMAP_KEY = 'genCon.basemap';
 
+/** The building the floor switcher drives before anything has been clicked. */
+const DEFAULT_VENUE_ID = 'icc';
+
 export default function App() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
   const [basemapId, setBasemapId] = useState<BasemapId>('dark');
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Each building shows one floor, and remembers which independently of the
+  // others: only the ones a user has changed appear here.
+  const [chosenLevels, setChosenLevels] = useState<Record<string, string>>({});
+  const [focusedVenueId, setFocusedVenueId] = useState(DEFAULT_VENUE_ID);
 
   const { status, feed, index } = useEventFeed();
 
@@ -59,7 +67,33 @@ export default function App() {
     return total;
   }, [index, nowMs]);
 
+  const activeLevels = useMemo(
+    () => ({ ...GROUND_LEVELS, ...chosenLevels }),
+    [chosenLevels],
+  );
+
+  /** Show a floor, and drop a selection that floor has just hidden. */
+  const chooseLevel = useCallback((venueId: string, level: string) => {
+    setChosenLevels((current) => ({ ...current, [venueId]: level }));
+    setSelectedRoomId((current) => {
+      const room = current ? ROOMS_BY_ID[current] : undefined;
+      return room && room.venueId === venueId && room.level !== level ? null : current;
+    });
+  }, []);
+
+  // Picking a room hands the floor switcher that room's building, so the
+  // control is always about the part of the map you're working in.
+  const handleSelectRoom = useCallback((roomId: string | null) => {
+    setSelectedRoomId(roomId);
+    const room = roomId ? ROOMS_BY_ID[roomId] : undefined;
+    if (room) setFocusedVenueId(room.venueId);
+  }, []);
+
   const handleZoomToRoom = useCallback((room: Room) => {
+    // The room has to be on the floor being drawn for the zoom to land on
+    // anything, so bring its floor up with it.
+    setFocusedVenueId(room.venueId);
+    setChosenLevels((current) => ({ ...current, [room.venueId]: room.level }));
     setFocusRequest({ room, token: Date.now() });
     setOpenRoom(null);
   }, []);
@@ -119,11 +153,18 @@ export default function App() {
       <main className="app__main">
         <MapView
           selectedRoomId={selectedRoomId}
-          onSelectRoom={setSelectedRoomId}
+          onSelectRoom={handleSelectRoom}
           onOpenRoom={setOpenRoom}
+          onFocusVenue={setFocusedVenueId}
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
+          activeLevels={activeLevels}
+        />
+        <FloorControl
+          venueId={focusedVenueId}
+          level={activeLevels[focusedVenueId]}
+          onChooseLevel={chooseLevel}
         />
         <Legend />
       </main>
