@@ -128,13 +128,14 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
 outlines — those are the mapped shapes of the actual buildings, not estimates.
-What remains approximate is **inside** them: every venue's room layout is a
-schematic arrangement within its real footprint, not a surveyed floor plan.
-Rooms are in the right building and the right general part of it, but not at
-surveyed positions. The app says so in every room pop-up. Three venues with no
-interior worth breaking out — the Indiana Rep, the Escape Room and Circle
-Centre — are drawn as their footprint directly, and every room is checked to
-fall inside the building it belongs to.
+The **convention centre's interior is real too**: its rooms are measured off
+the official floor plans, which the map draws underneath them (below). Every
+other venue's interior is still a schematic arrangement inside its real
+footprint — rooms are in the right building and the right general part of it,
+but not at surveyed positions. The app says which you are looking at in every
+room pop-up. Three venues with no interior worth breaking out — the Indiana
+Rep, the Escape Room and Circle Centre — are drawn as their footprint directly,
+and every room is checked to fall inside the building it belongs to.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
 a real distance from the building's north-west corner; the other venues use a
@@ -146,10 +147,31 @@ to stay inside the part the footprint actually covers.
 To make an interior exact, overlay a real floor plan (below) or replace the room
 rectangles with surveyed ones. Nothing else has to change.
 
-### Real floor plans, when you have them
+### Real floor plans
 
-The schematic interiors can be replaced with real plans, per venue and per
-floor. Neither of the obvious sources gives them away:
+The convention centre has them. `public/floorplans/` holds its Level 1 and
+Level 2 plans as SVG, drawn under the rooms whenever a room on that floor is
+selected, and `src/data/venues.ts` places the convention centre's rooms by
+measuring off those plans rather than by eye.
+
+Getting there took two scripts, both kept in `scripts/`:
+
+- `pdf-to-svg.py` converts the plan PDFs. They are pure vector — no raster
+  images inside — so the drawing survives as paths, scales at any zoom, and
+  costs 39 KB and 162 KB rather than a pair of bitmaps.
+- `georeference-plan.py` places them. It rasterises the plan's building area
+  and searches for the scale and offset that best overlap the venue's OSM
+  footprint. Level 1 settles at 0.501 m per point and Level 2 at 0.503,
+  agreeing on the building's north-west corner to within half a metre — two
+  independently drawn plans, fitted independently. Intersection over union
+  against the OSM outline is 0.78; the rest is the difference between a roof
+  traced from above and floor area drawn from inside.
+
+Room rectangles then come from the plans themselves: the exhibit halls from the
+polygons the plan draws for them, the meeting-room blocks from the extent of
+their numbered labels, which the PDFs carry as ordinary text.
+
+For the other venues, neither obvious source gives plans away:
 
 - **OpenStreetMap has no interior rooms** in any Gen Con venue. Across the whole
   campus there are 28 indoor-tagged elements and not one is a room — they are
@@ -158,9 +180,9 @@ floor. Neither of the obvious sources gives them away:
 - **Gen Con's own plans** are drawn by a JavaScript map application rather than
   served as image files, and they are Gen Con's drawings, not open data.
 
-So if you have plan images — from Gen Con, a venue's own website, or
+So for those, if you have plan images — from Gen Con, a venue's own website, or
 photographed from the printed programme — drop them in `public/floorplans/` and
-list them in `public/floorplans.json`:
+add them to `public/floorplans.json`:
 
 ```json
 {
@@ -297,7 +319,9 @@ A personal schedule of the events you've got tickets for; search across events;
 walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
 for it); and offline caching of tiles so the map works without signal.
 
-Room-level detail could go further still. The convention center's exhibit halls
-are one shape each, though the source names the colour-coded and publisher
-sections inside them (`Hall B : Orange`, `Hall E : Asmodee`); breaking those out
-would put a demo table on the map rather than a hall.
+Room-level detail could go further still. The exhibit halls are one shape each,
+though the source names the colour-coded and publisher sections inside them
+(`Hall B : Orange`, `Hall E : Asmodee`); breaking those out would put a demo
+table on the map rather than a hall. The other venues would each need their own
+floor plan before their interiors could be measured the way the convention
+centre's now are.

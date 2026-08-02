@@ -9,10 +9,12 @@
  *
  * ACCURACY: the venue outlines are the real building footprints as mapped in
  * OpenStreetMap, not estimates — the shapes on screen are the shapes on the
- * ground. Interior room positions are still a schematic arrangement within
- * that footprint rather than a surveyed floor plan: halls are in the right
- * building and the right general part of it, not at surveyed coordinates. The
- * basemap underneath is real. See README.md.
+ * ground. The convention centre's rooms are measured off its official floor
+ * plans (see `public/floorplans/`), so its interior is drawn where the rooms
+ * really are. Every other venue's interior is still a schematic arrangement
+ * inside its real footprint: rooms are in the right building and the right
+ * general part of it, not at surveyed coordinates. The basemap underneath is
+ * real. See README.md.
  *
  * The venues and aliases below were tuned against the live event database:
  * every `Venue.aliases` entry is a `Location` string the source actually
@@ -313,8 +315,8 @@ export const ROOMS: Room[] = [
     name: 'Sagamore Ballroom',
     category: 'ballroom',
     venueId: 'icc',
-    level: 'Level 1',
-    rect: { x: 52, y: 20, width: 120, height: 52 },
+    level: 'Level 2',
+    rect: { x: 300, y: 31, width: 76, height: 23 },
     // The source misspells it "Sagamaore" on most of its records, so both
     // spellings have to resolve.
     aliases: ['Sagamore', 'Sagamaore', 'Sagamore Ballroom', 'Sagamaore Ballroom'],
@@ -328,7 +330,7 @@ export const ROOMS: Room[] = [
     category: 'ballroom',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 180, y: 20, width: 104, height: 52 },
+    rect: { x: 207, y: 22, width: 41, height: 20 },
     aliases: ['Wabash', 'Wabash Ballroom'],
     description:
       'Mid-size ballroom on the west concourse. Typically hosts the larger RPG blocks, costume contests and evening entertainment.',
@@ -341,7 +343,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 52, y: 80, width: 76, height: 56 },
+    rect: { x: 53, y: 38, width: 80, height: 12 },
     aliases: ['Will Call', 'Registration'],
     description:
       'Badge pickup, will call and on-site registration. Lines are longest Wednesday evening and Thursday morning — pick up your badge early if you can.',
@@ -353,7 +355,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 136, y: 80, width: 72, height: 56 },
+    rect: { x: 138, y: 38, width: 60, height: 12 },
     aliases: ['Central', 'Customer Service'],
     description:
       'The information and customer service hub: event ticket exchanges, generic ticket sales, lost and found, and answers to "where is…?"',
@@ -366,7 +368,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 216, y: 80, width: 68, height: 56 },
+    rect: { x: 261, y: 38, width: 58, height: 12 },
     aliases: ['Serpentine Lobby'],
     description:
       'Concession stands along the main concourse. Fast, expensive, and reliably packed between noon and 2pm — Georgia Street food trucks are the usual escape valve.',
@@ -379,22 +381,22 @@ export const ROOMS: Room[] = [
     name: '500 Ballroom',
     category: 'ballroom',
     venueId: 'icc',
-    level: 'Level 5',
-    rect: { x: 292, y: 20, width: 84, height: 52 },
+    level: 'Level 1',
+    rect: { x: 339, y: 88, width: 45, height: 28 },
     aliases: ['500 Ballroom', 'Ballroom 500'],
     description:
       'Upper-level ballroom reached from the escalators. Quieter than the main floor and a common home for workshops and author events.',
     highlights: ['Workshops', 'Author events', 'Quieter than Level 1'],
   },
   {
-    id: 'rooms-101-107',
-    name: 'Meeting Rooms 101–107',
-    shortName: '101–107',
+    id: 'rooms-101-117',
+    name: 'Meeting Rooms 101–117',
+    shortName: '101–117',
     category: 'meeting',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 292, y: 80, width: 84, height: 56 },
-    aliases: numberRange(101, 107),
+    rect: { x: 294, y: 46, width: 90, height: 28 },
+    aliases: numberRange(101, 117),
     description:
       'Small breakout rooms off the Level 1 concourse. Expect scheduled RPG tables, seminars and GM briefings.',
     highlights: ['Scheduled RPGs', 'Seminars', 'Seats roughly 40–80 each'],
@@ -408,7 +410,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 128, y: 146, width: 42, height: 44 },
+    rect: { x: 44, y: 53, width: 48, height: 74 },
     aliases: ['Hall A', 'Exhibit Hall A'],
     description:
       'West end of the exhibit hall. Traditionally the entrance-adjacent aisles — the first wall of booths you hit when the hall opens.',
@@ -421,7 +423,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 175, y: 146, width: 42, height: 44 },
+    rect: { x: 92, y: 53, width: 47, height: 74 },
     aliases: ['Hall B', 'Exhibit Hall B', 'Event Hall B'],
     description:
       'The busiest demo space in the building: publisher tables run back-to-back sessions here all four days, each signed with the company running it.',
@@ -434,7 +436,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 222, y: 146, width: 42, height: 44 },
+    rect: { x: 139, y: 53, width: 47, height: 74 },
     aliases: ['Hall C', 'Exhibit Hall C'],
     description: 'Mid-hall aisles: mid-size publishers, accessory makers and dice vendors.',
     highlights: ['Dice & accessories', 'Mid-size publishers', 'Art prints'],
@@ -446,7 +448,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 269, y: 146, width: 42, height: 44 },
+    rect: { x: 185, y: 54, width: 86, height: 42 },
     aliases: ['Hall D', 'Exhibit Hall D'],
     description:
       'Continues the mid-hall aisles toward the east. Common home for miniatures, terrain and painting supplies.',
@@ -459,7 +461,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 316, y: 146, width: 42, height: 44 },
+    rect: { x: 185, y: 96, width: 86, height: 44 },
     aliases: ['Hall E', 'Exhibit Hall E'],
     description:
       'East exhibit aisles, and where the biggest brands put their organised play: long banks of tables running scheduled sessions.',
@@ -472,7 +474,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 363, y: 146, width: 42, height: 44 },
+    rect: { x: 146, y: 127, width: 72, height: 70 },
     aliases: ['Hall F', 'Exhibit Hall F'],
     description:
       'Far east end of the exhibit hall, adjacent to the east entrance. Quietest aisles in the morning.',
@@ -485,7 +487,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 128, y: 196, width: 50, height: 36 },
+    rect: { x: 146, y: 197, width: 72, height: 58 },
     aliases: ['Hall G', 'Exhibit Hall G'],
     description:
       'South exhibit block. Frequently used for the used-game auction area and larger retail booths.',
@@ -498,7 +500,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 184, y: 196, width: 50, height: 36 },
+    rect: { x: 218, y: 174, width: 66, height: 97 },
     aliases: ['Hall H', 'Exhibit Hall H'],
     description: 'South exhibit block continued — costume, prop and accessory vendors cluster here.',
     highlights: ['Costume & props', 'Leatherwork', 'Photo backdrops'],
@@ -510,7 +512,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 240, y: 196, width: 50, height: 36 },
+    rect: { x: 284, y: 174, width: 66, height: 114 },
     aliases: ['Hall I', 'Exhibit Hall I'],
     description:
       'Often converted into event space rather than booths: large scheduled play areas and tournament banks.',
@@ -523,7 +525,7 @@ export const ROOMS: Room[] = [
     category: 'gaming',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 296, y: 196, width: 50, height: 36 },
+    rect: { x: 350, y: 174, width: 50, height: 57 },
     aliases: ['Hall J', 'Exhibit Hall J', 'Open Gaming'],
     description:
       'Open gaming: rows of free tables, first come first served. Grab one, put a game out, and strangers will sit down.',
@@ -536,7 +538,7 @@ export const ROOMS: Room[] = [
     category: 'gaming',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 352, y: 196, width: 50, height: 36 },
+    rect: { x: 350, y: 230, width: 50, height: 62 },
     aliases: ['Hall K', 'Exhibit Hall K', 'Family Fun'],
     description:
       'Family and kids programming, plus overflow open gaming. Lower noise and shorter sessions than the main hall.',
@@ -545,27 +547,27 @@ export const ROOMS: Room[] = [
 
   // --------------------------------------------- Convention center meeting rooms
   {
-    id: 'rooms-120-133',
-    name: 'Meeting Rooms 120–133',
-    shortName: '120–133',
+    id: 'rooms-120-128',
+    name: 'Meeting Rooms 120–128',
+    shortName: '120–128',
     category: 'meeting',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 128, y: 238, width: 64, height: 20 },
-    aliases: numberRange(120, 133),
+    rect: { x: 91, y: 18, width: 93, height: 14 },
+    aliases: numberRange(120, 128),
     description:
       'The west half of the Level 1 breakout block. A large share of the scheduled RPG and workshop slots land here.',
     highlights: ['Scheduled RPGs', 'Workshops', 'Seats roughly 40–120 each'],
   },
   {
-    id: 'rooms-134-145',
-    name: 'Meeting Rooms 134–145',
-    shortName: '134–145',
+    id: 'rooms-130-145',
+    name: 'Meeting Rooms 130–145',
+    shortName: '130–145',
     category: 'meeting',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 198, y: 238, width: 64, height: 20 },
-    aliases: numberRange(134, 145),
+    rect: { x: 223, y: 135, width: 153, height: 14 },
+    aliases: numberRange(130, 145),
     description:
       'The east half of the Level 1 breakout block, closest to the Georgia Street entrance. The busiest meeting rooms in the building.',
     highlights: ['Scheduled RPGs', 'Board game demos', 'Near the east entrance'],
@@ -577,7 +579,7 @@ export const ROOMS: Room[] = [
     category: 'meeting',
     venueId: 'icc',
     level: 'Level 2',
-    rect: { x: 268, y: 238, width: 64, height: 20 },
+    rect: { x: 278, y: 49, width: 63, height: 68 },
     aliases: numberRange(201, 212),
     description:
       'Level 2 breakout rooms above the main concourse, reached by the escalators that double as the convention’s default meeting spot.',
@@ -590,7 +592,7 @@ export const ROOMS: Room[] = [
     category: 'meeting',
     venueId: 'icc',
     level: 'Level 2',
-    rect: { x: 338, y: 238, width: 64, height: 20 },
+    rect: { x: 250, y: 137, width: 136, height: 14 },
     aliases: numberRange(231, 245),
     description:
       'East end of the Level 2 block. Often used for tournaments and multi-session campaign play that needs a room for the whole day.',
