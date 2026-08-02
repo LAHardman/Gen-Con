@@ -4,6 +4,10 @@
 # One-time setup: repository Settings → Pages → Build and deployment →
 # Source: "GitHub Actions". After that this runs itself.
 #
+# GitHub Pages only serves private repositories on a paid plan. On the free
+# plan the repository has to be public for this to work — see README.md, which
+# also lists the hosts that build a private repository for free.
+#
 # The schedule is imported here rather than committed, so the repository stays
 # free of a large generated file and the published site refreshes on its own.
 # Event detail pages are cached between runs, so only the first run pays the
@@ -12,8 +16,9 @@
 name: Deploy to GitHub Pages
 
 on:
+  # Any branch may be pushed; the build below only proceeds for the default
+  # one, whatever it happens to be called in this repository.
   push:
-    branches: [main]
   # Refresh the schedule without pushing anything.
   workflow_dispatch:
     inputs:
@@ -38,6 +43,9 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event_name != 'push' ||
+      github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

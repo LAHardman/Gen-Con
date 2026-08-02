@@ -7,32 +7,58 @@ those events happen in. Double-click a room to see what's on there and when.
 ## Put it on a phone
 
 The app is a web page, so the easiest way onto a phone is to publish it once and
-then just open the link. `.github/workflows/deploy.yml` does the publishing;
-nobody has to keep a laptop running.
+then just open the link. Nobody has to keep a laptop running.
 
-**One-time, on GitHub:**
+**First, check which route applies.** GitHub Pages only serves *private*
+repositories on a paid plan. If this repository is private and the account is on
+the free plan, repository **Settings → Pages** will not offer a source at all —
+the only Pages screen you can reach is the account-level one, which just does
+domain verification. Two ways round it:
 
-1. Go to **Settings → Pages**.
+| If the repository is | Use |
+| --- | --- |
+| Public, or the account has GitHub Pro/Team | **GitHub Pages** — `.github/workflows/deploy.yml` is already set up for it |
+| Private, on the free plan | **Cloudflare Pages**, **Netlify** or **Vercel** — all build private repositories for free |
+
+### With GitHub Pages
+
+1. Repository **Settings → Pages**.
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Go to **Actions → Deploy to GitHub Pages → Run workflow**.
+3. **Actions → Deploy to GitHub Pages → Run workflow**.
 
-The first run takes around fifteen minutes, because it imports the schedule
-from scratch. It prints the address when it finishes:
+The first run takes around fifteen minutes, because it imports the schedule from
+scratch. It prints the address when it finishes:
 `https://<your-username>.github.io/<your-repo>/`
 
-**On any phone, from then on:**
+After that it looks after itself: pushes to the default branch republish, and a
+weekly job tops up the schedule. Event pages are cached between runs, so those
+later runs are quick.
 
-4. Open that address in Safari or Chrome.
+### With Cloudflare Pages, Netlify or Vercel
+
+These connect to a private repository and build it themselves, so the code stays
+private and there is still nothing to run locally. Point the host at this
+repository and give it:
+
+- **Build command:** `npm run fetch:events -- --limit 4000 && npm run build`
+- **Output directory:** `dist`
+
+They don't keep `.cache/` between builds the way the GitHub workflow does, so
+every build re-imports those event pages. Drop the `--limit`, or the whole
+`fetch:events` half of the command, to trade schedule coverage against build
+time.
+
+### Then, on any phone
+
+4. Open the address the host gives you, in Safari or Chrome.
 5. Tap **Share → Add to Home Screen**.
 
 It now opens like an app — full screen, its own icon, no browser chrome. To put
 it on somebody else's phone, send them the same link; there is nothing to
 install and no account to make.
 
-After that first run it looks after itself: every push republishes, and a weekly
-job tops up the schedule. Event pages are cached between runs, so those later
-runs are quick. To refresh on demand, run the workflow again from the Actions
-tab.
+Note that the published site is public whichever host you use, even when the
+repository is private. It is a convention map, so that is usually the point.
 
 **What still needs signal.** The schedule is baked into the page, so it survives
 bad convention Wi-Fi. The map tiles are not — they stream from the tile
