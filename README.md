@@ -4,13 +4,51 @@ A trip planner for the Gen Con convention: a real map of downtown Indianapolis
 with the convention venues on it, and the event schedule attached to the rooms
 those events happen in. Double-click a room to see what's on there and when.
 
-## Running it
+## Put it on a phone
+
+The app is a web page, so the easiest way onto a phone is to publish it once and
+then just open the link. `.github/workflows/deploy.yml` does the publishing;
+nobody has to keep a laptop running.
+
+**One-time, on GitHub:**
+
+1. Go to **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+3. Go to **Actions → Deploy to GitHub Pages → Run workflow**.
+
+The first run takes around fifteen minutes, because it imports the schedule
+from scratch. It prints the address when it finishes:
+`https://<your-username>.github.io/<your-repo>/`
+
+**On any phone, from then on:**
+
+4. Open that address in Safari or Chrome.
+5. Tap **Share → Add to Home Screen**.
+
+It now opens like an app — full screen, its own icon, no browser chrome. To put
+it on somebody else's phone, send them the same link; there is nothing to
+install and no account to make.
+
+After that first run it looks after itself: every push republishes, and a weekly
+job tops up the schedule. Event pages are cached between runs, so those later
+runs are quick. To refresh on demand, run the workflow again from the Actions
+tab.
+
+**What still needs signal.** The schedule is baked into the page, so it survives
+bad convention Wi-Fi. The map tiles are not — they stream from the tile
+provider. Offline tiles are on the list below.
+
+## Working on it locally
 
 ```bash
 npm install
 npm run events:sample   # placeholder schedule so the UI has data (optional)
 npm run dev             # http://localhost:5173
 ```
+
+The dev server binds to every interface, so a phone on the same Wi-Fi can open
+the **Network** address it prints — useful when you are changing the app and
+want to see it on a real device.
 
 | Command | What it does |
 | --- | --- |
@@ -23,9 +61,9 @@ npm run dev             # http://localhost:5173
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
 
-One web app covers iOS, Android and desktop, and installs to the home screen or
-dock via its web app manifest. If it ever needs app-store distribution or native
-APIs, the same codebase wraps with Capacitor.
+`dist/` is fully self-contained and uses relative paths, so it also works
+dropped on any static host, or bundled into a native shell with Capacitor if it
+ever needs app-store distribution.
 
 ## The map
 
