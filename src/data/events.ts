@@ -36,7 +36,19 @@ export interface ConEvent {
 }
 
 export interface EventFeed {
-  source: { name: string; url: string; fetchedAt: string };
+  source: {
+    name: string;
+    url: string;
+    /** When `fetch:events` produced this file. */
+    fetchedAt: string;
+    /**
+     * When the source itself said it last rebuilt from its spreadsheet, and the
+     * change set that was current then. The importer stores the same pair and
+     * compares them on the next run to decide what needs re-reading.
+     */
+    sourceUpdatedAt?: string;
+    changeSet?: number;
+  };
   year?: number;
   events: ConEvent[];
 }

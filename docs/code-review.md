@@ -42,7 +42,8 @@ This module is already written the way testable code looks: every extraction
 step is an exported pure function taking a string and returning data
 (`parseStart`, `parseDurationMinutes`, `parseMoney`, `parseCount`,
 `parseEventType`, `mapFields`, `readFieldTable`, `parseEventPage`,
-`parseCataloguePage`, `parseDayIndex`). It has no tests.
+`parseCataloguePage`, `parseDayIndex`, `parseChangeList`, `parseChangeSet`). It has
+no tests.
 
 It is also the module most likely to break *without anyone noticing*, because
 its failure mode is not an exception — it's `null`, which
@@ -62,6 +63,8 @@ cases that are currently unguarded:
 | `parseDurationMinutes` | `"2h30m"`, `"90 min"`, bare `"4"` → 240 |
 | `parseEventType` | `"FLM - Film Festival"` → `"FLM"`; a bare type passes through |
 | `mapFields` | first-match-wins and the `claimed` set — that a single label cannot be claimed by two fields |
+| `parseChangeList` | the `events.csv` timestamp; that the five sets printed twice (nav drop-down and body) are deduplicated by id; sets sorted newest first |
+| `parseChangeSet` | codes attributed to the heading above them, not the page — a set with all three sections must not put deleted codes in the added bucket |
 
 **Fixture tests over the HTML parsers.** Save one real `event.php` page, one
 `categoryAll.php` page and one `dayTimeList.php` page into

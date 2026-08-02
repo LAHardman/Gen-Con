@@ -364,6 +364,8 @@ The source publishes each event in two places, and the importer reads both:
 
 | Page | What it gives | Cost |
 | --- | --- | --- |
+| `changeList.php` | when the database was last rebuilt, and every change set since | 1 request |
+| `changes.php?ChangeSet=…` | one change set: events added, deleted, or with tickets back on sale | 1 per unseen set |
 | `index.php` | one `category.php` link per event type | 1 request |
 | `dayTimeList.php` | the convention's days, with real dates | 1 request |
 | `categoryAll.php?EventType=…` | every event in a category: title, code, day, time, cost, tickets — **but no location** | 1 per event type |
@@ -378,10 +380,78 @@ prints the labels the site is actually using and how `FIELD_PATTERNS` resolves
 each one; that is the list to adjust if the source ever renames them.
 
 The catalogue pass is cheap. The detail pass is not — roughly 27,000 requests
-for a full year — so detail pages are cached in `.cache/event-details.jsonl` and
-the crawl is resumable: only the first run pays for them. Use `--limit` to
-spread that over several runs, `--no-details` to skip locations entirely, and
-`--delay` / `--concurrency` to control how hard it leans on a hobbyist's server.
+for a full year. Use `--limit` to spread that over several runs, `--no-details`
+to skip locations entirely, and `--delay` / `--concurrency` to control how hard
+it leans on a hobbyist's server.
+
+### Only the first run pays for it
+
+Two files in `.cache/` mean a later run re-reads almost nothing:
+
+| File | What it holds |
+| --- | --- |
+| `event-details.jsonl` | every event record pulled, each with the `pulledAt` of the run that read it |
+| `import-state.json` | the watermark: the source's own last-rebuilt timestamp, the newest change set, and when this repo last pulled in full |
+
+A run starts at `changeList.php`. The whole site is generated from one
+spreadsheet, and that page prints when it was last processed — so while that
+timestamp matches the one in `import-state.json`, nothing on the site has
+changed, and the run stops there having made **one request**:
+
+```
+Source last rebuilt: Sunday August 02, 2026 - 11:51 am EST (change set 345)
+  Unchanged since the last pull at 2026-08-02T17:31:42.663Z.
+public/events.json is already up to date. Nothing fetched.
+```
+
+When it has moved, the change sets published since the last run say which
+events were added, deleted, or had tickets go back on sale. Only those are
+re-pulled; the deleted ones are dropped from the cache:
+
+```
+  2 change set(s) since the last pull; reading them.
+  507 event(s) to re-pull, 32 deleted.
+```
+
+**What that misses, and why there's still a full pass.** The source only
+publishes a change set "when at least one of the three criteria above is met" —
+its words. A title, a time, or a *room* edit changes the data without ever
+appearing in one. Following change sets alone would let a room move go
+unnoticed indefinitely, so a full re-pull falls due every `FULL_REFRESH_DAYS`
+(7) regardless, and `--full` forces one at any time. Being more than
+`MAX_CHANGE_SETS` (40) behind also triggers one, since reading that many sets
+costs more requests than the pull they were meant to save.
+
+Only a run that read everything moves the watermark, and "everything" is
+checked rather than assumed: every event in the catalogue has a cached record,
+and nothing is still failing. A run that ends short — `--no-details`, or event
+pages that never came back — leaves the watermark where it was, so the next run
+sees the same work again and finishes it rather than skipping past events it
+never actually read. A `--limit` run that happens to close the last gap counts;
+one that doesn't, doesn't.
+
+`--limit` also turns a due full re-pull into a top-up, and doesn't reset the
+full-pull clock. Throwing the cache away and then reading only `--limit` of it
+back would lose more than it refreshed, and the next capped run would do the
+same again — which is exactly what the weekly job in
+`.github/workflows/deploy.yml` does, at 4,000 pages a run.
+
+### Getting all of them, first time
+
+A first pull is 27,000 requests, and at even a very low failure rate that is
+hundreds of events with no location. Two mechanisms rather than one:
+
+- **Per request:** up to five attempts with exponential backoff and jitter, on
+  network errors, 429s and 5xxs. A 4xx fails immediately — the page genuinely
+  isn't there, and knocking again won't change that. The jitter matters because
+  a pool of workers that all fail at once would otherwise march back in step.
+- **Per crawl:** whatever still failed is swept up and tried again, up to four
+  sweeps, each waiting longer than the last. A source having a bad minute costs
+  a pause rather than the run.
+
+Progress is appended to the cache as it lands, so an interrupted crawl keeps
+what it got. The file is compacted at the end of a run, because a re-pulled
+event otherwise leaves its old line behind.
 
 ### Matching events to rooms
 
