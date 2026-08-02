@@ -7,14 +7,16 @@ import {
   ROOMS_BY_ID,
   VENUES,
   VENUES_BY_ID,
+  planDetail,
   roomBounds,
+  roomShapes,
   venueBounds,
   type Room,
   type Venue,
 } from '../data/venues';
+import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { boundsCentre } from '../utils/geo';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
-import type { Floorplan } from '../hooks/useFloorplans';
 
 interface Props {
   selectedRoomId: string | null;
@@ -24,11 +26,6 @@ interface Props {
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
-  /**
-   * Real floor plans to draw over the basemap, one per venue that has any.
-   * Empty unless public/floorplans.json lists some.
-   */
-  floorplans: Array<{ venueId: string; plan: Floorplan }>;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -38,9 +35,22 @@ function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
   return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
 }
 
-/** OSM footprint rings are already [latitude, longitude], which is Leaflet's order. */
-function toLatLngs(footprint: Venue['footprint']) {
-  return footprint.map(([lat, lng]) => L.latLng(lat, lng));
+/** OSM footprint and plan rings are both [latitude, longitude] — Leaflet's order. */
+function toLatLngs(ring: Venue['footprint'] | PlanRing) {
+  return ring.map(([lat, lng]) => L.latLng(lat, lng));
+}
+
+/**
+ * The floor of a building whose plan is drawn.
+ *
+ * Stacking every level at once turns a plan into noise, so each building shows
+ * its ground floor until a room in it is selected, and then the floor that room
+ * is on. Buildings other than the one selected are unaffected.
+ */
+function activePlanLevel(venueId: string, selected: Room | undefined) {
+  const levels = PLAN_LEVELS[venueId] ?? [];
+  if (selected?.venueId === venueId && levels.includes(selected.level)) return selected.level;
+  return levels[0];
 }
 
 export function MapView({
@@ -50,14 +60,12 @@ export function MapView({
   focusRequest,
   basemapId,
   eventCounts,
-  floorplans,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
   const roomLayersRef = useRef(new Map<string, L.Path>());
-  const floorplanRef = useRef<L.ImageOverlay[]>([]);
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
   const handlers = useRef({ onSelectRoom, onOpenRoom });
@@ -87,14 +95,14 @@ export function MapView({
       minZoom: 13,
     });
 
-    // Floor plans belong under the rooms drawn on top of them. Leaflet puts
-    // images and vectors in the same pane, in insertion order, so they need a
-    // pane of their own between the tiles (200) and the overlays (400).
-    map.createPane('floorplan');
-    const floorplanPane = map.getPane('floorplan');
-    if (floorplanPane) {
-      floorplanPane.style.zIndex = '350';
-      floorplanPane.style.pointerEvents = 'none';
+    // The building's fabric belongs under the rooms drawn on top of it, and
+    // Leaflet puts every vector in one pane in insertion order, so it needs a
+    // pane of its own between the tiles (200) and the overlays (400).
+    map.createPane('plan-detail');
+    const detailPane = map.getPane('plan-detail');
+    if (detailPane) {
+      detailPane.style.zIndex = '350';
+      detailPane.style.pointerEvents = 'none';
     }
 
     map.fitBounds(allBounds, { padding: [40, 40] });
@@ -102,6 +110,9 @@ export function MapView({
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.control.scale({ position: 'bottomleft', imperial: true, metric: true }).addTo(map);
+    // The interiors are somebody else's drawings, traced rather than surveyed
+    // by us: name them alongside the basemap's own credit.
+    map.attributionControl.addAttribution(`Floor plans: ${PLAN_CREDIT}`);
 
     mapRef.current = map;
 
@@ -133,37 +144,44 @@ export function MapView({
     tileLayerRef.current = layer;
   }, [basemapId]);
 
-  /* ------------------------------------------------- optional floor-plan image */
+  /* -------------------------------------------------- floor-plan geometry */
+  /*
+   * The building's own fabric, read off its official plans: prefunction halls,
+   * service cores, restrooms, the airwall lines the big halls divide along, and
+   * any lettered space no room claims. Drawn as map geometry in the map's own
+   * palette rather than laid over it as a picture, so it sits under the rooms
+   * instead of on top of the basemap.
+   */
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    for (const layer of floorplanRef.current) layer.remove();
-    floorplanRef.current = [];
+    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+    const layers: L.Layer[] = [];
 
-    for (const { venueId, plan } of floorplans) {
-      const venue = VENUES_BY_ID[venueId];
-      if (!venue) continue;
+    for (const venue of VENUES) {
+      const level = activePlanLevel(venue.id, selected);
+      if (!level) continue;
 
-      // A plan's own corners when it has them — a drawing rarely stops exactly
-      // at the building's outline — falling back to the footprint's bounds.
-      const corners = plan.bounds;
-      const bounds = corners
-        ? L.latLngBounds([corners.north, corners.west], [corners.south, corners.east])
-        : toLatLngBounds(venueBounds(venue));
-
-      const overlay = L.imageOverlay(plan.url, bounds, {
-        opacity: plan.opacity ?? 0.85,
-        interactive: false,
-        pane: 'floorplan',
-        className: 'map__floorplan',
-        // Somebody else's drawing: name whoever made it, next to the basemap's.
-        attribution: plan.credit ? `Floor plan: ${plan.credit}` : undefined,
-      });
-      overlay.addTo(map);
-      floorplanRef.current.push(overlay);
+      for (const shape of planDetail(venue.id, level)) {
+        const points = toLatLngs(shape.ring);
+        const options = {
+          className: `map__plan map__plan--${shape.kind}`,
+          pane: 'plan-detail',
+          interactive: false,
+        };
+        // An airwall is a line across a hall, not an enclosure.
+        const layer =
+          shape.kind === 'divider' ? L.polyline(points, options) : L.polygon(points, options);
+        layer.addTo(map);
+        layers.push(layer);
+      }
     }
-  }, [floorplans]);
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [selectedRoomId]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {
@@ -215,8 +233,10 @@ export function MapView({
       layers.push(label);
     }
 
-    // Rooms. A room that is its whole venue takes the building's real outline;
-    // the rest are rectangles in the venue's schematic interior grid.
+    // Rooms take their real outline from the venue's floor plan where there is
+    // one — several outlines, for a block of meeting rooms that share a wall. A
+    // room that is its whole venue takes the building's OSM footprint. Anything
+    // left is a rectangle in the venue's schematic interior grid.
     for (const room of ROOMS) {
       const style = CATEGORY_STYLES[room.category];
       const shape: L.PathOptions = {
@@ -226,9 +246,13 @@ export function MapView({
         fillOpacity: 0.55,
         weight: 2,
       };
-      const shapeLayer = room.fillsVenue
-        ? L.polygon(toLatLngs(VENUES_BY_ID[room.venueId].footprint), shape)
-        : L.rectangle(toLatLngBounds(roomBounds(room)), shape);
+      const drawn = roomShapes(room);
+      const shapeLayer =
+        drawn.length > 0
+          ? L.polygon(drawn.map((ring) => [toLatLngs(ring)]), shape)
+          : room.fillsVenue
+            ? L.polygon(toLatLngs(VENUES_BY_ID[room.venueId].footprint), shape)
+            : L.rectangle(toLatLngBounds(roomBounds(room)), shape);
 
       shapeLayer.on('click', (event) => {
         L.DomEvent.stopPropagation(event);

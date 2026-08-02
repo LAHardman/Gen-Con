@@ -5,7 +5,6 @@ import { RoomDialog } from './components/RoomDialog';
 import { ROOMS_BY_ID, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
-import { activeFloorplans, useFloorplans } from './hooks/useFloorplans';
 import { isHappeningAt } from './data/events';
 
 const SOURCE_URL = 'https://gencon.eventdb.us/';
@@ -19,11 +18,6 @@ export default function App() {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { status, feed, index } = useEventFeed();
-
-  // Real floor plans, where any have been supplied. Every building that has one
-  // shows it straight away; selecting a room only changes which floor of that
-  // building is drawn.
-  const floorplanManifest = useFloorplans();
 
   useEffect(() => {
     try {
@@ -72,14 +66,6 @@ export default function App() {
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
 
-  const floorplans = useMemo(
-    () =>
-      activeFloorplans(
-        floorplanManifest,
-        selectedRoom && { venueId: selectedRoom.venueId, level: selectedRoom.level },
-      ),
-    [floorplanManifest, selectedRoom],
-  );
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
 
   return (
@@ -138,7 +124,6 @@ export default function App() {
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
-          floorplans={floorplans}
         />
         <Legend />
       </main>

@@ -1,0 +1,45 @@
+{
+  "__doc__": [
+    "Where a venue's floor plans sit in the world, so their drawings can be turned",
+    "into map geometry.",
+    "",
+    "The frame belongs to the venue, not to a sheet. Every floor of a building is",
+    "one drawing issued floor by floor — the convention centre's two put its walls",
+    "at the same page coordinates to a tenth of a point — so they share a single",
+    "page-to-world transform and cannot drift apart. Fit them separately and two",
+    "floors of the same room can disagree about where that room is; sharing the",
+    "frame makes that impossible rather than merely small.",
+    "",
+    "`frame.page` is a rectangle in PDF points, y up from the bottom-left corner —",
+    "the space plan-labels.py reports and pdf-to-svg.py writes its paths in. Here",
+    "it is the whole page, so nothing about the transform depends on a crop.",
+    "`frame.bounds` is where that rectangle's corners land: (x0, y0) is the",
+    "south-west corner and (x1, y1) the north-east one. The mapping is linear in",
+    "Web Mercator, which is what a map draws in, and the plans are drawn to scale",
+    "with north up, so a uniform scale and an offset is the whole transform.",
+    "",
+    "`legend` is where a sheet prints its key. Nothing inside is part of the",
+    "building, and the swatches are drawn in the same colours as the thing they",
+    "stand for, so they have to be excluded by position rather than by colour.",
+    "",
+    "scripts/fit-plan.mjs re-derives the frame against the venue's OpenStreetMap",
+    "footprint and reports how closely each sheet then agrees with it."
+  ],
+  "icc": {
+    "venueId": "icc",
+    "credit": "Indianapolis Convention & Visitors Association",
+    "frame": {
+      "page": [0, 0, 900, 675],
+      "bounds": {
+        "west": -86.1674918,
+        "south": 39.7625097,
+        "east": -86.1616102,
+        "north": 39.7659005
+      }
+    },
+    "plans": {
+      "icc-level-1": { "level": "Level 1", "legend": [0, 25, 340, 125] },
+      "icc-level-2": { "level": "Level 2", "legend": [0, 20, 250, 95] }
+    }
+  }
+}
