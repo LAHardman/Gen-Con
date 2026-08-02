@@ -30,6 +30,28 @@ interface Props {
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
 const ROOM_LABEL_MIN_ZOOM = 16;
 
+/**
+ * A label is only drawn once its room is big enough on screen to hold one.
+ *
+ * The zoom threshold alone isn't enough: a floor of single-table rooms — the
+ * Marriott's ten state and city rooms, Union Station's eleven railroad rooms —
+ * puts a dozen labels into a space that fits two, and they pile up on top of
+ * each other. Sizing the test in screen pixels means the big halls stay
+ * labelled at the zoom you see the whole campus at, and the small rooms name
+ * themselves as you zoom into the building they're in.
+ */
+const LABEL_MIN_PIXELS = { width: 38, height: 12 };
+
+function roomFitsLabel(map: L.Map, room: Room) {
+  const [nw, se] = roomBounds(room);
+  const a = map.latLngToLayerPoint([nw.lat, nw.lng]);
+  const b = map.latLngToLayerPoint([se.lat, se.lng]);
+  return (
+    Math.abs(b.x - a.x) >= LABEL_MIN_PIXELS.width &&
+    Math.abs(b.y - a.y) >= LABEL_MIN_PIXELS.height
+  );
+}
+
 function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
   return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
 }
@@ -282,7 +304,9 @@ export function MapView({
         if (!layer) continue;
 
         layer.unbindTooltip();
-        if (!showLabels || hiddenByFloor(room)) continue;
+        if (hiddenByFloor(room)) continue;
+        // The room you've picked always names itself, however small it is.
+        if (room.id !== selectedRoomId && (!showLabels || !roomFitsLabel(map, room))) continue;
 
         const count = eventCounts.get(room.id) ?? 0;
         const label = room.shortName ?? room.name;
