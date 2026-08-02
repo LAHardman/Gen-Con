@@ -407,13 +407,24 @@ tuned to it. It imports the full 2026 catalogue — **27,537 events across 19
 event types**, matching the total the site itself reports — with the days and
 times it publishes.
 
-Of a 3,000-event sample spread evenly across all 19 types, **99.4% resolved to
+Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
 a room on the map**. The source uses 16 distinct `Location` values and several
-hundred `Room` values.
+hundred `Room` values, and every `Location` but two resolves to a building.
 
-The stragglers are small offsite venues OpenStreetMap has no building for (Le
-Meridien, Janus Lofts) and convention-center strings that name no particular
-hall (`Exhibit Hall`, `Exhibit Hall Booth #1229`, `Georgia Street Entrance`).
+The 11 stragglers are both of those: **Le Meridien** (10 events), a hotel
+OpenStreetMap has no building for, so there is nothing to draw it on; and
+**416 Wabash** (1 event), an address five blocks east of the campus. Nothing
+inside a building the map knows goes unmatched any more.
+
+That last one used to be worse than unmatched. Its `Room` reads
+`416 E Wabash St`, and with no venue recognised the matcher searched every room
+on the campus and put it in the **convention centre's Wabash Ballroom** — a
+confident answer, in the wrong building, with nothing to say it was a guess.
+An unrecognised `Location` now only matches venues the map draws as a single
+room, whose aliases are that building's own names and street address. Room
+names repeat across the campus, which is the whole reason matching resolves the
+venue first; with no venue at all, a room-name match is exactly the mistake
+that design exists to prevent.
 
 If an import comes back empty, `--inspect` prints the structure it actually
 found — the event types linked, the convention's days, a catalogue page's yield,

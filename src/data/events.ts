@@ -95,6 +95,21 @@ const ROOM_CANDIDATES_BY_VENUE = ROOM_CANDIDATES.reduce((map, candidate) => {
   return map;
 }, new Map<string, Array<Candidate<Room>>>());
 
+/**
+ * The rooms an unrecognised `Location` may still match: those that stand for a
+ * whole building, whose aliases are that building's own names and street
+ * address.
+ *
+ * Searching every room instead is actively harmful, because room names recur
+ * across the campus — which is the whole reason matching resolves the venue
+ * first. An event at "416 Wabash", five blocks east of the convention centre,
+ * landed in the convention centre's Wabash Ballroom on the strength of the
+ * word "Wabash", and nothing about the result said it was a guess. Leaving it
+ * unmatched puts it in the console report instead, which is where a location
+ * the map doesn't know belongs.
+ */
+const WHOLE_VENUE_CANDIDATES = ROOM_CANDIDATES.filter(({ subject }) => subject.fillsVenue);
+
 /** The longest key that `haystack` contains, across the given candidates. */
 function bestMatch<T extends { id: string }>(
   haystack: string,
@@ -136,7 +151,7 @@ export function roomIdForEvent(event: ConEvent): string | null {
   const venueId = venueIdForEvent(event);
   const candidates = venueId
     ? (ROOM_CANDIDATES_BY_VENUE.get(venueId) ?? [])
-    : ROOM_CANDIDATES;
+    : WHOLE_VENUE_CANDIDATES;
 
   const within = normalise([event.roomText, event.tableText].filter(Boolean).join(' '));
   const matched = within ? bestMatch(within, candidates) : null;
@@ -148,8 +163,9 @@ export function roomIdForEvent(event: ConEvent): string | null {
   if (candidates.length === 1) return candidates[0].subject.id;
   if (venueId) return null;
 
-  // No venue either — try the whole location string against every room, which
-  // is the best that can be done for a source that doesn't separate the two.
+  // No venue either — try the whole location string, still only against the
+  // buildings drawn as one room, since one of them may be named or addressed
+  // in the `Location` field rather than the `Room` one.
   const haystack = normalise([event.locationText, event.roomText].filter(Boolean).join(' '));
   return haystack ? (bestMatch(haystack, candidates)?.id ?? null) : null;
 }

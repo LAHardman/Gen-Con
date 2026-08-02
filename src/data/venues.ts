@@ -798,7 +798,7 @@ export const ROOMS: Room[] = [
     aliases: [
       'White River Ballroom G', 'White River Ballroom H', 'White River Ballroom I',
       'White River Ballroom J', 'White River G', 'White River H', 'White River I',
-      'White River J',
+      'White River J', 'Ballroom G', 'Ballroom H', 'Ballroom I', 'Ballroom J',
     ],
     description:
       'The west column of the White River Ballroom: four sections in a stack, walled off from the middle of the room rather than only airwalled. Society play and the larger RPG blocks.',
@@ -817,6 +817,7 @@ export const ROOMS: Room[] = [
     aliases: [
       'White River Ballroom', 'White River', 'White River Ballroom E',
       'White River Ballroom F', 'White River E', 'White River F',
+      'Ballroom E', 'Ballroom F',
     ],
     description:
       'The two centre sections, and the widest single span in the ballroom. Combined with its neighbours this is the largest event space on the floor.',
@@ -833,7 +834,7 @@ export const ROOMS: Room[] = [
     aliases: [
       'White River Ballroom A', 'White River Ballroom B', 'White River Ballroom C',
       'White River Ballroom D', 'White River A', 'White River B', 'White River C',
-      'White River D',
+      'White River D', 'Ballroom A', 'Ballroom B', 'Ballroom C', 'Ballroom D',
     ],
     description:
       'The east column of four sections, nearest the numbered breakout rooms and the prefunction hall the trade day marketplace runs in.',
@@ -1409,7 +1410,7 @@ export const ROOMS: Room[] = [
     rect: { x: 44, y: 60, width: 8, height: 15 },
     // The plans don't letter the Edison rooms; their events land here rather
     // than nowhere, on the hotel's own block of small rooms.
-    aliases: ['Haymarket Station', 'Haymarket', 'Edison North', 'Edison South'],
+    aliases: ['Haymarket Station', 'Haymarket', 'Hay Market', 'Edison North', 'Edison South'],
     description: 'Two lettered rooms at the Illinois Street end of the hotel’s meeting corridor, opposite the Executive Boardroom.',
     highlights: ['Lettered A–B', 'Nearest Illinois Street', 'Small sessions'],
   },
@@ -1896,7 +1897,7 @@ export const ROOMS: Room[] = [
     venueId: 'omni',
     level: '1st floor',
     rect: { x: 62, y: 4, width: 32, height: 22 },
-    aliases: ['Severin Ballroom', 'Severin'],
+    aliases: ['Severin Ballroom', 'Severin', 'Jennings Ballroom', 'Jennings'],
     description:
       'The 1st floor’s own ballroom, off the lower lobby and the stairs up to the meeting floor. The only large room you reach without going upstairs.',
     highlights: ['Off the lower lobby', 'No stairs needed', 'Mid-size blocks'],
