@@ -129,6 +129,33 @@ Ranking is by how the match was made — a room whose name starts with what you
 typed, then an exact alias, then a word inside a name, then event titles — and
 ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
 
+### Floors
+
+A flat map has one surface and a building has several, and the rooms on them
+land on top of each other: the convention centre's 201–212 sit directly over
+101–117, and the JW has three floors of meeting rooms in one stack. So the map
+draws **one floor of a building at a time**, and the picker on the right of the
+map changes which. It names the building whose floors it is offering — the one
+under the middle of the screen, or filling most of it — and follows you as you
+move between them. A building with one floor has nothing to switch and shows no
+picker. The floors you aren't on are left as ghosts: faint enough not to read as
+rooms, present enough to say there is more here than one storey.
+
+Each building holds its own floor, so reading the JW's 3rd doesn't move the
+Hyatt. Anything that takes you to a room takes you to its floor as well —
+clicking it, or picking it out of the search box.
+
+**A building opens on the floor the convention uses, not its lowest.** That is
+the one with most of its rooms on it. The obvious rule is the wrong one here:
+the Hyatt's ground floor is a single room, the Embassy's is a single room, and a
+building that opens on an empty storey looks like a building with no interior.
+The stadium is the exception the count gets wrong — its field is one room and
+the concourse ring above it is two — so `opensOn` in `venues.ts` says which.
+
+Note that a floor here is a floor of *that building*. Gen Con's own level
+switcher numbers campus event levels instead, so its "level 3" is at once the
+JW's 3rd floor, the Hyatt's 3rd, the Embassy's 5th and the Hilton's 9th.
+
 ### Restrooms
 
 Marked with a **WC** dot, and toggled from the legend. They come from two
@@ -141,9 +168,9 @@ places, and the difference matters:
   rather than a shape, so the mark is where the pictogram is. Same schematic
   grade as those buildings' rooms.
 
-They follow the same floor rule as the rooms: selecting a room hides the
-amenities on other floors of that building, because a toilet on the wrong
-storey is not a useful direction.
+They follow the same floor rule as the rooms: only the floor a building is
+showing has its restrooms drawn, because a toilet on the wrong storey is not a
+useful direction.
 
 **Water fountains are not marked, and that is not an oversight.** No plan shows
 them. The convention centre's legend has four categories and water is not one;

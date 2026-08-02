@@ -51,11 +51,6 @@ export function Legend({ showAmenities, onToggleAmenities }: Props) {
               </span>
               Restrooms
             </label>
-            {/* Said here rather than left to be inferred from an empty map. */}
-            <small>
-              From the convention centre’s plans, and from the pictograms on Gen Con’s plans of
-              the hotels. Water fountains aren’t marked — no plan shows them.
-            </small>
           </li>
         </ul>
       )}

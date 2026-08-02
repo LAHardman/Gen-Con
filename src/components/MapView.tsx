@@ -6,6 +6,7 @@ import {
   ROOMS_BY_ID,
   VENUES,
   VENUES_BY_ID,
+  defaultLevel,
   planDetail,
   roomBounds,
   roomShapes,
@@ -27,6 +28,10 @@ interface Props {
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
   showAmenities: boolean;
+  /** The floor each building is showing, where it isn't showing its lowest. */
+  levels: Record<string, string>;
+  /** The building the map is looking at, so the floor picker knows whose floors to offer. */
+  onVenueInView: (venueId: string | null) => void;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -64,16 +69,51 @@ function toLatLngs(ring: Venue['footprint'] | PlanRing) {
 }
 
 /**
- * The floor of a building whose plan is drawn.
+ * The floor of a building the map is drawing.
  *
- * Stacking every level at once turns a plan into noise, so each building shows
- * its ground floor until a room in it is selected, and then the floor that room
- * is on. Buildings other than the one selected are unaffected.
+ * Every building starts on its lowest floor and stays there until something
+ * changes it — the floor picker, or opening a room upstairs. Buildings hold
+ * their floor independently, so reading the JW's 3rd doesn't move the Hyatt.
  */
-function activePlanLevel(venueId: string, selected: Room | undefined) {
-  const levels = PLAN_LEVELS[venueId] ?? [];
-  if (selected?.venueId === venueId && levels.includes(selected.level)) return selected.level;
-  return levels[0];
+function levelOf(venueId: string, levels: Record<string, string>) {
+  return levels[venueId] ?? defaultLevel(venueId);
+}
+
+/** The same floor, named as its plan sheet names it — only the drawn buildings have these. */
+function planLevelOf(venueId: string, levels: Record<string, string>) {
+  const sheets = PLAN_LEVELS[venueId] ?? [];
+  const showing = levelOf(venueId, levels);
+  return showing && sheets.includes(showing) ? showing : sheets[0];
+}
+
+/**
+ * Which building the map is looking at, for the floor picker to offer floors of.
+ *
+ * The one under the middle of the screen, which is where you point a map at
+ * what you want; failing that, the one filling most of it, so a building you
+ * have zoomed into but framed off-centre still counts. Below `SHARE` of the
+ * view nothing is being looked at in particular and the picker stays away.
+ */
+const SHARE = 0.12;
+
+function venueInView(map: L.Map): string | null {
+  const view = map.getBounds();
+  const centre = map.getCenter();
+  const viewArea = (view.getNorth() - view.getSouth()) * (view.getEast() - view.getWest());
+
+  let best: { id: string; share: number } | null = null;
+  for (const venue of VENUES) {
+    const [nw, se] = venueBounds(venue);
+    const bounds = L.latLngBounds([se.lat, nw.lng], [nw.lat, se.lng]);
+    if (bounds.contains(centre)) return venue.id;
+
+    const lat = Math.min(bounds.getNorth(), view.getNorth()) - Math.max(bounds.getSouth(), view.getSouth());
+    const lng = Math.min(bounds.getEast(), view.getEast()) - Math.max(bounds.getWest(), view.getWest());
+    if (lat <= 0 || lng <= 0) continue;
+    const share = (lat * lng) / viewArea;
+    if (!best || share > best.share) best = { id: venue.id, share };
+  }
+  return best && best.share >= SHARE ? best.id : null;
 }
 
 export function MapView({
@@ -84,6 +124,8 @@ export function MapView({
   basemapId,
   eventCounts,
   showAmenities,
+  levels,
+  onVenueInView,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -147,6 +189,19 @@ export function MapView({
     };
   }, [allBounds]);
 
+  /* ------------------------------------------------------- building in view */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const report = () => onVenueInView(venueInView(map));
+    report();
+    map.on('moveend zoomend', report);
+    return () => {
+      map.off('moveend zoomend', report);
+    };
+  }, [onVenueInView]);
+
   /* --------------------------------------------------------------- basemap */
   useEffect(() => {
     const map = mapRef.current;
@@ -180,11 +235,10 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
     const layers: L.Layer[] = [];
 
     for (const venue of VENUES) {
-      const level = activePlanLevel(venue.id, selected);
+      const level = planLevelOf(venue.id, levels);
       if (!level) continue;
 
       for (const shape of planDetail(venue.id, level)) {
@@ -205,7 +259,7 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [selectedRoomId]);
+  }, [levels]);
 
   /* ------------------------------------------------------------- amenities */
   /*
@@ -221,13 +275,10 @@ export function MapView({
     const map = mapRef.current;
     if (!map || !showAmenities) return;
 
-    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
     const layers: L.Layer[] = [];
 
     for (const amenity of AMENITIES) {
-      if (selected && amenity.venueId === selected.venueId && amenity.level !== selected.level) {
-        continue;
-      }
+      if (amenity.level !== levelOf(amenity.venueId, levels)) continue;
       const marker = L.marker([amenity.position.lat, amenity.position.lng], {
         icon: L.divIcon({
           className: `map__amenity map__amenity--${amenity.kind}`,
@@ -249,7 +300,7 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [showAmenities, selectedRoomId]);
+  }, [showAmenities, levels]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {
@@ -329,15 +380,11 @@ export function MapView({
   /*
    * A flat map of a building with several floors stacks them: the convention
    * centre's rooms 201-212 sit directly over 101-117, because that is where
-   * they are. Selecting a room therefore drops the rest of its building's
-   * floors out of the way, matching the floor plan the map draws underneath.
+   * they are. So only the floor the building is showing is drawn properly, and
+   * the rest are left as ghosts — faint enough not to read as rooms, present
+   * enough to say there is more here than one storey.
    */
-  const hiddenByFloor = (room: Room) => {
-    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
-    return Boolean(
-      selected && room.venueId === selected.venueId && room.level !== selected.level,
-    );
-  };
+  const hiddenByFloor = (room: Room) => room.level !== levelOf(room.venueId, levels);
 
   /* ----------------------------------------------- labels, counts, selection */
   useEffect(() => {
@@ -377,7 +424,7 @@ export function MapView({
       map.off('zoomend', applyLabels);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventCounts, selectedRoomId]);
+  }, [eventCounts, selectedRoomId, levels]);
 
   useEffect(() => {
     for (const [roomId, layer] of roomLayersRef.current) {
@@ -387,7 +434,7 @@ export function MapView({
       element?.classList.toggle('map__room--other-floor', room ? hiddenByFloor(room) : false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRoomId]);
+  }, [selectedRoomId, levels]);
 
   /* -------------------------------------------------------- focus requests */
   const focusToken = focusRequest?.token ?? null;

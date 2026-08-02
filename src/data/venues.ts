@@ -135,6 +135,11 @@ export interface Venue {
    * writes that field verbatim, so these are the source's own short forms.
    */
   aliases?: string[];
+  /**
+   * The floor the map opens this building on, where counting its rooms picks
+   * the wrong one. See `defaultLevel`.
+   */
+  opensOn?: string;
 }
 
 /**
@@ -188,6 +193,10 @@ export const VENUES: Venue[] = [
     },
     footprint: VENUE_FOOTPRINTS['lucas-oil'],
     grid: UNIT_GRID,
+    // The boarded-over field is one room and the concourse ring above it is
+    // two, so counting rooms would open the stadium on the wrong one. The
+    // field is the reason anyone walks down here.
+    opensOn: 'Field level',
   },
   {
     id: 'jw-marriott',
@@ -2264,6 +2273,68 @@ export const ROOMS: Room[] = [
 export const ROOMS_BY_ID: Record<string, Room> = Object.fromEntries(
   ROOMS.map((room) => [room.id, room]),
 );
+
+/**
+ * The floors of each building, lowest first.
+ *
+ * A flat map has one surface and a building has several, and the rooms on them
+ * sit on top of each other: rooms 201–212 are directly over 101–117, because
+ * that is where they are. So the map draws one floor of a building at a time
+ * and lets you change which — and this is the list it offers, taken from the
+ * rooms themselves in the order they are written above, which is by floor from
+ * the ground up.
+ *
+ * Note that a floor here is a floor of *that building*. Gen Con's own level
+ * switcher numbers campus event levels instead, so its "level 3" is at once the
+ * JW's 3rd floor, the Hyatt's 3rd, the Embassy's 5th and the Hilton's 9th.
+ */
+export const VENUE_LEVELS: Record<string, string[]> = (() => {
+  // "Level 2", "9th floor" — a floor that numbers itself says where it goes.
+  const storey = (level: string) => {
+    const found = level.match(/(\d+)(?:st|nd|rd|th)? (?:floor|level)|level (\d+)/i);
+    return found ? Number(found[1] ?? found[2]) : null;
+  };
+
+  const levels: Record<string, string[]> = {};
+  for (const room of ROOMS) {
+    const list = (levels[room.venueId] ??= []);
+    if (!list.includes(room.level)) list.push(room.level);
+  }
+  for (const list of Object.values(levels)) {
+    // Only where every floor numbers itself. The stadium's are named after what
+    // is on them — field, concourse, club — and are already written in order.
+    if (list.every((level) => storey(level) !== null)) {
+      list.sort((a, b) => storey(a)! - storey(b)!);
+    }
+  }
+  return levels;
+})();
+
+/**
+ * The floor a building opens on.
+ *
+ * Not its lowest, which is the obvious answer and the wrong one here: the
+ * Hyatt's ground floor is one room, the Embassy's is one room, and a building
+ * that opens on an empty storey looks like a building with no interior. The
+ * convention's floor is the one it uses, so that is the one with most of its
+ * rooms on it — and the picker names it, so there is no doubt which you are
+ * looking at.
+ *
+ * Counting rooms gets it right everywhere but the stadium, where the field is
+ * one room and the concourse above it is two; `opensOn` says so there.
+ */
+export function defaultLevel(venueId: string): string | undefined {
+  const venue = VENUES_BY_ID[venueId];
+  if (venue?.opensOn) return venue.opensOn;
+
+  const levels = VENUE_LEVELS[venueId] ?? [];
+  let best: { level: string; rooms: number } | undefined;
+  for (const level of levels) {
+    const rooms = ROOMS.filter((room) => room.venueId === venueId && room.level === level).length;
+    if (!best || rooms > best.rooms) best = { level, rooms };
+  }
+  return best?.level;
+}
 
 /**
  * The outlines a room takes from its venue's floor plan.
