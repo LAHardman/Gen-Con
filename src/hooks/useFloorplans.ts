@@ -68,20 +68,31 @@ export function useFloorplans(url = './floorplans.json'): FloorplanManifest {
 }
 
 /**
- * The plan to draw for a selected room.
+ * Every plan to draw right now: one per venue that has any.
  *
- * Matched on the room's own level, so selecting a Level 2 room never shows the
- * Level 1 drawing. The single-plan case is the exception: a venue with one plan
- * uses it whatever the level is called, so a plan added without matching the
- * level strings exactly still shows up rather than silently doing nothing.
+ * A building's plans are drawn without being asked for, because a floor plan
+ * you have to discover by clicking is a floor plan most people never see. Each
+ * venue shows its first plan — the ground floor, as the manifest lists them —
+ * until a room in that building is selected, at which point it switches to the
+ * floor that room is on.
  */
-export function floorplanFor(
+export function activeFloorplans(
   manifest: FloorplanManifest,
-  venueId: string | undefined,
-  level: string | undefined,
-): Floorplan | undefined {
-  const plans = venueId ? manifest[venueId] : undefined;
-  if (!plans?.length) return undefined;
-  const exact = plans.find((plan) => plan.level === level);
-  return exact ?? (plans.length === 1 ? plans[0] : undefined);
+  selected?: { venueId: string; level: string },
+): Array<{ venueId: string; plan: Floorplan }> {
+  // A local binding, so the check below narrows inside the callback too.
+  const chosen = selected;
+
+  return Object.entries(manifest).flatMap(([venueId, plans]) => {
+    // The example manifest documents itself under a `__doc__` key; skip
+    // anything that isn't actually a list of plans.
+    if (!Array.isArray(plans) || typeof plans[0]?.url !== 'string') return [];
+
+    const onThisFloor =
+      chosen && chosen.venueId === venueId
+        ? plans.find((plan) => plan.level === chosen.level)
+        : undefined;
+
+    return [{ venueId, plan: onThisFloor ?? plans[0] }];
+  });
 }

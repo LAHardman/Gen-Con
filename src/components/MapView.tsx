@@ -25,14 +25,14 @@ interface Props {
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
   /**
-   * Optional real floor plan for the selected room's venue and level, drawn
-   * over the basemap. Absent unless public/floorplans.json lists one.
+   * Real floor plans to draw over the basemap, one per venue that has any.
+   * Empty unless public/floorplans.json lists some.
    */
-  floorplan?: { venueId: string; plan: Floorplan };
+  floorplans: Array<{ venueId: string; plan: Floorplan }>;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
-const ROOM_LABEL_MIN_ZOOM = 17;
+const ROOM_LABEL_MIN_ZOOM = 16;
 
 function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
   return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
@@ -50,14 +50,14 @@ export function MapView({
   focusRequest,
   basemapId,
   eventCounts,
-  floorplan,
+  floorplans,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
   const roomLayersRef = useRef(new Map<string, L.Path>());
-  const floorplanRef = useRef<L.ImageOverlay | null>(null);
+  const floorplanRef = useRef<L.ImageOverlay[]>([]);
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
   const handlers = useRef({ onSelectRoom, onOpenRoom });
@@ -86,6 +86,16 @@ export function MapView({
       maxZoom: 21,
       minZoom: 13,
     });
+
+    // Floor plans belong under the rooms drawn on top of them. Leaflet puts
+    // images and vectors in the same pane, in insertion order, so they need a
+    // pane of their own between the tiles (200) and the overlays (400).
+    map.createPane('floorplan');
+    const floorplanPane = map.getPane('floorplan');
+    if (floorplanPane) {
+      floorplanPane.style.zIndex = '350';
+      floorplanPane.style.pointerEvents = 'none';
+    }
 
     map.fitBounds(allBounds, { padding: [40, 40] });
     map.on('click', () => handlers.current.onSelectRoom(null));
@@ -128,29 +138,32 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    floorplanRef.current?.remove();
-    floorplanRef.current = null;
+    for (const layer of floorplanRef.current) layer.remove();
+    floorplanRef.current = [];
 
-    const venue = floorplan ? VENUES_BY_ID[floorplan.venueId] : undefined;
-    if (!floorplan || !venue) return;
+    for (const { venueId, plan } of floorplans) {
+      const venue = VENUES_BY_ID[venueId];
+      if (!venue) continue;
 
-    // A plan's own corners when it has them — a drawing rarely stops exactly at
-    // the building's outline — falling back to the venue's footprint bounds.
-    const corners = floorplan.plan.bounds;
-    const bounds = corners
-      ? L.latLngBounds([corners.north, corners.west], [corners.south, corners.east])
-      : toLatLngBounds(venueBounds(venue));
+      // A plan's own corners when it has them — a drawing rarely stops exactly
+      // at the building's outline — falling back to the footprint's bounds.
+      const corners = plan.bounds;
+      const bounds = corners
+        ? L.latLngBounds([corners.north, corners.west], [corners.south, corners.east])
+        : toLatLngBounds(venueBounds(venue));
 
-    const overlay = L.imageOverlay(floorplan.plan.url, bounds, {
-      opacity: floorplan.plan.opacity ?? 0.85,
-      interactive: false,
-      className: 'map__floorplan',
-      // Somebody else's drawing: name whoever made it, next to the basemap's.
-      attribution: floorplan.plan.credit ? `Floor plan: ${floorplan.plan.credit}` : undefined,
-    });
-    overlay.addTo(map);
-    floorplanRef.current = overlay;
-  }, [floorplan]);
+      const overlay = L.imageOverlay(plan.url, bounds, {
+        opacity: plan.opacity ?? 0.85,
+        interactive: false,
+        pane: 'floorplan',
+        className: 'map__floorplan',
+        // Somebody else's drawing: name whoever made it, next to the basemap's.
+        attribution: plan.credit ? `Floor plan: ${plan.credit}` : undefined,
+      });
+      overlay.addTo(map);
+      floorplanRef.current.push(overlay);
+    }
+  }, [floorplans]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {
