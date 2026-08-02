@@ -1,0 +1,41 @@
+{
+  "__doc__": [
+    "Where each floor plan sits in the world, so its drawing can be turned into",
+    "map geometry.",
+    "",
+    "`page` is the drawing's own extent in PDF points — [x0, y0, x1, y1] with y up",
+    "from the bottom-left corner, the space plan-labels.py reports and pdf-to-svg.py",
+    "writes its paths in. `bounds` is where that rectangle's corners land: (x0, y0)",
+    "is the south-west corner and (x1, y1) the north-east one.",
+    "",
+    "The mapping is linear in Web Mercator, which is what a map draws in, and the",
+    "plans are drawn to scale with north up, so a straight rectangle-to-rectangle",
+    "fit is the right shape of transform. The numbers come from fitting the plan's",
+    "outline to the building's OpenStreetMap footprint; scripts/fit-plan.mjs",
+    "re-derives them and reports how closely the two agree."
+  ],
+  "icc-level-1": {
+    "venueId": "icc",
+    "level": "Level 1",
+    "credit": "Indianapolis Convention & Visitors Association",
+    "page": [90, 0, 850, 631],
+    "bounds": {
+      "west": -86.1668825,
+      "south": 39.7625216,
+      "east": -86.1619275,
+      "north": 39.7656839
+    }
+  },
+  "icc-level-2": {
+    "venueId": "icc",
+    "level": "Level 2",
+    "credit": "Indianapolis Convention & Visitors Association",
+    "page": [90, 39, 850, 643],
+    "bounds": {
+      "west": -86.1668989,
+      "south": 39.7626934,
+      "east": -86.1619374,
+      "north": 39.7657244
+    }
+  }
+}

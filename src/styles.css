@@ -185,11 +185,6 @@ body {
   filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
 }
 
-.map__floorplan {
-  /* Official floor plans are printed on white; blend them into the dark map. */
-  mix-blend-mode: screen;
-}
-
 /* Venue and room geometry ------------------------------------------------ */
 
 .map__link {
@@ -204,6 +199,50 @@ body {
   stroke-width: 1.5;
   stroke-dasharray: 4 4;
   fill: none;
+}
+
+/* Floor-plan geometry ----------------------------------------------------- */
+
+/*
+ * The building's interior as its architects drew it, restyled for a dark map.
+ * The plans use paper colours — pale greys and pinks on white — which read as a
+ * bright slab over a night basemap, so only the distinctions carry over: rooms
+ * and halls a shade lighter than the space around them, restrooms and service
+ * areas told apart by tint rather than by the plan's own hues. Everything here
+ * is background; the rooms the app knows about are drawn over it in colour.
+ */
+.map__plan {
+  stroke: #454c66;
+  stroke-width: 0.75;
+  fill: #2a3048;
+  fill-opacity: 0.55;
+}
+
+.map__plan--circulation {
+  /* Prefunction and hallways: the space between rooms, so barely there. */
+  fill: #333a54;
+  fill-opacity: 0.4;
+  stroke-opacity: 0.5;
+}
+
+.map__plan--service {
+  fill: #262b40;
+  fill-opacity: 0.5;
+  stroke-opacity: 0.5;
+}
+
+.map__plan--restroom {
+  fill: #4a3f5c;
+  fill-opacity: 0.7;
+  stroke: #6b5c82;
+}
+
+/* Moveable airwalls: where a hall divides, drawn as the dashed line it is. */
+.map__plan--divider {
+  fill: none;
+  stroke: #4c5470;
+  stroke-width: 0.75;
+  stroke-dasharray: 3 3;
 }
 
 .map__room {

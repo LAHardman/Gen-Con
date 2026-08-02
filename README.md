@@ -128,14 +128,20 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
 outlines — those are the mapped shapes of the actual buildings, not estimates.
-The **convention centre's interior is real too**: its rooms are measured off
-the official floor plans, which the map draws underneath them (below). Every
-other venue's interior is still a schematic arrangement inside its real
+The **convention centre's interior is real too**: its halls and meeting rooms
+are the outlines from its official floor plans, read into real coordinates and
+drawn as map geometry (below). Every other venue's interior is still a schematic arrangement inside its real
 footprint — rooms are in the right building and the right general part of it,
 but not at surveyed positions. The app says which you are looking at in every
 room pop-up. Three venues with no interior worth breaking out — the Indiana
-Rep, the Escape Room and Circle Centre — are drawn as their footprint directly,
-and every room is checked to fall inside the building it belongs to.
+Rep, the Escape Room and Circle Centre — are drawn as their footprint directly.
+
+Every schematic room is checked to fall inside the building it belongs to.
+Rooms drawn from a floor plan are held to a different standard, because the
+plan and the OSM outline are two independent tracings of the same building: the
+convention centre has three whose walls cross the mapped outline, by at most
+2.7 m. That is the two sources disagreeing, not a room in the wrong place, and
+the plan is the better authority for where an interior wall is.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
 a real distance from the building's north-west corner; the other venues use a
@@ -144,37 +150,72 @@ taller than the building: the building proper occupies the first 265 m, and the
 rest of the box is the thin skywalk arm running south to Lucas Oil. Rooms have
 to stay inside the part the footprint actually covers.
 
-To make an interior exact, overlay a real floor plan (below) or replace the room
-rectangles with surveyed ones. Nothing else has to change.
+To make an interior exact, run its floor plan through the pipeline below, or
+replace the room rectangles with surveyed ones. Nothing else has to change.
 
 ### Real floor plans
 
-The convention centre has them. `public/floorplans/` holds its Level 1 and
-Level 2 plans as SVG, drawn under the rooms whenever a room on that floor is
-selected, and `src/data/venues.ts` places the convention centre's rooms by
-measuring off those plans rather than by eye.
+The convention centre's interior on the map **is** its official floor plan. Not
+a picture of one laid over the map — the plan's own geometry, read into real
+coordinates and drawn by the app in the app's palette. Exhibit Hall D is the
+outline the architect drew for Exhibit Hall D, and the prefunction halls,
+service cores, restrooms and airwall lines around it are the shapes the plan
+draws for them.
 
-Getting there took two scripts, both kept in `scripts/`:
+That is worth the trouble because an image overlay never quite works. It
+arrives as one flat sheet in somebody else's colours, its paper greys fight the
+basemap, and wherever the fit is a metre out the whole sheet looks wrong at
+once. Geometry has none of those problems: it takes the map's own styling, sits
+under the rooms rather than over the basemap, and a room that is drawn from the
+plan can be clicked, labelled and zoomed to like any other.
 
-- `pdf-to-svg.py` converts the plan PDFs. They are pure vector — no raster
-  images inside — so the drawing survives as paths, scales at any zoom, and
-  costs 39 KB and 162 KB rather than a pair of bitmaps.
-- `georeference-plan.py` places them. It rasterises the plan's building area
-  and searches for the scale and offset that best overlap the venue's OSM
-  footprint. Level 1 settles at 0.501 m per point and Level 2 at 0.503,
-  agreeing on the building's north-west corner to within half a metre — two
-  independently drawn plans, fitted independently. Intersection over union
-  against the OSM outline is 0.78; the rest is the difference between a roof
-  traced from above and floor area drawn from inside.
+The pipeline is three scripts in `scripts/`, run over the PDFs in `plans/`:
 
-Room rectangles then come from the plans themselves: the exhibit halls from the
-polygons the plan draws for them, the meeting-room blocks from the extent of
-their numbered labels, which the PDFs carry as ordinary text.
+- **`pdf-to-svg.py`** converts a plan. These are pure vector drawings — no
+  raster images inside — so the whole thing survives as paths.
+- **`plan-labels.py`** reads the printed type back out with its position. This
+  is the piece that makes the rest work: the plans letter every hall and
+  meeting room, so a label tells you which shape is room 143.
+- **`plan-to-geometry.mjs`** turns both into `src/data/plan-geometry.ts`.
 
-Measuring floors has one consequence worth knowing: rooms genuinely stack. The
-convention centre's rooms 201-212 sit directly over 101-117, because that is
-where they are. Selecting a room therefore fades the rest of its building's
-floors, matching the plan drawn underneath, so the two don't fight.
+Classification comes from the plans' own legends, which key each space by
+colour — exhibit halls and meeting rooms in one, prefunction space, restrooms,
+service areas. So the page background, the surrounding streets and the legend
+itself simply aren't among the colours that mean anything, and never enter the
+output. Each printed label then claims the tightest shape it falls inside, and
+a shape answers to every label on it: `HALL A`, `EXHIBIT HALL A`, or each of
+`130`–`139` where a block of meeting rooms shares one drawn space and divides
+along airwalls. `Room.plan` in `venues.ts` lists the labels a room covers:
+
+```ts
+{ id: 'hall-d', plan: ['HALL D'], … }
+{ id: 'rooms-130-145', plan: numberRange(130, 145), … }
+```
+
+19 of the convention centre's 22 rooms are drawn this way, across 132 shapes.
+The three that aren't — registration, Gen Con Central and the food court — are
+services the plan doesn't letter, so they keep a schematic rectangle on the
+Level 1 concourse.
+
+**Georeferencing.** `plans/georeference.json` says where each plan's page sits
+in the world, and `scripts/fit-plan.mjs` derives it: the plan is a scale drawing
+and Web Mercator is conformal over a city block, so the only freedom is a
+uniform scale and an offset — three numbers, not four. It searches those for the
+best overlap with the building's OSM footprint, clipped to the building proper
+because the OSM way also carries the thin skywalk arm running south to Lucas Oil
+and no floor plan of the convention centre draws that.
+
+Both sheets settle at 0.726 Mercator metres per point — Level 1 at 0.7258 and
+Level 2 at 0.7267, agreeing to one part in a thousand, and on the building's
+west wall to 1.4 m. Two independently drawn plans, fitted independently, landing
+in the same place. Intersection over union against the OSM outline is 0.96, and
+98.8% of everything the plans draw falls inside the mapped building.
+
+Drawing real floors has one consequence worth knowing: rooms genuinely stack.
+The convention centre's rooms 201-212 sit directly over 101-117, because that is
+where they are. Each building therefore draws one floor at a time — its ground
+floor until you select a room in it, then that room's floor — and selecting a
+room fades the rest of its building's floors.
 
 The JW Marriott's own floor plans set the arrangement of its rooms — the big
 halls west, the numbered rooms down the east side, floor by floor — but those
@@ -182,7 +223,11 @@ drawings carry no building outline or scale to fit against, so its interior is
 positioned from them rather than measured, and stays schematic. Lucas Oil's
 field is measured: its box is a full NFL field including end zones, centred on
 the bowl and turned onto the bowl's own long axis, which the minimum-area
-rectangle around the OSM footprint puts 25.6° off the street grid.
+rectangle around the OSM footprint puts 25.6° off the street grid. Its street-
+level plan is a seating diagram with no scale, so it can't be fitted — but it
+names the spaces and says which side of the bowl each is on, which is where the
+East and West Club lounges, the concourses and the gates come from. Their
+positions are schematic; their names and their sides are not.
 
 For the remaining venues, neither obvious source gives plans away:
 
@@ -193,29 +238,27 @@ For the remaining venues, neither obvious source gives plans away:
 - **Gen Con's own plans** are drawn by a JavaScript map application rather than
   served as image files, and they are Gen Con's drawings, not open data.
 
-So for those, if you have plan images — from Gen Con, a venue's own website, or
-photographed from the printed programme — drop them in `public/floorplans/` and
-add them to `public/floorplans.json`:
+To add another venue, put its plan PDF in `plans/`, add an entry to
+`plans/georeference.json`, and run:
 
-```json
-{
-  "icc": [
-    { "level": "Level 1", "url": "./floorplans/icc-level-1.png", "credit": "Gen Con LLC" },
-    { "level": "Exhibit level", "url": "./floorplans/icc-exhibit.png", "opacity": 0.7 }
-  ]
-}
+```
+python3 scripts/pdf-to-svg.py   plans/<name>.pdf plans/<name>.svg
+python3 scripts/plan-labels.py  plans/<name>.pdf plans/<name>.labels.json
+node scripts/fit-plan.mjs <name>          # reports the bounds to paste back
+node scripts/plan-to-geometry.mjs
 ```
 
-`public/floorplans.example.json` documents the format and lists the venue ids.
-Keys are venue ids; `level` must match a `Room.level` on that venue. Selecting a
-room draws the plan for its building and floor, so the overlay follows what you
-are looking at. Each plan is stretched to that venue's real footprint bounds, so
-how well it lines up depends on the image being cropped to the building.
+Then set `Room.plan` on the rooms it letters. A plan whose colours don't match
+the convention centre's needs its legend added to `LEGEND` in
+`plan-to-geometry.mjs` — the script says what it kept and what it dropped.
 
-The manifest is read at runtime rather than bundled, so adding a plan to a
-deployed site means uploading two files, not rebuilding. `credit` is shown in
-the map's attribution — these are somebody else's drawings, so check you are
-allowed to redistribute one before publishing it.
+This route needs a vector PDF with a colour-keyed legend. A plan that is only a
+photograph or a seating diagram has no geometry to read, and there is no
+overlay fallback: the map draws geometry or it draws the schematic rooms.
+
+The plans in `plans/`, and the geometry read out of them, are the venue's
+drawings and not open data. `PLAN_CREDIT` puts the source in the map's
+attribution; check you are allowed to redistribute a plan before adding one.
 
 ## Event schedule
 

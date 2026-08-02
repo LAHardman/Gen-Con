@@ -9,12 +9,15 @@
  *
  * ACCURACY: the venue outlines are the real building footprints as mapped in
  * OpenStreetMap, not estimates — the shapes on screen are the shapes on the
- * ground. The convention centre's rooms are measured off its official floor
- * plans (see `public/floorplans/`), so its interior is drawn where the rooms
- * really are. Every other venue's interior is still a schematic arrangement
- * inside its real footprint: rooms are in the right building and the right
- * general part of it, not at surveyed coordinates. The basemap underneath is
- * real. See README.md.
+ * ground. The convention centre's halls and meeting rooms are read straight
+ * off its official floor plans (`plans/`, converted by
+ * `scripts/plan-to-geometry.mjs`): each is drawn as the outline the architect
+ * drew, in the position the plan puts it. Three of its rooms — registration,
+ * Gen Con Central and the food court — are services the plan doesn't letter,
+ * so they keep a schematic rectangle on the Level 1 concourse. Every other
+ * venue's interior is a schematic arrangement inside its real footprint: rooms
+ * are in the right building and the right general part of it, not at surveyed
+ * coordinates. The basemap underneath is real. See README.md.
  *
  * The venues and aliases below were tuned against the live event database:
  * every `Venue.aliases` entry is a `Location` string the source actually
@@ -24,6 +27,7 @@
 import type { LatLng, LocalRect, VenueAnchor } from '../utils/geo';
 import { localRectToBounds } from '../utils/geo';
 import { VENUE_FOOTPRINTS, type FootprintRing } from './footprints';
+import { PLAN_DETAIL, PLAN_SHAPES, type PlanDetail, type PlanRing } from './plan-geometry';
 
 export type RoomCategory =
   | 'exhibit'
@@ -58,8 +62,20 @@ export interface Room {
   category: RoomCategory;
   venueId: string;
   level: string;
-  /** Position within the venue's local grid. */
+  /**
+   * Position within the venue's local grid. Where `plan` names shapes on a
+   * real floor plan those are drawn instead, and this only has to be close
+   * enough to put the room in the right part of the building.
+   */
   rect: LocalRect;
+  /**
+   * Labels printed on the venue's floor plan, exactly as they appear on it,
+   * naming the spaces this room covers — `['HALL A']`, or every number along a
+   * block of meeting rooms. The room is then drawn as the outline the
+   * architect drew rather than as `rect`. Resolved against the room's own
+   * level. See `plan-geometry.ts`.
+   */
+  plan?: readonly string[];
   description: string;
   highlights: string[];
   /**
@@ -317,6 +333,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 2',
     rect: { x: 300, y: 31, width: 76, height: 23 },
+    plan: ['SAGAMORE', ...numberRange(1, 7)],
     // The source misspells it "Sagamaore" on most of its records, so both
     // spellings have to resolve.
     aliases: ['Sagamore', 'Sagamaore', 'Sagamore Ballroom', 'Sagamaore Ballroom'],
@@ -331,6 +348,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 207, y: 22, width: 41, height: 20 },
+    plan: ['WABASH BALLROOM'],
     aliases: ['Wabash', 'Wabash Ballroom'],
     description:
       'Mid-size ballroom on the west concourse. Typically hosts the larger RPG blocks, costume contests and evening entertainment.',
@@ -343,7 +361,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 53, y: 38, width: 80, height: 12 },
+    rect: { x: 40, y: 24, width: 74, height: 12 },
     aliases: ['Will Call', 'Registration'],
     description:
       'Badge pickup, will call and on-site registration. Lines are longest Wednesday evening and Thursday morning — pick up your badge early if you can.',
@@ -355,7 +373,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 138, y: 38, width: 60, height: 12 },
+    rect: { x: 120, y: 24, width: 62, height: 12 },
     aliases: ['Central', 'Customer Service'],
     description:
       'The information and customer service hub: event ticket exchanges, generic ticket sales, lost and found, and answers to "where is…?"',
@@ -368,7 +386,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 261, y: 38, width: 58, height: 12 },
+    rect: { x: 250, y: 24, width: 58, height: 12 },
     aliases: ['Serpentine Lobby'],
     description:
       'Concession stands along the main concourse. Fast, expensive, and reliably packed between noon and 2pm — Georgia Street food trucks are the usual escape valve.',
@@ -383,6 +401,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 339, y: 88, width: 45, height: 28 },
+    plan: ['500 BALLROOM'],
     aliases: ['500 Ballroom', 'Ballroom 500'],
     description:
       'Upper-level ballroom reached from the escalators. Quieter than the main floor and a common home for workshops and author events.',
@@ -396,6 +415,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 294, y: 46, width: 90, height: 28 },
+    plan: numberRange(101, 117),
     aliases: numberRange(101, 117),
     description:
       'Small breakout rooms off the Level 1 concourse. Expect scheduled RPG tables, seminars and GM briefings.',
@@ -411,6 +431,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 44, y: 53, width: 48, height: 74 },
+    plan: ['HALL A'],
     aliases: ['Hall A', 'Exhibit Hall A'],
     description:
       'West end of the exhibit hall. Traditionally the entrance-adjacent aisles — the first wall of booths you hit when the hall opens.',
@@ -424,6 +445,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 92, y: 53, width: 47, height: 74 },
+    plan: ['HALL B'],
     aliases: ['Hall B', 'Exhibit Hall B', 'Event Hall B'],
     description:
       'The busiest demo space in the building: publisher tables run back-to-back sessions here all four days, each signed with the company running it.',
@@ -437,6 +459,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 139, y: 53, width: 47, height: 74 },
+    plan: ['HALL C'],
     aliases: ['Hall C', 'Exhibit Hall C'],
     description: 'Mid-hall aisles: mid-size publishers, accessory makers and dice vendors.',
     highlights: ['Dice & accessories', 'Mid-size publishers', 'Art prints'],
@@ -449,6 +472,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 185, y: 54, width: 86, height: 42 },
+    plan: ['HALL D'],
     aliases: ['Hall D', 'Exhibit Hall D'],
     description:
       'Continues the mid-hall aisles toward the east. Common home for miniatures, terrain and painting supplies.',
@@ -462,6 +486,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 185, y: 96, width: 86, height: 44 },
+    plan: ['HALL E'],
     aliases: ['Hall E', 'Exhibit Hall E'],
     description:
       'East exhibit aisles, and where the biggest brands put their organised play: long banks of tables running scheduled sessions.',
@@ -475,6 +500,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 146, y: 127, width: 72, height: 70 },
+    plan: ['HALL F'],
     aliases: ['Hall F', 'Exhibit Hall F'],
     description:
       'Far east end of the exhibit hall, adjacent to the east entrance. Quietest aisles in the morning.',
@@ -488,6 +514,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 146, y: 197, width: 72, height: 58 },
+    plan: ['HALL G'],
     aliases: ['Hall G', 'Exhibit Hall G'],
     description:
       'South exhibit block. Frequently used for the used-game auction area and larger retail booths.',
@@ -501,6 +528,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 218, y: 174, width: 66, height: 97 },
+    plan: ['HALL H'],
     aliases: ['Hall H', 'Exhibit Hall H'],
     description: 'South exhibit block continued — costume, prop and accessory vendors cluster here.',
     highlights: ['Costume & props', 'Leatherwork', 'Photo backdrops'],
@@ -513,6 +541,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 284, y: 174, width: 66, height: 114 },
+    plan: ['HALL I'],
     aliases: ['Hall I', 'Exhibit Hall I'],
     description:
       'Often converted into event space rather than booths: large scheduled play areas and tournament banks.',
@@ -526,6 +555,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 350, y: 174, width: 50, height: 57 },
+    plan: ['HALL J'],
     aliases: ['Hall J', 'Exhibit Hall J', 'Open Gaming'],
     description:
       'Open gaming: rows of free tables, first come first served. Grab one, put a game out, and strangers will sit down.',
@@ -539,6 +569,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 350, y: 230, width: 50, height: 62 },
+    plan: ['HALL K'],
     aliases: ['Hall K', 'Exhibit Hall K', 'Family Fun'],
     description:
       'Family and kids programming, plus overflow open gaming. Lower noise and shorter sessions than the main hall.',
@@ -554,6 +585,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 91, y: 18, width: 93, height: 14 },
+    plan: numberRange(120, 128),
     aliases: numberRange(120, 128),
     description:
       'The west half of the Level 1 breakout block. A large share of the scheduled RPG and workshop slots land here.',
@@ -567,6 +599,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 1',
     rect: { x: 223, y: 135, width: 153, height: 14 },
+    plan: numberRange(130, 145),
     aliases: numberRange(130, 145),
     description:
       'The east half of the Level 1 breakout block, closest to the Georgia Street entrance. The busiest meeting rooms in the building.',
@@ -580,6 +613,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 2',
     rect: { x: 278, y: 49, width: 63, height: 68 },
+    plan: numberRange(201, 212),
     aliases: numberRange(201, 212),
     description:
       'Level 2 breakout rooms above the main concourse, reached by the escalators that double as the convention’s default meeting spot.',
@@ -593,6 +627,7 @@ export const ROOMS: Room[] = [
     venueId: 'icc',
     level: 'Level 2',
     rect: { x: 250, y: 137, width: 136, height: 14 },
+    plan: numberRange(231, 245),
     aliases: numberRange(231, 245),
     description:
       'East end of the Level 2 block. Often used for tournaments and multi-session campaign play that needs a room for the whole day.',
@@ -632,7 +667,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Concourse level',
-    rect: { x: 70, y: 34, width: 18, height: 22 },
+    rect: { x: 70, y: 38, width: 17, height: 22 },
     aliases: ['East Concourse'],
     description:
       'The wide east walkway, lined with tables. Easy to find and easy to get turned around in — it wraps the whole bowl.',
@@ -644,24 +679,37 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Concourse level',
-    rect: { x: 10, y: 52, width: 18, height: 22 },
+    rect: { x: 14, y: 38, width: 17, height: 22 },
     aliases: ['West Concourse'],
     description:
       'The west side of the concourse ring, quieter than the east and closer to the skywalk back to the convention centre.',
     highlights: ['Quieter side', 'Nearest the skywalk', 'Table banks'],
   },
   {
-    id: 'lucas-oil-club-lounges',
-    name: 'Club Lounges',
-    shortName: 'Club Lounges',
+    id: 'lucas-oil-east-club',
+    name: 'East Club Lounge',
+    shortName: 'East Club',
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Club level',
-    rect: { x: 36, y: 18, width: 28, height: 10 },
-    aliases: ['East Club Lounge', 'West Club Lounge', 'Club Lounge'],
+    rect: { x: 63, y: 24, width: 17, height: 11 },
+    aliases: ['East Club Lounge', 'East Club', 'Club Lounge'],
     description:
-      'The stadium’s club lounges, used for smaller sessions. Carpeted, seated and considerably calmer than the field below.',
-    highlights: ['Calmer than the field', 'Smaller sessions', 'Seated & carpeted'],
+      'The club lounge along the east side of the bowl, used for smaller sessions. Carpeted, seated and considerably calmer than the field below. Signed by whoever sponsors it — currently Faegre Drinker — rather than by the compass point.',
+    highlights: ['Calmer than the field', 'Smaller sessions', 'Signed by its sponsor'],
+  },
+  {
+    id: 'lucas-oil-west-club',
+    name: 'West Club Lounge',
+    shortName: 'West Club',
+    category: 'amenity',
+    venueId: 'lucas-oil',
+    level: 'Club level',
+    rect: { x: 20, y: 24, width: 17, height: 11 },
+    aliases: ['West Club Lounge', 'West Club'],
+    description:
+      'The matching lounge on the west side, above the Huntington West Gate and the closest club space to the skywalk back to the convention centre.',
+    highlights: ['Nearest the skywalk', 'Smaller sessions', 'Seated & carpeted'],
   },
   {
     id: 'lucas-oil-meeting-rooms',
@@ -670,7 +718,7 @@ export const ROOMS: Room[] = [
     category: 'meeting',
     venueId: 'lucas-oil',
     level: 'Meeting level',
-    rect: { x: 68, y: 58, width: 14, height: 12 },
+    rect: { x: 66, y: 62, width: 16, height: 12 },
     aliases: ['Meeting Room', 'Meeting Rooms'],
     description:
       'A dozen numbered breakout rooms off the concourse, running RPG and workshop slots away from the noise of the field.',
@@ -683,7 +731,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Suite level',
-    rect: { x: 16, y: 36, width: 16, height: 14 },
+    rect: { x: 18, y: 62, width: 16, height: 12 },
     aliases: ['Lower Suites', 'Suites'],
     description:
       'Private suites let out as small event spaces. The most sheltered rooms in the building, and the hardest to find without directions.',
@@ -1118,8 +1166,54 @@ export const ROOMS_BY_ID: Record<string, Room> = Object.fromEntries(
   ROOMS.map((room) => [room.id, room]),
 );
 
-/** A room's footprint on the real map, derived from its venue's anchor. */
+/**
+ * The outlines a room takes from its venue's floor plan.
+ *
+ * Empty for a room in a building whose plans we don't have, or one the plan
+ * doesn't letter — those fall back to their schematic rectangle. Several
+ * labels can name one shape, as a block of meeting rooms divided by airwalls
+ * does, so the rings are deduplicated.
+ */
+const ROOM_SHAPES = new Map<string, readonly PlanRing[]>(
+  ROOMS.map((room) => {
+    const rings = new Set<PlanRing>();
+    for (const label of room.plan ?? []) {
+      const ring = PLAN_SHAPES[`${room.venueId}/${room.level}/${label.trim().toUpperCase()}`];
+      if (ring) rings.add(ring);
+    }
+    return [room.id, [...rings]];
+  }),
+);
+
+export function roomShapes(room: Room): readonly PlanRing[] {
+  return ROOM_SHAPES.get(room.id) ?? [];
+}
+
+/** Shapes a room already draws needn't be drawn again as background detail. */
+const CLAIMED = new Set<PlanRing>([...ROOM_SHAPES.values()].flat());
+
+/**
+ * The rest of a floor: its prefunction space, service cores, restrooms, airwall
+ * lines, and any lettered space no room claims.
+ */
+export function planDetail(venueId: string, level: string): readonly PlanDetail[] {
+  return (PLAN_DETAIL[`${venueId}/${level}`] ?? []).filter((shape) => !CLAIMED.has(shape.ring));
+}
+
+function ringBounds(rings: readonly PlanRing[]): [LatLng, LatLng] {
+  const points = rings.flat();
+  const lats = points.map(([lat]) => lat);
+  const lngs = points.map(([, lng]) => lng);
+  return [
+    { lat: Math.max(...lats), lng: Math.min(...lngs) },
+    { lat: Math.min(...lats), lng: Math.max(...lngs) },
+  ];
+}
+
+/** A room's footprint on the real map: its plan outline, or its schematic rect. */
 export function roomBounds(room: Room): [LatLng, LatLng] {
+  const shapes = roomShapes(room);
+  if (shapes.length > 0) return ringBounds(shapes);
   const venue = VENUES_BY_ID[room.venueId];
   return localRectToBounds(room.rect, venue.grid, venue.anchor);
 }
