@@ -655,3 +655,12 @@ body {
     transition: none !important;
   }
 }
+
+/* Rooms on another floor of the building you have selected in. They stay on the
+   map so the building doesn't appear to empty out, but drop back far enough to
+   read as "not this floor" and stop swallowing clicks meant for the floor plan
+   underneath. */
+.map__room--other-floor {
+  opacity: 0.12;
+  pointer-events: none;
+}

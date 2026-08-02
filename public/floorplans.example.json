@@ -1,0 +1,34 @@
+{
+  "__doc__": [
+    "Optional. Copy to floorplans.json to draw real floor plans over the map.",
+    "",
+    "Neither OpenStreetMap nor the Gen Con event database publishes interior",
+    "plans for these buildings, so the app draws schematic interiors instead.",
+    "If you have plan images — from Gen Con, from a venue's own website, or",
+    "photographed from the printed programme — put them in public/floorplans/",
+    "and list them here. They are read at runtime, so adding one to a deployed",
+    "site means uploading two files, not rebuilding.",
+    "",
+    "Keys are venue ids from src/data/venues.ts. 'level' must match a Room.level",
+    "on that venue, so selecting a room shows the plan for the floor it is on.",
+    "Each plan is stretched to its venue's real OSM footprint bounds, so how",
+    "well it lines up depends on the image being cropped to the building.",
+    "",
+    "These are somebody else's drawings: set 'credit', and check you are allowed",
+    "to redistribute an image before publishing it on a public site.",
+    "",
+    "Venue ids: icc, lucas-oil, jw-marriott, marriott-downtown, westin, hyatt,",
+    "crowne-plaza, hilton, omni, embassy-suites, indiana-rep, escape-room,",
+    "circle-centre"
+  ],
+
+  "icc": [
+    { "level": "Level 1", "url": "./floorplans/icc-level-1.png", "credit": "Gen Con LLC" },
+    { "level": "Level 2", "url": "./floorplans/icc-level-2.png", "credit": "Gen Con LLC" },
+    { "level": "Exhibit level", "url": "./floorplans/icc-exhibit.png", "opacity": 0.7, "credit": "Gen Con LLC" }
+  ],
+
+  "lucas-oil": [
+    { "level": "Field level", "url": "./floorplans/lucas-oil-field.png", "credit": "Gen Con LLC" }
+  ]
+}

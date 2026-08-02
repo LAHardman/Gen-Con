@@ -128,34 +128,94 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
 outlines — those are the mapped shapes of the actual buildings, not estimates.
-Buildings whose interiors the map doesn't break out (the hotels, Lucas Oil
-Stadium) are drawn as that footprint directly. What remains approximate is the
-**interior of the convention center: its room layout is a schematic arrangement
-inside the real footprint, not a surveyed floor plan** — halls are in the right
-building and the right general part of it, but not at surveyed positions. The
-app says so in every room pop-up.
+The **convention centre's interior is real too**: its rooms are measured off
+the official floor plans, which the map draws underneath them (below). Every
+other venue's interior is still a schematic arrangement inside its real
+footprint — rooms are in the right building and the right general part of it,
+but not at surveyed positions. The app says which you are looking at in every
+room pop-up. Three venues with no interior worth breaking out — the Indiana
+Rep, the Escape Room and Circle Centre — are drawn as their footprint directly,
+and every room is checked to fall inside the building it belongs to.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
-a real distance from the building's north-west corner. Note that its footprint's
-bounding box is taller than the building: the convention center proper occupies
-the first 265 m, and the rest of the box is the thin skywalk arm running south
-to Lucas Oil. Rooms have to stay inside the part the footprint actually covers.
+a real distance from the building's north-west corner; the other venues use a
+plain 0–100 grid. Note that the convention center's footprint bounding box is
+taller than the building: the building proper occupies the first 265 m, and the
+rest of the box is the thin skywalk arm running south to Lucas Oil. Rooms have
+to stay inside the part the footprint actually covers.
 
-To make the interior exact, overlay an official floor plan (below) or replace
-the room rectangles with surveyed ones. Nothing else has to change.
+To make an interior exact, overlay a real floor plan (below) or replace the room
+rectangles with surveyed ones. Nothing else has to change.
 
-### Overlaying an official floor plan
+### Real floor plans
 
-If you have an official floor-plan image, it can be drawn over the real map:
+The convention centre has them. `public/floorplans/` holds its Level 1 and
+Level 2 plans as SVG, drawn under the rooms whenever a room on that floor is
+selected, and `src/data/venues.ts` places the convention centre's rooms by
+measuring off those plans rather than by eye.
 
-```bash
-# put the image in public/, then:
-VITE_FLOORPLAN_URL=./icc-floorplan.png npm run dev
+Getting there took two scripts, both kept in `scripts/`:
+
+- `pdf-to-svg.py` converts the plan PDFs. They are pure vector — no raster
+  images inside — so the drawing survives as paths, scales at any zoom, and
+  costs 39 KB and 162 KB rather than a pair of bitmaps.
+- `georeference-plan.py` places them. It rasterises the plan's building area
+  and searches for the scale and offset that best overlap the venue's OSM
+  footprint. Level 1 settles at 0.501 m per point and Level 2 at 0.503,
+  agreeing on the building's north-west corner to within half a metre — two
+  independently drawn plans, fitted independently. Intersection over union
+  against the OSM outline is 0.78; the rest is the difference between a roof
+  traced from above and floor area drawn from inside.
+
+Room rectangles then come from the plans themselves: the exhibit halls from the
+polygons the plan draws for them, the meeting-room blocks from the extent of
+their numbered labels, which the PDFs carry as ordinary text.
+
+Measuring floors has one consequence worth knowing: rooms genuinely stack. The
+convention centre's rooms 201-212 sit directly over 101-117, because that is
+where they are. Selecting a room therefore fades the rest of its building's
+floors, matching the plan drawn underneath, so the two don't fight.
+
+The JW Marriott's own floor plans set the arrangement of its rooms — the big
+halls west, the numbered rooms down the east side, floor by floor — but those
+drawings carry no building outline or scale to fit against, so its interior is
+positioned from them rather than measured, and stays schematic. Lucas Oil's
+field is measured: its box is a full NFL field including end zones, centred on
+the bowl and turned onto the bowl's own long axis, which the minimum-area
+rectangle around the OSM footprint puts 25.6° off the street grid.
+
+For the remaining venues, neither obvious source gives plans away:
+
+- **OpenStreetMap has no interior rooms** in any Gen Con venue. Across the whole
+  campus there are 28 indoor-tagged elements and not one is a room — they are
+  skywalk footbridges, four underground corridors, and shop and artwork points.
+  The Overpass query that produced the footprints stops at the walls.
+- **Gen Con's own plans** are drawn by a JavaScript map application rather than
+  served as image files, and they are Gen Con's drawings, not open data.
+
+So for those, if you have plan images — from Gen Con, a venue's own website, or
+photographed from the printed programme — drop them in `public/floorplans/` and
+add them to `public/floorplans.json`:
+
+```json
+{
+  "icc": [
+    { "level": "Level 1", "url": "./floorplans/icc-level-1.png", "credit": "Gen Con LLC" },
+    { "level": "Exhibit level", "url": "./floorplans/icc-exhibit.png", "opacity": 0.7 }
+  ]
+}
 ```
 
-It is stretched to the convention centre's anchor bounds, so how well it lines
-up depends on the anchor being right. This is the path to a genuinely exact
-interior map.
+`public/floorplans.example.json` documents the format and lists the venue ids.
+Keys are venue ids; `level` must match a `Room.level` on that venue. Selecting a
+room draws the plan for its building and floor, so the overlay follows what you
+are looking at. Each plan is stretched to that venue's real footprint bounds, so
+how well it lines up depends on the image being cropped to the building.
+
+The manifest is read at runtime rather than bundled, so adding a plan to a
+deployed site means uploading two files, not rebuilding. `credit` is shown in
+the map's attribution — these are somebody else's drawings, so check you are
+allowed to redistribute one before publishing it.
 
 ## Event schedule
 
@@ -272,7 +332,9 @@ A personal schedule of the events you've got tickets for; search across events;
 walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
 for it); and offline caching of tiles so the map works without signal.
 
-Lucas Oil Stadium is the one venue whose interior would be worth breaking out:
-it takes about a fifth of the schedule, and the source already separates the
-field blocks, exhibit halls 1–2, the east concourse, the club lounges and the
-numbered meeting rooms. Today they all resolve to the stadium as a whole.
+Room-level detail could go further still. The exhibit halls are one shape each,
+though the source names the colour-coded and publisher sections inside them
+(`Hall B : Orange`, `Hall E : Asmodee`); breaking those out would put a demo
+table on the map rather than a hall. The other venues would each need their own
+floor plan before their interiors could be measured the way the convention
+centre's now are.

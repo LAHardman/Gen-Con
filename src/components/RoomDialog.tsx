@@ -199,9 +199,9 @@ export function RoomDialog({
         </div>
 
         <p className="dialog__note">
-          Room outlines are placed within the real building footprint but are a schematic
-          arrangement, not a surveyed floor plan. Check the official Gen Con program for exact room
-          assignments.
+          {room.venueId === 'icc'
+            ? 'Room outlines are traced from the convention centre’s official floor plans, which the map draws underneath. Check the official Gen Con program for exact room assignments.'
+            : 'Room outlines are placed within the real building footprint but are a schematic arrangement, not a surveyed floor plan. Check the official Gen Con program for exact room assignments.'}
         </p>
       </div>
     </div>

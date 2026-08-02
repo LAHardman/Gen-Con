@@ -1,0 +1,28 @@
+{
+  "icc": [
+    {
+      "level": "Level 1",
+      "url": "./floorplans/icc-level-1.svg",
+      "opacity": 0.75,
+      "credit": "Indianapolis Convention & Visitors Association",
+      "bounds": {
+        "north": 39.7655233,
+        "west": -86.1664595,
+        "south": 39.7626834,
+        "east": -86.1620097
+      }
+    },
+    {
+      "level": "Level 2",
+      "url": "./floorplans/icc-level-2.svg",
+      "opacity": 0.75,
+      "credit": "Indianapolis Convention & Visitors Association",
+      "bounds": {
+        "north": 39.7655768,
+        "west": -86.1664521,
+        "south": 39.7628476,
+        "east": -86.1619846
+      }
+    }
+  ]
+}
