@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import {
   CATEGORY_STYLES,
-  CONNECTIONS,
   ROOMS,
   ROOMS_BY_ID,
   VENUES,
@@ -11,11 +10,11 @@ import {
   roomBounds,
   roomShapes,
   venueBounds,
+  venueOutline,
   type Room,
   type Venue,
 } from '../data/venues';
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
-import { boundsCentre } from '../utils/geo';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 
 interface Props {
@@ -190,27 +189,10 @@ export function MapView({
 
     const layers: L.Layer[] = [];
 
-    // Skywalk links between venues, drawn under everything else.
-    for (const link of CONNECTIONS) {
-      const from = VENUES_BY_ID[link.from];
-      const to = VENUES_BY_ID[link.to];
-      if (!from || !to) continue;
-      const a = boundsCentre(venueBounds(from));
-      const b = boundsCentre(venueBounds(to));
-      const line = L.polyline(
-        [
-          [a.lat, a.lng],
-          [b.lat, b.lng],
-        ],
-        { className: 'map__link', interactive: false },
-      );
-      line.addTo(map);
-      layers.push(line);
-    }
-
-    // Venue outlines: the real building footprints, straight from OpenStreetMap.
+    // Venue outlines: traced from the building's own floor plans where there
+    // are any, and otherwise the real footprint straight from OpenStreetMap.
     for (const venue of VENUES) {
-      const outline = L.polygon(toLatLngs(venue.footprint), {
+      const outline = L.polygon(toLatLngs(venueOutline(venue)), {
         className: 'map__venue',
         interactive: false,
       });
@@ -251,7 +233,7 @@ export function MapView({
         drawn.length > 0
           ? L.polygon(drawn.map((ring) => [toLatLngs(ring)]), shape)
           : room.fillsVenue
-            ? L.polygon(toLatLngs(VENUES_BY_ID[room.venueId].footprint), shape)
+            ? L.polygon(toLatLngs(venueOutline(VENUES_BY_ID[room.venueId])), shape)
             : L.rectangle(toLatLngBounds(roomBounds(room)), shape);
 
       shapeLayer.on('click', (event) => {

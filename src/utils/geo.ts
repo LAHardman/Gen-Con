@@ -65,10 +65,6 @@ export function localRectToBounds(
   ];
 }
 
-export function boundsCentre([nw, se]: [LatLng, LatLng]): LatLng {
-  return { lat: (nw.lat + se.lat) / 2, lng: (nw.lng + se.lng) / 2 };
-}
-
 /** Great-circle-ish distance in metres. Flat-earth is fine over a few city blocks. */
 export function distanceMetres(a: LatLng, b: LatLng) {
   const east = (b.lng - a.lng) * metresPerDegreeLng((a.lat + b.lat) / 2);

@@ -7,17 +7,18 @@
  * local grid and projected from that anchor, so moving or resizing a venue
  * moves everything inside it.
  *
- * ACCURACY: the venue outlines are the real building footprints as mapped in
- * OpenStreetMap, not estimates — the shapes on screen are the shapes on the
- * ground. The convention centre's halls and meeting rooms are read straight
- * off its official floor plans (`plans/`, converted by
+ * ACCURACY: the venue outlines are real, not estimates — the shapes on screen
+ * are the shapes on the ground. The convention centre's halls and meeting rooms
+ * are read straight off its official floor plans (`plans/`, converted by
  * `scripts/plan-to-geometry.mjs`): each is drawn as the outline the architect
- * drew, in the position the plan puts it. Three of its rooms — registration,
- * Gen Con Central and the food court — are services the plan doesn't letter,
- * so they keep a schematic rectangle on the Level 1 concourse. Every other
- * venue's interior is a schematic arrangement inside its real footprint: rooms
- * are in the right building and the right general part of it, not at surveyed
- * coordinates. The basemap underneath is real. See README.md.
+ * drew, in the position the plan puts it, and the line around the building is
+ * traced from those same plans so the two agree. Three of its rooms —
+ * registration, Gen Con Central and the food court — are services the plan
+ * doesn't letter, so they keep a schematic rectangle on the Level 1 concourse.
+ * Every other venue is outlined by its OpenStreetMap footprint, with an
+ * interior that is a schematic arrangement inside it: rooms are in the right
+ * building and the right general part of it, not at surveyed coordinates. The
+ * basemap underneath is real. See README.md.
  *
  * The venues and aliases below were tuned against the live event database:
  * every `Venue.aliases` entry is a `Location` string the source actually
@@ -27,7 +28,13 @@
 import type { LatLng, LocalRect, VenueAnchor } from '../utils/geo';
 import { localRectToBounds } from '../utils/geo';
 import { VENUE_FOOTPRINTS, type FootprintRing } from './footprints';
-import { PLAN_DETAIL, PLAN_SHAPES, type PlanDetail, type PlanRing } from './plan-geometry';
+import {
+  PLAN_DETAIL,
+  PLAN_OUTLINE,
+  PLAN_SHAPES,
+  type PlanDetail,
+  type PlanRing,
+} from './plan-geometry';
 
 export type RoomCategory =
   | 'exhibit'
@@ -87,10 +94,10 @@ export interface Room {
   aliases?: string[];
   /**
    * Set where the room *is* the whole venue, as it is for every building whose
-   * interior the map doesn't break out. Such a room is drawn as the venue's
-   * surveyed footprint rather than as `rect`, so it takes the real shape of the
-   * building instead of a rectangle poking out of it. `rect` still gives the
-   * bounds used to zoom to it.
+   * interior the map doesn't break out. Such a room is drawn as the venue's own
+   * outline rather than as `rect`, so it takes the real shape of the building
+   * instead of a rectangle poking out of it. `rect` still gives the bounds used
+   * to zoom to it.
    */
   fillsVenue?: boolean;
 }
@@ -102,7 +109,10 @@ export interface Venue {
   shortName?: string;
   /** Where the venue sits in the real world, from its OSM footprint's bounds. */
   anchor: VenueAnchor;
-  /** The real building outline, drawn as the venue's shape on the map. */
+  /**
+   * The building's surveyed outline from OpenStreetMap. Drawn as the venue's
+   * shape unless its floor plans give a better one — see `venueOutline`.
+   */
   footprint: FootprintRing;
   /** The venue's own rectangle in its local grid; rooms are placed inside it. */
   grid: LocalRect;
@@ -1218,22 +1228,20 @@ export function roomBounds(room: Room): [LatLng, LatLng] {
   return localRectToBounds(room.rect, venue.grid, venue.anchor);
 }
 
+/**
+ * The line drawn around a venue.
+ *
+ * A building whose interior comes from a floor plan is outlined from the same
+ * drawing, so the two agree. Anything else is outlined by its OpenStreetMap
+ * footprint, which is still the surveyed shape of the building and still what
+ * `footprints.ts` holds for every venue including this one.
+ */
+export function venueOutline(venue: Venue): FootprintRing | PlanRing {
+  return PLAN_OUTLINE[venue.id] ?? venue.footprint;
+}
+
 /** A venue's own footprint on the real map: the bounds of its OSM outline. */
 export function venueBounds(venue: Venue): [LatLng, LatLng] {
   return localRectToBounds(venue.grid, venue.grid, venue.anchor);
 }
 
-/** Skywalk and concourse links, drawn between venue centres. */
-export const CONNECTIONS: Array<{ from: string; to: string; label: string }> = [
-  { from: 'icc', to: 'lucas-oil', label: 'Skywalk to Lucas Oil Stadium' },
-  { from: 'icc', to: 'jw-marriott', label: 'Skywalk to the JW Marriott' },
-  { from: 'icc', to: 'marriott-downtown', label: 'Skywalk to the Marriott Downtown' },
-  { from: 'icc', to: 'westin', label: 'Skywalk to the Westin' },
-  { from: 'icc', to: 'hyatt', label: 'Skywalk to the Hyatt Regency' },
-  { from: 'icc', to: 'crowne-plaza', label: 'Skywalk to the Crowne Plaza' },
-  { from: 'icc', to: 'circle-centre', label: 'Skywalk to Circle Centre' },
-  { from: 'circle-centre', to: 'omni', label: 'Walk to the Omni Severin' },
-  { from: 'circle-centre', to: 'embassy-suites', label: 'Walk to the Embassy Suites' },
-  { from: 'hyatt', to: 'hilton', label: 'Walk to the Hilton' },
-  { from: 'embassy-suites', to: 'indiana-rep', label: 'Walk to the Indiana Rep' },
-];
