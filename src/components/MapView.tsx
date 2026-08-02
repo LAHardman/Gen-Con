@@ -14,6 +14,7 @@ import {
 } from '../data/venues';
 import { boundsCentre } from '../utils/geo';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
+import type { Floorplan } from '../hooks/useFloorplans';
 
 interface Props {
   selectedRoomId: string | null;
@@ -23,8 +24,11 @@ interface Props {
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
-  /** Optional georeferenced floor-plan image drawn over the basemap. */
-  floorplanUrl?: string;
+  /**
+   * Optional real floor plan for the selected room's venue and level, drawn
+   * over the basemap. Absent unless public/floorplans.json lists one.
+   */
+  floorplan?: { venueId: string; plan: Floorplan };
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -46,7 +50,7 @@ export function MapView({
   focusRequest,
   basemapId,
   eventCounts,
-  floorplanUrl,
+  floorplan,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -126,16 +130,22 @@ export function MapView({
 
     floorplanRef.current?.remove();
     floorplanRef.current = null;
-    if (!floorplanUrl) return;
 
-    const overlay = L.imageOverlay(floorplanUrl, toLatLngBounds(venueBounds(VENUES_BY_ID.icc)), {
-      opacity: 0.85,
+    const venue = floorplan ? VENUES_BY_ID[floorplan.venueId] : undefined;
+    if (!floorplan || !venue) return;
+
+    // Stretched to the venue's real footprint bounds, so how well it lines up
+    // depends on the image being cropped to the building.
+    const overlay = L.imageOverlay(floorplan.plan.url, toLatLngBounds(venueBounds(venue)), {
+      opacity: floorplan.plan.opacity ?? 0.85,
       interactive: false,
       className: 'map__floorplan',
+      // Somebody else's drawing: name whoever made it, next to the basemap's.
+      attribution: floorplan.plan.credit ? `Floor plan: ${floorplan.plan.credit}` : undefined,
     });
     overlay.addTo(map);
     floorplanRef.current = overlay;
-  }, [floorplanUrl]);
+  }, [floorplan]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {

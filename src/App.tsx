@@ -5,12 +5,11 @@ import { RoomDialog } from './components/RoomDialog';
 import { ROOMS_BY_ID, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
+import { floorplanFor, useFloorplans } from './hooks/useFloorplans';
 import { isHappeningAt } from './data/events';
 
 const SOURCE_URL = 'https://gencon.eventdb.us/';
 const BASEMAP_KEY = 'genCon.basemap';
-/** Optional: drop an official floor-plan image here and it overlays the ICC. */
-const FLOORPLAN_URL = import.meta.env.VITE_FLOORPLAN_URL as string | undefined;
 
 export default function App() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
@@ -20,6 +19,11 @@ export default function App() {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const { status, feed, index } = useEventFeed();
+
+  // Real floor plans, if any have been supplied. The one drawn is the plan for
+  // the selected room's building and floor, so it follows what you're looking
+  // at rather than needing its own switcher.
+  const floorplans = useFloorplans();
 
   useEffect(() => {
     try {
@@ -67,6 +71,10 @@ export default function App() {
   }, []);
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+
+  const plan = floorplanFor(floorplans, selectedRoom?.venueId, selectedRoom?.level);
+  const floorplan =
+    plan && selectedRoom ? { venueId: selectedRoom.venueId, plan } : undefined;
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
 
   return (
@@ -125,7 +133,7 @@ export default function App() {
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
-          floorplanUrl={FLOORPLAN_URL}
+          floorplan={floorplan}
         />
         <Legend />
       </main>
