@@ -233,8 +233,11 @@ now traced around everything its plans draw, so the line and the rooms inside it
 can't disagree. Every other venue keeps its OSM footprint, which is also what
 `footprints.ts` still holds for all of them, the convention centre included.
 
-Every room is checked to fall inside the building it belongs to, and all of them
-are.
+Every room is checked two ways: that it falls inside the building it belongs to,
+and that it doesn't sit on another room on the same floor. Both are clean —
+sampled over what the map actually draws for each room, which is its plan
+outline where it has one and its rectangle where it doesn't, with a shared wall
+not counting as a collision.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
 a real distance from the building's north-west corner; the other venues use a
@@ -285,10 +288,24 @@ along airwalls. `Room.plan` in `venues.ts` lists the labels a room covers:
 { id: 'rooms-130-145', plan: numberRange(130, 145), … }
 ```
 
-19 of the convention centre's 22 rooms are drawn this way, across 132 shapes.
+20 of the convention centre's 23 rooms are drawn this way, across 132 shapes.
 The three that aren't — registration, Gen Con Central and the food court — are
 services the plan doesn't letter, so they keep a schematic rectangle on the
 Level 1 concourse.
+
+**One space, one owner.** Level 1 prints a band called `SWING SPACE` between
+Halls C, E and F, and colours all three halls straight through it, because that
+band is let to whichever of them needs it. Read literally that hands the same
+930 m² to three rooms at once: three outlines stacked on each other, a click in
+the band landing on whichever hall was drawn last, and Hall E's bounds running
+eighty metres west of Hall E. So a space gives up whatever named space is drawn
+inside it — the halls keep every wall the architect drew, they simply stop where
+the swing space starts, and the band is a room of its own. The cut runs along
+the drawing's own walls rather than a raster of them: these plans are square, so
+slicing the pair along every coordinate either outline mentions leaves cells
+that are wholly in or wholly out. Walls within the same 0.25 m the outlines are
+simplified by are taken to be the same wall first, because drawn ones miss each
+other by a hair.
 
 **The outline comes from the plans too.** `plan-to-geometry.mjs` traces a line
 around everything a venue's sheets draw — every floor, since an upper storey

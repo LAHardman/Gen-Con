@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check:geometry": "node scripts/check-geometry.mjs",
     "fetch:events": "node scripts/fetch-events.mjs",
     "events:sample": "node scripts/make-sample-events.mjs"
   },
