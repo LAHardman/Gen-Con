@@ -1,20 +1,27 @@
 /**
  * Gen Con venue data, anchored to real-world coordinates.
  *
- * Each venue carries a `anchor` (its north-west corner and real size in metres)
- * that places it on the map, plus a local grid in which its rooms are laid out.
- * Rooms are projected from that anchor, so moving or resizing a venue moves
- * everything inside it.
+ * Each venue carries its surveyed footprint from OpenStreetMap (see
+ * `footprints.ts`) and an `anchor` derived from that footprint's bounding box:
+ * its north-west corner and its real size in metres. Rooms are authored in a
+ * local grid and projected from that anchor, so moving or resizing a venue
+ * moves everything inside it.
  *
- * ACCURACY: venue anchors are close but approximate, and interior room
- * positions are a schematic arrangement within the real footprint rather than a
- * surveyed floor plan — the halls are in the right building and the right
- * general part of it, not at surveyed coordinates. The basemap underneath is
- * real. See README.md for how to replace the anchors with exact footprints.
+ * ACCURACY: the venue outlines are the real building footprints as mapped in
+ * OpenStreetMap, not estimates — the shapes on screen are the shapes on the
+ * ground. Interior room positions are still a schematic arrangement within
+ * that footprint rather than a surveyed floor plan: halls are in the right
+ * building and the right general part of it, not at surveyed coordinates. The
+ * basemap underneath is real. See README.md.
+ *
+ * The venues and aliases below were tuned against the live event database:
+ * every `Venue.aliases` entry is a `Location` string the source actually
+ * publishes, and every `Room.aliases` entry is drawn from its `Room` values.
  */
 
 import type { LatLng, LocalRect, VenueAnchor } from '../utils/geo';
 import { localRectToBounds } from '../utils/geo';
+import { VENUE_FOOTPRINTS, type FootprintRing } from './footprints';
 
 export type RoomCategory =
   | 'exhibit'
@@ -54,12 +61,20 @@ export interface Room {
   description: string;
   highlights: string[];
   /**
-   * Extra location strings, as they appear in the event listings, that should
-   * resolve to this room. The room's own name and short name are always
-   * matched; these cover the abbreviations and alternate spellings the event
+   * Extra strings, as they appear in the event listings' `Room` field, that
+   * should resolve to this room. The room's own name and short name are always
+   * matched; these cover the abbreviations, spans and misspellings the event
    * data uses.
    */
   aliases?: string[];
+  /**
+   * Set where the room *is* the whole venue, as it is for every building whose
+   * interior the map doesn't break out. Such a room is drawn as the venue's
+   * surveyed footprint rather than as `rect`, so it takes the real shape of the
+   * building instead of a rectangle poking out of it. `rect` still gives the
+   * bounds used to zoom to it.
+   */
+  fillsVenue?: boolean;
 }
 
 export interface Venue {
@@ -67,38 +82,70 @@ export interface Venue {
   name: string;
   /** Short form used for the on-map label, where full names collide. */
   shortName?: string;
-  /** Where the venue sits in the real world. */
+  /** Where the venue sits in the real world, from its OSM footprint's bounds. */
   anchor: VenueAnchor;
+  /** The real building outline, drawn as the venue's shape on the map. */
+  footprint: FootprintRing;
   /** The venue's own rectangle in its local grid; rooms are placed inside it. */
   grid: LocalRect;
-  /** Location strings in the event data that mean "this venue". */
+  /**
+   * `Location` strings in the event data that mean "this venue". The importer
+   * writes that field verbatim, so these are the source's own short forms.
+   */
   aliases?: string[];
 }
+
+/**
+ * A local grid measured in metres, matching the venue's real size, so room
+ * rectangles below can be read as real distances.
+ */
+const metresGrid = (anchor: VenueAnchor): LocalRect => ({
+  x: 0,
+  y: 0,
+  width: anchor.widthMetres,
+  height: anchor.heightMetres,
+});
+
+/** Single-room venues use a plain 0–100 grid; their one room fills it. */
+const UNIT_GRID: LocalRect = { x: 0, y: 0, width: 100, height: 100 };
+
+/** Fills a whole single-room venue, inset slightly so its outline stays visible. */
+const WHOLE_VENUE: LocalRect = { x: 6, y: 6, width: 88, height: 88 };
+
+const ICC_ANCHOR: VenueAnchor = {
+  nw: { lat: 39.765683, lng: -86.166846 },
+  widthMetres: 420,
+  heightMetres: 443,
+};
 
 export const VENUES: Venue[] = [
   {
     id: 'icc',
     name: 'Indiana Convention Center',
     shortName: 'Convention Center',
-    aliases: ['ICC', 'Convention Center', 'Indianapolis Convention Center'],
-    anchor: {
-      nw: { lat: 39.766, lng: -86.167 },
-      widthMetres: 470,
-      heightMetres: 250,
-    },
-    grid: { x: 180, y: 180, width: 1760, height: 940 },
+    aliases: ['ICC', 'Convention Center', 'Indiana Convention Center'],
+    anchor: ICC_ANCHOR,
+    footprint: VENUE_FOOTPRINTS.icc,
+    // Metres, so the room rectangles below are real distances inside the
+    // building. The footprint's bounding box is taller than the building: the
+    // convention center proper occupies y 0–265, and below that only the thin
+    // skywalk arm down to Lucas Oil runs on to y 443. Rooms therefore live in
+    // y 20–258, and within the width the footprint actually covers at that
+    // depth — roughly x 52–388 in the north half and x 128–408 in the south.
+    grid: metresGrid(ICC_ANCHOR),
   },
   {
     id: 'lucas-oil',
     name: 'Lucas Oil Stadium',
     shortName: 'Lucas Oil Stadium',
-    aliases: ['LOS', 'Stadium', 'Lucas Oil'],
+    aliases: ['Stadium', 'Lucas Oil', 'LOS'],
     anchor: {
-      nw: { lat: 39.761, lng: -86.165 },
-      widthMetres: 200,
-      heightMetres: 190,
+      nw: { lat: 39.761396, lng: -86.165373 },
+      widthMetres: 268,
+      heightMetres: 295,
     },
-    grid: { x: 0, y: 0, width: 100, height: 100 },
+    footprint: VENUE_FOOTPRINTS['lucas-oil'],
+    grid: UNIT_GRID,
   },
   {
     id: 'jw-marriott',
@@ -106,11 +153,12 @@ export const VENUES: Venue[] = [
     shortName: 'JW Marriott',
     aliases: ['JW', 'JW Marriott'],
     anchor: {
-      nw: { lat: 39.7668, lng: -86.169 },
-      widthMetres: 85,
-      heightMetres: 55,
+      nw: { lat: 39.767158, lng: -86.169402 },
+      widthMetres: 172,
+      heightMetres: 132,
     },
-    grid: { x: 0, y: 0, width: 100, height: 100 },
+    footprint: VENUE_FOOTPRINTS['jw-marriott'],
+    grid: UNIT_GRID,
   },
   {
     id: 'marriott-downtown',
@@ -118,11 +166,12 @@ export const VENUES: Venue[] = [
     shortName: 'Marriott Downtown',
     aliases: ['Marriott', 'Marriott Downtown'],
     anchor: {
-      nw: { lat: 39.7662, lng: -86.1698 },
+      nw: { lat: 39.767057, lng: -86.165204 },
       widthMetres: 70,
-      heightMetres: 45,
+      heightMetres: 122,
     },
-    grid: { x: 0, y: 0, width: 100, height: 100 },
+    footprint: VENUE_FOOTPRINTS['marriott-downtown'],
+    grid: UNIT_GRID,
   },
   {
     id: 'westin',
@@ -130,23 +179,121 @@ export const VENUES: Venue[] = [
     shortName: 'Westin',
     aliases: ['Westin'],
     anchor: {
-      nw: { lat: 39.7671, lng: -86.1668 },
-      widthMetres: 70,
-      heightMetres: 50,
+      nw: { lat: 39.766936, lng: -86.164279 },
+      widthMetres: 97,
+      heightMetres: 112,
     },
-    grid: { x: 0, y: 0, width: 100, height: 100 },
+    footprint: VENUE_FOOTPRINTS.westin,
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'hyatt',
+    name: 'Hyatt Regency Indianapolis',
+    shortName: 'Hyatt Regency',
+    aliases: ['Hyatt', 'Hyatt Regency'],
+    anchor: {
+      nw: { lat: 39.766972, lng: -86.161563 },
+      widthMetres: 121,
+      heightMetres: 124,
+    },
+    footprint: VENUE_FOOTPRINTS.hyatt,
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'crowne-plaza',
+    name: 'Crowne Plaza at Historic Union Station',
+    shortName: 'Crowne Plaza',
+    // The event data files these under two different location names; both are
+    // the same building.
+    aliases: ['Crowne Plaza', 'Union Station'],
+    anchor: {
+      nw: { lat: 39.763336, lng: -86.161762 },
+      widthMetres: 285,
+      heightMetres: 170,
+    },
+    footprint: VENUE_FOOTPRINTS['crowne-plaza'],
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'hilton',
+    name: 'Hilton Indianapolis Hotel & Suites',
+    shortName: 'Hilton',
+    // "HIlton" is how a run of the source's own records spell it.
+    aliases: ['Hilton', 'HIlton'],
+    anchor: {
+      nw: { lat: 39.769241, lng: -86.161258 },
+      widthMetres: 109,
+      heightMetres: 62,
+    },
+    footprint: VENUE_FOOTPRINTS.hilton,
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'omni',
+    name: 'Omni Severin Hotel',
+    shortName: 'Omni',
+    aliases: ['Omni', 'Omni Severin'],
+    anchor: {
+      nw: { lat: 39.764159, lng: -86.159868 },
+      widthMetres: 56,
+      heightMetres: 63,
+    },
+    footprint: VENUE_FOOTPRINTS.omni,
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'embassy-suites',
+    name: 'Embassy Suites Indianapolis Downtown',
+    shortName: 'Embassy Suites',
+    aliases: ['Embassy Suites', 'Embassy'],
+    anchor: {
+      nw: { lat: 39.767829, lng: -86.160829 },
+      widthMetres: 67,
+      heightMetres: 60,
+    },
+    footprint: VENUE_FOOTPRINTS['embassy-suites'],
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'indiana-rep',
+    name: 'Indiana Repertory Theatre',
+    shortName: 'Indiana Rep',
+    // The source spells it "Theater".
+    aliases: ['Indiana Repertory Theater', 'Indiana Repertory'],
+    anchor: {
+      nw: { lat: 39.767885, lng: -86.161278 },
+      widthMetres: 40,
+      heightMetres: 65,
+    },
+    footprint: VENUE_FOOTPRINTS['indiana-rep'],
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'escape-room',
+    name: 'The Escape Room USA',
+    shortName: 'Escape Room',
+    aliases: ['The Escape Room USA', 'Escape Room'],
+    anchor: {
+      nw: { lat: 39.764139, lng: -86.159092 },
+      widthMetres: 63,
+      heightMetres: 31,
+    },
+    footprint: VENUE_FOOTPRINTS['escape-room'],
+    grid: UNIT_GRID,
   },
   {
     id: 'circle-centre',
     name: 'Circle Centre Mall',
     shortName: 'Circle Centre',
+    // No events are scheduled here; it is on the map for food and shelter.
     aliases: ['Circle Centre', 'Circle Center'],
     anchor: {
-      nw: { lat: 39.7668, lng: -86.16 },
-      widthMetres: 200,
-      heightMetres: 150,
+      nw: { lat: 39.76695, lng: -86.159841 },
+      widthMetres: 129,
+      heightMetres: 287,
     },
-    grid: { x: 0, y: 0, width: 100, height: 100 },
+    footprint: VENUE_FOOTPRINTS['circle-centre'],
+    grid: UNIT_GRID,
   },
 ];
 
@@ -154,22 +301,26 @@ export const VENUES_BY_ID: Record<string, Venue> = Object.fromEntries(
   VENUES.map((venue) => [venue.id, venue]),
 );
 
-/** Fills a whole single-room venue, inset slightly so its outline stays visible. */
-const WHOLE_VENUE: LocalRect = { x: 6, y: 6, width: 88, height: 88 };
+/** Numeric meeting-room aliases: `numberRange(120, 133)` -> ['120', …, '133']. */
+function numberRange(first: number, last: number): string[] {
+  return Array.from({ length: last - first + 1 }, (_, index) => String(first + index));
+}
 
 export const ROOMS: Room[] = [
-  // ------------------------------------------- Indiana Convention Center, north
+  // ----------------------------------- Indiana Convention Center, north wing
   {
     id: 'sagamore-ballroom',
     name: 'Sagamore Ballroom',
     category: 'ballroom',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 220, y: 220, width: 480, height: 210 },
-    aliases: ['Sagamore', 'Sagamore Ballroom 1', 'ICC : Sagamore Ballroom'],
+    rect: { x: 52, y: 20, width: 120, height: 52 },
+    // The source misspells it "Sagamaore" on most of its records, so both
+    // spellings have to resolve.
+    aliases: ['Sagamore', 'Sagamaore', 'Sagamore Ballroom', 'Sagamaore Ballroom'],
     description:
-      'The largest ballroom in the convention center, usually divided into lettered sections for seminars, industry panels and the biggest ticketed events.',
-    highlights: ['Keynotes & industry panels', 'True Dungeon staging', 'Divisible into 8 sections'],
+      'The largest ballroom in the convention center, usually divided into numbered sections for seminars, industry panels and the biggest ticketed events.',
+    highlights: ['Keynotes & industry panels', 'True Dungeon staging', 'Divided into sections 1–8'],
   },
   {
     id: 'wabash-ballroom',
@@ -177,52 +328,12 @@ export const ROOMS: Room[] = [
     category: 'ballroom',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 715, y: 220, width: 360, height: 210 },
-    aliases: ['Wabash', 'ICC : Wabash Ballroom'],
+    rect: { x: 180, y: 20, width: 104, height: 52 },
+    aliases: ['Wabash', 'Wabash Ballroom'],
     description:
-      'Mid-size ballroom on the north concourse. Typically hosts the larger RPG blocks, costume contests and evening entertainment.',
+      'Mid-size ballroom on the west concourse. Typically hosts the larger RPG blocks, costume contests and evening entertainment.',
     highlights: ['Costume contest', 'Large RPG blocks', 'Evening entertainment'],
   },
-  {
-    id: 'ballroom-500',
-    name: '500 Ballroom',
-    category: 'ballroom',
-    venueId: 'icc',
-    level: 'Level 5',
-    rect: { x: 1090, y: 220, width: 300, height: 210 },
-    aliases: ['500 Ballroom', 'Ballroom 500'],
-    description:
-      'Upper-level ballroom reached from the north escalators. Quieter than the main floor and a common home for workshops and author events.',
-    highlights: ['Workshops', 'Author events', 'Quieter than Level 1'],
-  },
-  {
-    id: 'rooms-101-107',
-    name: 'Meeting Rooms 101–107',
-    shortName: '101–107',
-    category: 'meeting',
-    venueId: 'icc',
-    level: 'Level 1',
-    rect: { x: 1405, y: 220, width: 240, height: 210 },
-    aliases: ['101', '102', '103', '104', '105', '106', '107'],
-    description:
-      'Small breakout rooms off the Level 1 concourse. Expect scheduled RPG tables, seminars and GM briefings.',
-    highlights: ['Scheduled RPGs', 'Seminars', 'Seats roughly 40–80 each'],
-  },
-  {
-    id: 'rooms-108-114',
-    name: 'Meeting Rooms 108–114',
-    shortName: '108–114',
-    category: 'meeting',
-    venueId: 'icc',
-    level: 'Level 1',
-    rect: { x: 1660, y: 220, width: 240, height: 210 },
-    aliases: ['108', '109', '110', '111', '112', '113', '114'],
-    description:
-      'Continuation of the Level 1 breakout block toward the east end of the building. Closest rooms to the Georgia Street entrance.',
-    highlights: ['Scheduled RPGs', 'Board game demos', 'Near the east entrance'],
-  },
-
-  // ------------------------------------------------------ Concourse services
   {
     id: 'registration',
     name: 'Registration & Will Call',
@@ -230,7 +341,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 220, y: 450, width: 360, height: 150 },
+    rect: { x: 52, y: 80, width: 76, height: 56 },
     aliases: ['Will Call', 'Registration'],
     description:
       'Badge pickup, will call and on-site registration. Lines are longest Wednesday evening and Thursday morning — pick up your badge early if you can.',
@@ -242,7 +353,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 595, y: 450, width: 300, height: 150 },
+    rect: { x: 136, y: 80, width: 72, height: 56 },
     aliases: ['Central', 'Customer Service'],
     description:
       'The information and customer service hub: event ticket exchanges, generic ticket sales, lost and found, and answers to "where is…?"',
@@ -255,36 +366,38 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'icc',
     level: 'Level 1',
-    rect: { x: 910, y: 450, width: 280, height: 150 },
+    rect: { x: 216, y: 80, width: 68, height: 56 },
+    aliases: ['Serpentine Lobby'],
     description:
       'Concession stands along the main concourse. Fast, expensive, and reliably packed between noon and 2pm — Georgia Street food trucks are the usual escape valve.',
     highlights: ['Concessions & seating', 'Peak 12–2pm', 'Nearest restrooms'],
   },
+
+  // -------------------------------- Convention center, north end of the main block
   {
-    id: 'rooms-201-212',
-    name: 'Meeting Rooms 201–212',
-    shortName: '201–212',
-    category: 'meeting',
+    id: 'ballroom-500',
+    name: '500 Ballroom',
+    category: 'ballroom',
     venueId: 'icc',
-    level: 'Level 2',
-    rect: { x: 1205, y: 450, width: 340, height: 150 },
-    aliases: ['201', '202', '203', '204', '205', '206', '207', '208', '209', '210', '211', '212'],
+    level: 'Level 5',
+    rect: { x: 292, y: 20, width: 84, height: 52 },
+    aliases: ['500 Ballroom', 'Ballroom 500'],
     description:
-      'Level 2 breakout rooms above the main concourse. A large share of the scheduled RPG and workshop slots land here.',
-    highlights: ['Scheduled RPGs', 'Workshops', 'Reached by escalator'],
+      'Upper-level ballroom reached from the escalators. Quieter than the main floor and a common home for workshops and author events.',
+    highlights: ['Workshops', 'Author events', 'Quieter than Level 1'],
   },
   {
-    id: 'rooms-231-243',
-    name: 'Meeting Rooms 231–243',
-    shortName: '231–243',
+    id: 'rooms-101-107',
+    name: 'Meeting Rooms 101–107',
+    shortName: '101–107',
     category: 'meeting',
     venueId: 'icc',
-    level: 'Level 2',
-    rect: { x: 1560, y: 450, width: 340, height: 150 },
-    aliases: ['231', '232', '233', '234', '235', '236', '237', '238', '239', '240', '241', '242', '243'],
+    level: 'Level 1',
+    rect: { x: 292, y: 80, width: 84, height: 56 },
+    aliases: numberRange(101, 107),
     description:
-      'East end of the Level 2 block. Often used for tournaments and multi-session campaign play that needs a room for the whole day.',
-    highlights: ['Tournaments', 'All-day campaigns', 'Near east escalators'],
+      'Small breakout rooms off the Level 1 concourse. Expect scheduled RPG tables, seminars and GM briefings.',
+    highlights: ['Scheduled RPGs', 'Seminars', 'Seats roughly 40–80 each'],
   },
 
   // ---------------------------------------------------------- Exhibit halls
@@ -295,7 +408,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 220, y: 630, width: 268, height: 230 },
+    rect: { x: 128, y: 146, width: 42, height: 44 },
     aliases: ['Hall A', 'Exhibit Hall A'],
     description:
       'West end of the exhibit hall. Traditionally the entrance-adjacent aisles — the first wall of booths you hit when the hall opens.',
@@ -308,11 +421,11 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 500, y: 630, width: 268, height: 230 },
-    aliases: ['Hall B', 'Exhibit Hall B'],
+    rect: { x: 175, y: 146, width: 42, height: 44 },
+    aliases: ['Hall B', 'Exhibit Hall B', 'Event Hall B'],
     description:
-      'Core exhibit space, generally the largest booths and the demo tables that go with them.',
-    highlights: ['Flagship publisher booths', 'Demo tables', 'Release-day queues'],
+      'The busiest demo space in the building: publisher tables run back-to-back sessions here all four days, each signed with the company running it.',
+    highlights: ['Publisher demo tables', 'Colour-coded sections', 'Release-day queues'],
   },
   {
     id: 'hall-c',
@@ -321,7 +434,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 780, y: 630, width: 268, height: 230 },
+    rect: { x: 222, y: 146, width: 42, height: 44 },
     aliases: ['Hall C', 'Exhibit Hall C'],
     description: 'Mid-hall aisles: mid-size publishers, accessory makers and dice vendors.',
     highlights: ['Dice & accessories', 'Mid-size publishers', 'Art prints'],
@@ -333,7 +446,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 1060, y: 630, width: 268, height: 230 },
+    rect: { x: 269, y: 146, width: 42, height: 44 },
     aliases: ['Hall D', 'Exhibit Hall D'],
     description:
       'Continues the mid-hall aisles toward the east. Common home for miniatures, terrain and painting supplies.',
@@ -346,11 +459,11 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 1340, y: 630, width: 268, height: 230 },
+    rect: { x: 316, y: 146, width: 42, height: 44 },
     aliases: ['Hall E', 'Exhibit Hall E'],
     description:
-      'East exhibit aisles. Usually a mix of smaller publishers, crowdfunding pickups and first-time exhibitors.',
-    highlights: ['First-time exhibitors', 'Crowdfunding pickups', 'Small press'],
+      'East exhibit aisles, and where the biggest brands put their organised play: long banks of tables running scheduled sessions.',
+    highlights: ['Organised play banks', 'Major publishers', 'Painting & hobby events'],
   },
   {
     id: 'hall-f',
@@ -359,7 +472,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 1620, y: 630, width: 268, height: 230 },
+    rect: { x: 363, y: 146, width: 42, height: 44 },
     aliases: ['Hall F', 'Exhibit Hall F'],
     description:
       'Far east end of the exhibit hall, adjacent to the east entrance. Quietest aisles in the morning.',
@@ -372,7 +485,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 220, y: 875, width: 322, height: 205 },
+    rect: { x: 128, y: 196, width: 50, height: 36 },
     aliases: ['Hall G', 'Exhibit Hall G'],
     description:
       'South exhibit block. Frequently used for the used-game auction area and larger retail booths.',
@@ -385,7 +498,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 557, y: 875, width: 322, height: 205 },
+    rect: { x: 184, y: 196, width: 50, height: 36 },
     aliases: ['Hall H', 'Exhibit Hall H'],
     description: 'South exhibit block continued — costume, prop and accessory vendors cluster here.',
     highlights: ['Costume & props', 'Leatherwork', 'Photo backdrops'],
@@ -397,7 +510,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 894, y: 875, width: 322, height: 205 },
+    rect: { x: 240, y: 196, width: 50, height: 36 },
     aliases: ['Hall I', 'Exhibit Hall I'],
     description:
       'Often converted into event space rather than booths: large scheduled play areas and tournament banks.',
@@ -410,7 +523,7 @@ export const ROOMS: Room[] = [
     category: 'gaming',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 1231, y: 875, width: 322, height: 205 },
+    rect: { x: 296, y: 196, width: 50, height: 36 },
     aliases: ['Hall J', 'Exhibit Hall J', 'Open Gaming'],
     description:
       'Open gaming: rows of free tables, first come first served. Grab one, put a game out, and strangers will sit down.',
@@ -423,11 +536,65 @@ export const ROOMS: Room[] = [
     category: 'gaming',
     venueId: 'icc',
     level: 'Exhibit level',
-    rect: { x: 1568, y: 875, width: 322, height: 205 },
+    rect: { x: 352, y: 196, width: 50, height: 36 },
     aliases: ['Hall K', 'Exhibit Hall K', 'Family Fun'],
     description:
       'Family and kids programming, plus overflow open gaming. Lower noise and shorter sessions than the main hall.',
     highlights: ['Kids & family events', 'Short sessions', 'Overflow open gaming'],
+  },
+
+  // --------------------------------------------- Convention center meeting rooms
+  {
+    id: 'rooms-120-133',
+    name: 'Meeting Rooms 120–133',
+    shortName: '120–133',
+    category: 'meeting',
+    venueId: 'icc',
+    level: 'Level 1',
+    rect: { x: 128, y: 238, width: 64, height: 20 },
+    aliases: numberRange(120, 133),
+    description:
+      'The west half of the Level 1 breakout block. A large share of the scheduled RPG and workshop slots land here.',
+    highlights: ['Scheduled RPGs', 'Workshops', 'Seats roughly 40–120 each'],
+  },
+  {
+    id: 'rooms-134-145',
+    name: 'Meeting Rooms 134–145',
+    shortName: '134–145',
+    category: 'meeting',
+    venueId: 'icc',
+    level: 'Level 1',
+    rect: { x: 198, y: 238, width: 64, height: 20 },
+    aliases: numberRange(134, 145),
+    description:
+      'The east half of the Level 1 breakout block, closest to the Georgia Street entrance. The busiest meeting rooms in the building.',
+    highlights: ['Scheduled RPGs', 'Board game demos', 'Near the east entrance'],
+  },
+  {
+    id: 'rooms-201-212',
+    name: 'Meeting Rooms 201–212',
+    shortName: '201–212',
+    category: 'meeting',
+    venueId: 'icc',
+    level: 'Level 2',
+    rect: { x: 268, y: 238, width: 64, height: 20 },
+    aliases: numberRange(201, 212),
+    description:
+      'Level 2 breakout rooms above the main concourse, reached by the escalators that double as the convention’s default meeting spot.',
+    highlights: ['Scheduled RPGs', 'Workshops', 'Reached by escalator'],
+  },
+  {
+    id: 'rooms-231-245',
+    name: 'Meeting Rooms 231–245',
+    shortName: '231–245',
+    category: 'meeting',
+    venueId: 'icc',
+    level: 'Level 2',
+    rect: { x: 338, y: 238, width: 64, height: 20 },
+    aliases: numberRange(231, 245),
+    description:
+      'East end of the Level 2 block. Often used for tournaments and multi-session campaign play that needs a room for the whole day.',
+    highlights: ['Tournaments', 'All-day campaigns', 'Near east escalators'],
   },
 
   // -------------------------------------------------------- Offsite venues
@@ -436,11 +603,12 @@ export const ROOMS: Room[] = [
     name: 'Lucas Oil Stadium',
     category: 'venue',
     venueId: 'lucas-oil',
-    level: 'Field & club level',
+    level: 'Field, concourse & club level',
     rect: WHOLE_VENUE,
+    fillsVenue: true,
     description:
-      'The stadium absorbs the events that outgrow the convention center: massive miniatures battles, large-scale open gaming and the biggest scheduled blocks. Allow a solid ten minutes to walk over via the skywalk.',
-    highlights: ['Large-scale miniatures', 'Overflow gaming', 'Skywalk from the ICC'],
+      'The stadium absorbs the events that outgrow the convention center. The field itself is divided into colour-coded and sponsor-named blocks, with more in the exhibit halls, the east concourse and the club lounges. Allow a solid ten minutes to walk over via the skywalk.',
+    highlights: ['Field blocks & open gaming', 'Exhibit Halls 1–2', 'Skywalk from the ICC'],
   },
   {
     id: 'jw-marriott-rooms',
@@ -450,9 +618,10 @@ export const ROOMS: Room[] = [
     venueId: 'jw-marriott',
     level: 'Meeting floors',
     rect: WHOLE_VENUE,
+    fillsVenue: true,
     description:
-      'The tall hotel on the west side of the campus. Its meeting floors host a large share of the RPG and seminar overflow, and it connects to the convention center by skywalk.',
-    highlights: ['RPG & seminar overflow', 'Skywalk connected', 'Late-night bar scene'],
+      'The tall hotel on the west side of the campus, and the busiest offsite venue after the stadium. Griffin Hall, the White River and Grand ballrooms and three floors of numbered rooms carry most of the RPG and seminar overflow. Skywalk connected.',
+    highlights: ['Griffin Hall', 'White River & Grand ballrooms', 'Skywalk connected'],
   },
   {
     id: 'marriott-downtown-rooms',
@@ -462,9 +631,10 @@ export const ROOMS: Room[] = [
     venueId: 'marriott-downtown',
     level: 'Meeting floors',
     rect: WHOLE_VENUE,
+    fillsVenue: true,
     description:
-      'Adjacent to the JW and part of the same connected block. Meeting rooms here run scheduled events all four days.',
-    highlights: ['Scheduled events', 'Skywalk connected', 'Quieter than the ICC'],
+      'Part of the same connected block as the JW. Its Indiana and Marriott ballrooms and its state- and city-named meeting rooms run scheduled events all four days.',
+    highlights: ['Indiana & Marriott ballrooms', 'Skywalk connected', 'Quieter than the ICC'],
   },
   {
     id: 'westin-rooms',
@@ -474,9 +644,103 @@ export const ROOMS: Room[] = [
     venueId: 'westin',
     level: 'Meeting floors',
     rect: WHOLE_VENUE,
+    fillsVenue: true,
     description:
-      'North of the convention center and connected by skywalk. Hosts smaller event tracks and is a short indoor walk to registration.',
-    highlights: ['Small event tracks', 'Shortest indoor walk', 'Skywalk connected'],
+      'North of the convention center and connected by skywalk. The Grand and Capitol ballrooms host the film festival and smaller event tracks, and it is a short indoor walk to registration.',
+    highlights: ['Film festival', 'Grand & Capitol ballrooms', 'Shortest indoor walk'],
+  },
+  {
+    id: 'hyatt-rooms',
+    name: 'Hyatt Regency Indianapolis',
+    shortName: 'Hyatt Regency',
+    category: 'lodging',
+    venueId: 'hyatt',
+    level: 'Meeting floors',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'North-east of the convention center. The Cosmopolitan and Regency ballrooms take the larger sessions, with the Studio, Concept and Directors rooms for small tables.',
+    highlights: ['Cosmopolitan & Regency ballrooms', 'Small-table rooms', 'Skywalk connected'],
+  },
+  {
+    id: 'crowne-plaza-rooms',
+    name: 'Crowne Plaza at Historic Union Station',
+    shortName: 'Crowne Plaza',
+    category: 'lodging',
+    venueId: 'crowne-plaza',
+    level: 'Meeting floors',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'The hotel built into Union Station, south-east of the convention center. Grand Central and the Illinois Street Ballroom carry the bulk of it; the smaller rooms are named after the railroads that used to run through the building.',
+    highlights: ['Grand Central A–D', 'Illinois Street Ballroom', 'Railroad-named rooms'],
+  },
+  {
+    id: 'hilton-rooms',
+    name: 'Hilton Indianapolis Hotel & Suites',
+    shortName: 'Hilton',
+    category: 'lodging',
+    venueId: 'hilton',
+    level: 'Meeting floors',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'North of the convention center on Meridian Street, a few minutes further out than the skywalk hotels. Victory Ballroom and Monument Hall take most of its schedule.',
+    highlights: ['Victory Ballroom', 'Monument Hall', 'Walk, not skywalk'],
+  },
+  {
+    id: 'omni-rooms',
+    name: 'Omni Severin Hotel',
+    shortName: 'Omni',
+    category: 'lodging',
+    venueId: 'omni',
+    level: 'Meeting floors',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'Across from Union Station, next to Circle Centre. Gates and McClellan halls run scheduled events, with small parlour and boardroom sessions alongside.',
+    highlights: ['Gates & McClellan halls', 'Small parlour rooms', 'Next to Circle Centre'],
+  },
+  {
+    id: 'embassy-suites-rooms',
+    name: 'Embassy Suites Indianapolis Downtown',
+    shortName: 'Embassy Suites',
+    category: 'lodging',
+    venueId: 'embassy-suites',
+    level: 'Meeting floors',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'North-east of the convention center on Georgia Street. A small schedule in the Ambassador, Chancellor and Coronation rooms.',
+    highlights: ['Ambassador rooms', 'Small event tracks', 'Short walk to the ICC'],
+  },
+  {
+    id: 'indiana-rep-stage',
+    name: 'Indiana Repertory Theatre',
+    shortName: 'Indiana Rep',
+    category: 'venue',
+    venueId: 'indiana-rep',
+    level: 'Auditorium',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    description:
+      'Working theatre on Washington Street, a couple of blocks north-east of the convention center, used for a handful of staged and performance events.',
+    highlights: ['Staged performances', 'Ticketed seating', 'Two blocks north-east'],
+  },
+  {
+    id: 'escape-room-venue',
+    name: 'The Escape Room USA',
+    shortName: 'Escape Room',
+    category: 'venue',
+    venueId: 'escape-room',
+    level: '200 S. Meridian St',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    // The source files these events under the room name "200 S. Meridian St".
+    aliases: ['200 S. Meridian St', '200 South Meridian'],
+    description:
+      'A commercial escape-room venue two blocks south-east of the convention center, running booked sessions through the convention. Its events are ticketed like any other and it is a ten-minute walk each way.',
+    highlights: ['Booked escape rooms', 'Ten-minute walk', 'Offsite — allow travel time'],
   },
   {
     id: 'circle-centre-mall',
@@ -486,8 +750,9 @@ export const ROOMS: Room[] = [
     venueId: 'circle-centre',
     level: 'Levels 1–4',
     rect: WHOLE_VENUE,
+    fillsVenue: true,
     description:
-      'Skywalk-connected mall with a food court and restaurants. The reliable option when convention center concession lines are 30 deep.',
+      'Skywalk-connected mall with a food court and restaurants. No events are scheduled here — it is the reliable option when convention center concession lines are 30 deep.',
     highlights: ['Food court', 'Restaurants', 'Skywalk connected'],
   },
 ];
@@ -502,7 +767,7 @@ export function roomBounds(room: Room): [LatLng, LatLng] {
   return localRectToBounds(room.rect, venue.grid, venue.anchor);
 }
 
-/** A venue's own footprint on the real map. */
+/** A venue's own footprint on the real map: the bounds of its OSM outline. */
 export function venueBounds(venue: Venue): [LatLng, LatLng] {
   return localRectToBounds(venue.grid, venue.grid, venue.anchor);
 }
@@ -513,5 +778,11 @@ export const CONNECTIONS: Array<{ from: string; to: string; label: string }> = [
   { from: 'icc', to: 'jw-marriott', label: 'Skywalk to the JW Marriott' },
   { from: 'icc', to: 'marriott-downtown', label: 'Skywalk to the Marriott Downtown' },
   { from: 'icc', to: 'westin', label: 'Skywalk to the Westin' },
+  { from: 'icc', to: 'hyatt', label: 'Skywalk to the Hyatt Regency' },
+  { from: 'icc', to: 'crowne-plaza', label: 'Skywalk to the Crowne Plaza' },
   { from: 'icc', to: 'circle-centre', label: 'Skywalk to Circle Centre' },
+  { from: 'circle-centre', to: 'omni', label: 'Walk to the Omni Severin' },
+  { from: 'circle-centre', to: 'embassy-suites', label: 'Walk to the Embassy Suites' },
+  { from: 'hyatt', to: 'hilton', label: 'Walk to the Hilton' },
+  { from: 'embassy-suites', to: 'indiana-rep', label: 'Walk to the Indiana Rep' },
 ];
