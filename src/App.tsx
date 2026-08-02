@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
+import { SearchBar } from './components/SearchBar';
 import { ROOMS_BY_ID, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
@@ -16,6 +17,7 @@ export default function App() {
   const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
   const [basemapId, setBasemapId] = useState<BasemapId>('dark');
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showAmenities, setShowAmenities] = useState(true);
 
   const { status, feed, index } = useEventFeed();
 
@@ -64,6 +66,15 @@ export default function App() {
     setOpenRoom(null);
   }, []);
 
+  // A search result takes you to the room and opens it, which is the whole
+  // point of searching for one: the map flies there behind the dialog, so
+  // closing it leaves you looking at the right place.
+  const handlePickSearchResult = useCallback((room: Room) => {
+    setSelectedRoomId(room.id);
+    setFocusRequest({ room, token: Date.now() });
+    setOpenRoom(room);
+  }, []);
+
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
 
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
@@ -88,6 +99,8 @@ export default function App() {
             </p>
           </div>
         </div>
+
+        <SearchBar index={index} onPick={handlePickSearchResult} />
 
         <div className="app__tools">
           <div className="app__basemaps" role="group" aria-label="Basemap style">
@@ -124,8 +137,9 @@ export default function App() {
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}
+          showAmenities={showAmenities}
         />
-        <Legend />
+        <Legend showAmenities={showAmenities} onToggleAmenities={() => setShowAmenities((on) => !on)} />
       </main>
 
       {openRoom && (

@@ -266,9 +266,23 @@ export function findLargestTable(root) {
  */
 export function parseEventPage(html, context = {}) {
   const root = parse(html);
-  const table = findLargestTable(root);
+
+  /*
+   * Some pages lose their <table> but keep its rows.
+   *
+   * Roughly a tenth of the catalogue — 2,661 events, all roleplaying — comes
+   * back with 22 <tr> and 45 <td> and no <table> element at all, because
+   * something earlier in the markup leaves the parser with an unclosed div and
+   * the table tag doesn't survive it. Insisting on the table dropped every one
+   * of those events silently: they were fetched, parsed to nothing, and went
+   * into the feed with no location.
+   *
+   * Reading rows is all `readFieldTable` does, and the rows are right there, so
+   * the root stands in for the table when there is none.
+   */
+  const table = findLargestTable(root) ?? (root.querySelectorAll('tr').length >= 2 ? root : null);
   if (!table) {
-    return { event: null, diagnostics: { reason: 'no <table> found', labels: [] } };
+    return { event: null, diagnostics: { reason: 'no <table> and no rows found', labels: [] } };
   }
 
   const fields = readFieldTable(table);

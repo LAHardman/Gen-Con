@@ -40,7 +40,7 @@
  * Use `--full` to ignore all of that and re-pull every page.
  */
 
-import { mkdir, writeFile, readFile, appendFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, appendFile, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'node-html-parser';
@@ -63,6 +63,7 @@ const OUTPUT = resolve(ROOT, 'public/events.json');
 const DEBUG_DIR = resolve(ROOT, '.cache');
 const DETAIL_CACHE = resolve(DEBUG_DIR, 'event-details.jsonl');
 const STATE_FILE = resolve(DEBUG_DIR, 'import-state.json');
+const LOCK_FILE = resolve(DEBUG_DIR, 'import.lock');
 const STATE_VERSION = 1;
 
 /**
@@ -163,6 +164,53 @@ async function getWithRetry(url, tries = 5) {
     if (attempt < tries) await sleep(500 * 2 ** (attempt - 1) * (0.75 + Math.random() * 0.5));
   }
   throw lastError;
+}
+
+/* --------------------------------------------------------------------- lock */
+
+/**
+ * Stops two imports running at once.
+ *
+ * Both would append to the same cache, and because the cache is what decides
+ * which pages still need fetching, both would decide the same ones do: a
+ * second run doubles the requests made of somebody's hobby server and gains
+ * nothing. Easy to do by accident — a weekly job and a local run overlapping,
+ * or a backgrounded crawl that outlived the shell that started it.
+ *
+ * The lock records a pid, so a crash leaves one that can be recognised as
+ * stale rather than blocking every later run.
+ */
+async function takeLock() {
+  try {
+    const held = JSON.parse(await readFile(LOCK_FILE, 'utf8'));
+    let alive = false;
+    try {
+      process.kill(held.pid, 0);
+      alive = true;
+    } catch {
+      // No such process; the lock outlived whatever wrote it.
+    }
+    if (alive && held.pid !== process.pid) {
+      console.error(`Another import (pid ${held.pid}) started at ${held.startedAt} is still running.`);
+      console.error(`Wait for it, or remove ${LOCK_FILE} if you know it is gone.`);
+      return false;
+    }
+    console.log(`Clearing a stale lock from pid ${held.pid}.`);
+  } catch {
+    // No lock, or an unreadable one; either way it's ours to take.
+  }
+  await mkdir(DEBUG_DIR, { recursive: true });
+  await writeFile(LOCK_FILE, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+  return true;
+}
+
+async function releaseLock() {
+  try {
+    const held = JSON.parse(await readFile(LOCK_FILE, 'utf8'));
+    if (held.pid === process.pid) await rm(LOCK_FILE, { force: true });
+  } catch {
+    // Already gone.
+  }
 }
 
 /* -------------------------------------------------------------- cache state */
@@ -381,6 +429,11 @@ async function crawlDetails(
   console.log(`  fetching ${total} event pages (${CONCURRENCY} at a time)`);
 
   let done = 0;
+  // Pages that answered but held no readable record. Retrying fetches the same
+  // bytes, so they aren't failures — but they are events that will reach the
+  // feed with no location, and saying nothing about them is how 2,661 of them
+  // once went missing without a word in the log.
+  let unreadable = 0;
   for (let sweep = 1; sweep <= DETAIL_SWEEPS && pending.length; sweep += 1) {
     if (sweep > 1) {
       console.log(`  sweep ${sweep}: retrying ${pending.length} that failed`);
@@ -393,12 +446,12 @@ async function crawlDetails(
         try {
           const page = await getWithRetry(absolute(`event.php?GameCode=${code}`));
           const { event } = parseEventPage(page.body, context);
-          // A page that came back but held no readable record is not a
-          // failure to retry: another attempt fetches the same bytes.
           if (event) {
             const record = { ...event, id: code, pulledAt: new Date().toISOString() };
             cached.set(code, record);
             await appendFile(DETAIL_CACHE, `${JSON.stringify(record)}\n`);
+          } else {
+            unreadable += 1;
           }
         } catch {
           failed.push(code);
@@ -417,6 +470,10 @@ async function crawlDetails(
   }
 
   console.log(`  ${cached.size} event pages cached, ${pending.length} still failing`);
+  if (unreadable) {
+    console.log(`  ${unreadable} page(s) came back but held no readable record — those events`);
+    console.log('  will have no location. Run --inspect to see what the page looks like now.');
+  }
   return { cached, failed: pending };
 }
 
@@ -656,10 +713,18 @@ function fail(reason, diagnostics) {
   process.exitCode = 1;
 }
 
-try {
-  await (INSPECT ? inspect() : run());
-} catch (error) {
-  console.error(`\nImport failed: ${error.message}`);
-  if (error.cause) console.error(`Cause: ${error.cause}`);
+// --inspect only reads, so it needn't wait on a crawl that is writing.
+const locked = INSPECT ? true : await takeLock();
+if (!locked) {
   process.exitCode = 1;
+} else {
+  try {
+    await (INSPECT ? inspect() : run());
+  } catch (error) {
+    console.error(`\nImport failed: ${error.message}`);
+    if (error.cause) console.error(`Cause: ${error.cause}`);
+    process.exitCode = 1;
+  } finally {
+    if (!INSPECT) await releaseLock();
+  }
 }

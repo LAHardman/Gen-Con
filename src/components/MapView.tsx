@@ -16,6 +16,7 @@ import {
 } from '../data/venues';
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
+import { AMENITIES } from '../data/amenities';
 
 interface Props {
   selectedRoomId: string | null;
@@ -25,6 +26,7 @@ interface Props {
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
+  showAmenities: boolean;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -81,6 +83,7 @@ export function MapView({
   focusRequest,
   basemapId,
   eventCounts,
+  showAmenities,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -203,6 +206,50 @@ export function MapView({
       for (const layer of layers) layer.remove();
     };
   }, [selectedRoomId]);
+
+  /* ------------------------------------------------------------- amenities */
+  /*
+   * Restrooms, as markers rather than shapes: the convention centre's are real
+   * outlines off its plans, but everywhere else they are a pictogram's
+   * position, and drawing those at different fidelities would imply a
+   * precision the second sort doesn't have. A mark says "here" either way.
+   *
+   * They follow the same floor rule as the rooms — an amenity on a floor you
+   * aren't looking at would be a direction to a toilet on the wrong storey.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !showAmenities) return;
+
+    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+    const layers: L.Layer[] = [];
+
+    for (const amenity of AMENITIES) {
+      if (selected && amenity.venueId === selected.venueId && amenity.level !== selected.level) {
+        continue;
+      }
+      const marker = L.marker([amenity.position.lat, amenity.position.lng], {
+        icon: L.divIcon({
+          className: `map__amenity map__amenity--${amenity.kind}`,
+          html: amenity.kind === 'restroom' ? '<span>WC</span>' : '<span>💧</span>',
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        }),
+        interactive: true,
+        keyboard: false,
+      });
+      marker.bindTooltip(amenity.kind === 'restroom' ? 'Restrooms' : 'Water', {
+        direction: 'top',
+        className: 'map__amenity-tip',
+      });
+      marker.addTo(map);
+      layers.push(marker);
+    }
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [showAmenities, selectedRoomId]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {

@@ -106,9 +106,51 @@ Leaflet renders it in the corner, and it must not be removed.
 | Pinch | Zoom |
 | Double-click / double-tap a room | Open its details and schedule |
 | Single click / tap a room | Select it |
+| Type in the search box | Find a room or an event |
 
 Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
 reserved for opening room details.
+
+### Search
+
+The box in the header searches rooms and events together as you type, and
+picking a result flies the map to that room and opens it — so an event result
+takes you to the place it happens, which is the only thing you can actually
+walk to.
+
+Rooms match on everything they are called: the name, the short name on the map,
+and every alias the schedule uses. So `104` offers the JW's rooms 101–104 *and*
+the convention centre's 101–117, because both buildings have one, and guessing
+between them would be worse than showing both. Events match on title, and the
+same title running twelve times in one room collapses to one result that says
+so rather than twelve identical rows.
+
+Ranking is by how the match was made — a room whose name starts with what you
+typed, then an exact alias, then a word inside a name, then event titles — and
+ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
+
+### Restrooms
+
+Marked with a **WC** dot, and toggled from the legend. They come from two
+places, and the difference matters:
+
+- **The convention centre's are measured.** Its plans key spaces by colour and
+  one of those colours is "Restrooms", so `plan-geometry.ts` already held 25 of
+  them as real outlines — the map just puts a mark in the middle of each.
+- **Everywhere else's are read off Gen Con's plans**, which draw a pictogram
+  rather than a shape, so the mark is where the pictogram is. Same schematic
+  grade as those buildings' rooms.
+
+They follow the same floor rule as the rooms: selecting a room hides the
+amenities on other floors of that building, because a toilet on the wrong
+storey is not a useful direction.
+
+**Water fountains are not marked, and that is not an oversight.** No plan shows
+them. The convention centre's legend has four categories and water is not one;
+its drawings carry no `fountain` or `water` label anywhere; Gen Con's own map
+draws no such icon. Rather than scatter plausible-looking dots, the map marks
+none — `AmenityKind` already allows for water, so the day a source turns up the
+entries drop straight into `src/data/amenities.ts`.
 
 ### How venues are positioned
 
@@ -560,13 +602,18 @@ src/
     footprints.ts    Real building outlines, from OpenStreetMap
     plan-geometry.ts Floor-plan geometry and outlines (generated)
     events.ts        Event types, venue/room matching, schedule helpers
+    amenities.ts     Restrooms, from the plans that draw them
+    search.ts        Ranking rooms and events against what you type
     basemaps.ts      Tile providers and their attribution
-  hooks/useEventFeed.ts   Loads public/events.json
+  hooks/
+    useEventFeed.ts       Loads public/events.json
+    useLocationCheck.ts   Re-reads the source to confirm a room's events
   utils/geo.ts       Local-grid ↔ latitude/longitude projection
   components/
-    MapView.tsx      Leaflet map, venue/room layers, labels
+    MapView.tsx      Leaflet map, venue/room layers, labels, amenities
     RoomDialog.tsx   Room details and its schedule
-    Legend.tsx       Category key
+    SearchBar.tsx    Search box and its results
+    Legend.tsx       Category key and the amenities toggle
 plans/
   *.pdf                    The venues' own floor plans
   *.svg, *.labels.json     Converted drawing and printed labels
@@ -583,8 +630,8 @@ scripts/
 
 ## Not built yet
 
-A personal schedule of the events you've got tickets for; search across events;
-walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
+A personal schedule of the events you've got tickets for; walking times
+between venues (`walkingMinutes` in `src/utils/geo.ts` is there
 for it); and offline caching of tiles so the map works without signal.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
