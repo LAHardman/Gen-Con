@@ -134,9 +134,14 @@ export function MapView({
     const venue = floorplan ? VENUES_BY_ID[floorplan.venueId] : undefined;
     if (!floorplan || !venue) return;
 
-    // Stretched to the venue's real footprint bounds, so how well it lines up
-    // depends on the image being cropped to the building.
-    const overlay = L.imageOverlay(floorplan.plan.url, toLatLngBounds(venueBounds(venue)), {
+    // A plan's own corners when it has them — a drawing rarely stops exactly at
+    // the building's outline — falling back to the venue's footprint bounds.
+    const corners = floorplan.plan.bounds;
+    const bounds = corners
+      ? L.latLngBounds([corners.north, corners.west], [corners.south, corners.east])
+      : toLatLngBounds(venueBounds(venue));
+
+    const overlay = L.imageOverlay(floorplan.plan.url, bounds, {
       opacity: floorplan.plan.opacity ?? 0.85,
       interactive: false,
       className: 'map__floorplan',

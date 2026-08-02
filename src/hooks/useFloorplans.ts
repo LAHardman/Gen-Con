@@ -26,6 +26,13 @@ export interface Floorplan {
   opacity?: number;
   /** Shown in the map's attribution, since these are somebody else's drawings. */
   credit?: string;
+  /**
+   * Where the image's corners sit in the world. A plan usually covers a little
+   * more or less than the building's own outline, so it needs its own corners
+   * rather than being stretched to the venue's. Falls back to the venue's
+   * footprint bounds when absent.
+   */
+  bounds?: { north: number; west: number; south: number; east: number };
 }
 
 /** venueId → its plans, one per level. */
@@ -60,7 +67,14 @@ export function useFloorplans(url = './floorplans.json'): FloorplanManifest {
   return manifest;
 }
 
-/** The plan to draw for a selected room: its own level, else the venue's first. */
+/**
+ * The plan to draw for a selected room.
+ *
+ * Matched on the room's own level, so selecting a Level 2 room never shows the
+ * Level 1 drawing. The single-plan case is the exception: a venue with one plan
+ * uses it whatever the level is called, so a plan added without matching the
+ * level strings exactly still shows up rather than silently doing nothing.
+ */
 export function floorplanFor(
   manifest: FloorplanManifest,
   venueId: string | undefined,
@@ -68,5 +82,6 @@ export function floorplanFor(
 ): Floorplan | undefined {
   const plans = venueId ? manifest[venueId] : undefined;
   if (!plans?.length) return undefined;
-  return plans.find((plan) => plan.level === level) ?? plans[0];
+  const exact = plans.find((plan) => plan.level === level);
+  return exact ?? (plans.length === 1 ? plans[0] : undefined);
 }

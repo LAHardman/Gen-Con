@@ -407,7 +407,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall A',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 128, y: 146, width: 42, height: 44 },
     aliases: ['Hall A', 'Exhibit Hall A'],
     description:
@@ -420,7 +420,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall B',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 175, y: 146, width: 42, height: 44 },
     aliases: ['Hall B', 'Exhibit Hall B', 'Event Hall B'],
     description:
@@ -433,7 +433,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall C',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 222, y: 146, width: 42, height: 44 },
     aliases: ['Hall C', 'Exhibit Hall C'],
     description: 'Mid-hall aisles: mid-size publishers, accessory makers and dice vendors.',
@@ -445,7 +445,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall D',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 269, y: 146, width: 42, height: 44 },
     aliases: ['Hall D', 'Exhibit Hall D'],
     description:
@@ -458,7 +458,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall E',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 316, y: 146, width: 42, height: 44 },
     aliases: ['Hall E', 'Exhibit Hall E'],
     description:
@@ -471,7 +471,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall F',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 363, y: 146, width: 42, height: 44 },
     aliases: ['Hall F', 'Exhibit Hall F'],
     description:
@@ -484,7 +484,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall G',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 128, y: 196, width: 50, height: 36 },
     aliases: ['Hall G', 'Exhibit Hall G'],
     description:
@@ -497,7 +497,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall H',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 184, y: 196, width: 50, height: 36 },
     aliases: ['Hall H', 'Exhibit Hall H'],
     description: 'South exhibit block continued — costume, prop and accessory vendors cluster here.',
@@ -509,7 +509,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall I',
     category: 'exhibit',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 240, y: 196, width: 50, height: 36 },
     aliases: ['Hall I', 'Exhibit Hall I'],
     description:
@@ -522,7 +522,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall J',
     category: 'gaming',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 296, y: 196, width: 50, height: 36 },
     aliases: ['Hall J', 'Exhibit Hall J', 'Open Gaming'],
     description:
@@ -535,7 +535,7 @@ export const ROOMS: Room[] = [
     shortName: 'Hall K',
     category: 'gaming',
     venueId: 'icc',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 352, y: 196, width: 50, height: 36 },
     aliases: ['Hall K', 'Exhibit Hall K', 'Family Fun'],
     description:
@@ -617,7 +617,7 @@ export const ROOMS: Room[] = [
     shortName: 'Exhibit 1–2',
     category: 'exhibit',
     venueId: 'lucas-oil',
-    level: 'Exhibit level',
+    level: 'Level 1',
     rect: { x: 30, y: 68, width: 30, height: 16 },
     aliases: ['Exhibit Hall 1', 'Exhibit Hall 2', 'Exhibit Hall 1--2'],
     description:
