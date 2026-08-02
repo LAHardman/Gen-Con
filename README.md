@@ -453,6 +453,40 @@ Progress is appended to the cache as it lands, so an interrupted crawl keeps
 what it got. The file is compacted at the end of a run, because a re-pulled
 event otherwise leaves its old line behind.
 
+### Checking a room's events haven't moved
+
+Opening a room re-reads the source for the events still to come in it, and says
+what it found:
+
+> **1 of the next 3 events has moved** since the schedule was imported. The
+> source now lists: 7 Wonders → Hyatt · Regency Ballroom A
+
+This exists because of the gap above. A change set is published only when an
+event is added, deleted, or has tickets go back on sale — a room edit isn't one
+of those, so between full re-pulls a move is invisible to the importer. The
+room you are standing in front of is the one where that matters.
+
+It checks the **next six** events rather than all of them: a busy room's
+schedule runs to hundreds, the ones already over cannot be walked to, and the
+source is one person's hobby server.
+
+**It needs a same-origin path to the source.** The event database sends no
+`access-control-allow-origin`, which is the same reason the schedule ships as a
+generated file rather than being fetched live. A path on the app's own origin
+that forwards to it lifts that, because the browser is then talking to itself:
+
+| Host | How |
+| --- | --- |
+| `npm run dev` | Already configured, in `vite.config.ts` |
+| Netlify, Cloudflare Pages | Already configured, in `public/_redirects` |
+| Vercel | A `rewrites` entry in `vercel.json` |
+| nginx, Caddy | `proxy_pass` / `reverse_proxy` on `/eventdb` |
+| **GitHub Pages** | **Not possible** — it serves static files only |
+
+Where the path isn't there the check says it couldn't reach the source, rather
+than implying everything is confirmed. Nothing else about the app depends on
+it.
+
 ### Matching events to rooms
 
 The source separates *where* from *what*: `Location` names the building (`ICC`,
