@@ -189,6 +189,183 @@ function simplify(points, tolerance) {
   ];
 }
 
+/* ------------------------------------------------- one space inside another */
+
+/**
+ * A plan can draw one named space straight through another, and Level 1 of the
+ * convention centre does: between Halls C, E and F it prints a band labelled
+ * "Swing Space", and all three halls are coloured through it, because that band
+ * is let to whichever of them needs it. Taken literally that hands the same
+ * 930 m² to three rooms at once — three outlines stacked on the map, a click in
+ * the band landing on whichever hall was drawn last, and Hall E's bounds
+ * running eighty metres west of Hall E.
+ *
+ * So a space gives up whatever named space is drawn inside it. The halls keep
+ * every wall the architect drew; they simply stop where the swing space starts,
+ * and the band is left to the room the plan actually labels it as.
+ *
+ * The cut runs along the drawing's own walls rather than a raster of them.
+ * Plans of this kind are square, so slicing the pair along every x and y either
+ * outline mentions leaves cells that are wholly in or wholly out, and the
+ * boundary of the cells that survive is made of edges the drawing already had.
+ *
+ * Drawn, though, those walls miss each other by a hair — the swing space's west
+ * end sits 0.07 m clear of Hall F's, and Hall E's east wall of the same band
+ * leans by as much over its whole length. Coordinates within `TOLERANCE` are
+ * therefore taken to be the same wall and pulled together before the cut, which
+ * is the same 0.25 m the outlines are simplified by a few lines further on.
+ */
+function carveOut(shapes, planId, scale) {
+  const snap = TOLERANCE / scale;
+  const rooms = shapes.filter((shape) => shape.kind === 'room');
+  const work = [];
+  for (const outer of rooms) {
+    const inners = rooms.filter((inner) => inner !== outer
+      && inner.keys?.size
+      && inner.size < outer.size
+      && encloses(outer.points, inner.points, snap));
+    if (inners.length) work.push({ outer, inners });
+  }
+
+  const naming = (shape) => (shape.keys?.size
+    ? [...shape.keys].reduce((a, b) => (b.length > a.length ? b : a))
+    : '(unnamed)');
+
+  for (const { outer, inners } of work) {
+    const given = inners.map(naming).join(', ');
+    const rings = square([outer.points, ...inners.map((inner) => inner.points)], snap);
+    if (!rings) {
+      console.warn(`  ${planId}: ${naming(outer)} contains ${given}, but not squarely; left overlapping`);
+      continue;
+    }
+    const cut = difference(rings[0], rings.slice(1));
+    if (!cut) {
+      console.warn(`  ${planId}: cutting ${given} out of ${naming(outer)} left nothing; left overlapping`);
+      continue;
+    }
+    console.log(`  ${planId}: ${naming(outer)} gives up ${given}`);
+    outer.points = cut;
+    outer.box = boundsOf(cut);
+    outer.size = area(cut);
+  }
+}
+
+/**
+ * The same rings with every coordinate within `snap` of another pulled onto one
+ * value, which leaves them exactly square and sharing their common walls —
+ * or null if some edge is a real diagonal rather than a drafting wobble.
+ */
+function square(rings, snap) {
+  const xs = ticks(rings, 0, snap);
+  const ys = ticks(rings, 1, snap);
+  const nearest = (value, list) => list.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
+  const out = rings.map((ring) => {
+    const moved = ring.map((point) => [nearest(point[0], xs), nearest(point[1], ys)]);
+    return moved.filter((point, i) => {
+      const next = moved[(i + 1) % moved.length];
+      return point[0] !== next[0] || point[1] !== next[1];
+    });
+  });
+  const flat = out.every((ring) => ring.every((point, i) => {
+    const next = ring[(i + 1) % ring.length];
+    return point[0] === next[0] || point[1] === next[1];
+  }));
+  return flat && out.every((ring) => ring.length >= 4) ? out : null;
+}
+
+/** The distinct coordinates of a set of rings along one axis, ones within `snap` merged. */
+function ticks(rings, axis, snap = 1e-6) {
+  const all = rings.flat().map((point) => point[axis]).sort((a, b) => a - b);
+  const out = [];
+  let group = [all[0]];
+  for (const value of all.slice(1)) {
+    if (value - group[0] <= snap) group.push(value);
+    else {
+      out.push(group.reduce((sum, v) => sum + v, 0) / group.length);
+      group = [value];
+    }
+  }
+  out.push(group.reduce((sum, v) => sum + v, 0) / group.length);
+  return out;
+}
+
+/** Whether `inner` lies within `outer`, walls within `snap` counting as shared. */
+function encloses(outer, inner, snap) {
+  const rings = square([outer, inner], snap);
+  if (!rings) return false;
+  const xs = ticks(rings, 0);
+  const ys = ticks(rings, 1);
+  for (let i = 0; i + 1 < xs.length; i += 1) {
+    for (let j = 0; j + 1 < ys.length; j += 1) {
+      const at = [(xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2];
+      if (contains(rings[1], at) && !contains(rings[0], at)) return false;
+    }
+  }
+  return true;
+}
+
+/** `outer` less every ring in `inners`, as one ring: the largest piece left. */
+function difference(outer, inners) {
+  const xs = ticks([outer, ...inners], 0);
+  const ys = ticks([outer, ...inners], 1);
+  const w = xs.length - 1;
+  const h = ys.length - 1;
+  const solid = new Uint8Array(w * h);
+  for (let i = 0; i < w; i += 1) {
+    for (let j = 0; j < h; j += 1) {
+      const at = [(xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2];
+      const keep = contains(outer, at) && !inners.some((inner) => contains(inner, at));
+      solid[j * w + i] = keep ? 1 : 0;
+    }
+  }
+
+  // Walk each kept cell's exposed sides, anticlockwise, so the sides chain
+  // head to tail into closed rings.
+  const filled = (i, j) => i >= 0 && j >= 0 && i < w && j < h && solid[j * w + i] === 1;
+  const sides = new Map();
+  const name = ([x, y]) => `${x.toFixed(6)},${y.toFixed(6)}`;
+  const add = (from, to) => {
+    const key = name(from);
+    if (!sides.has(key)) sides.set(key, []);
+    sides.get(key).push(to);
+  };
+  for (let i = 0; i < w; i += 1) {
+    for (let j = 0; j < h; j += 1) {
+      if (!filled(i, j)) continue;
+      const [x0, x1, y0, y1] = [xs[i], xs[i + 1], ys[j], ys[j + 1]];
+      if (!filled(i, j - 1)) add([x0, y0], [x1, y0]);
+      if (!filled(i + 1, j)) add([x1, y0], [x1, y1]);
+      if (!filled(i, j + 1)) add([x1, y1], [x0, y1]);
+      if (!filled(i - 1, j)) add([x0, y1], [x0, y0]);
+    }
+  }
+
+  let best = null;
+  while (sides.size) {
+    const [start] = sides.keys();
+    const ring = [];
+    let at = start;
+    while (sides.has(at)) {
+      const next = sides.get(at).pop();
+      if (!sides.get(at).length) sides.delete(at);
+      ring.push(next);
+      at = name(next);
+    }
+    if (ring.length >= 4 && (!best || area(ring) > area(best))) best = ring;
+  }
+  if (!best) return null;
+
+  // Corners only: the slicing put a vertex wherever either outline mentioned a
+  // coordinate, including straight down the middle of a wall.
+  const corners = best.filter((point, i) => {
+    const before = best[(i - 1 + best.length) % best.length];
+    const after = best[(i + 1) % best.length];
+    return (point[0] - before[0]) * (after[1] - point[1])
+      !== (point[1] - before[1]) * (after[0] - point[0]);
+  });
+  return corners.length >= 3 ? corners : null;
+}
+
 /* ------------------------------------------------------------- projection */
 
 const R = 6378137;
@@ -266,6 +443,8 @@ function convertPlan(planId, plan, frame) {
     const printed = parts.map((part) => part.text);
     shape.keys = new Set([...printed, printed.join(' ')].map(key));
   }
+
+  carveOut(shapes, planId, scale);
 
   const tolerance = TOLERANCE / scale;
   const features = shapes.map((shape) => ({

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CATEGORY_STYLES, VENUES_BY_ID, type Room } from '../data/venues';
+import {
+  CATEGORY_STYLES,
+  PLANNED_LAYOUT,
+  TRACED_FOOTPRINT,
+  VENUES_BY_ID,
+  type Room,
+} from '../data/venues';
 import {
   dayKey,
   formatDayLabel,
@@ -8,6 +14,7 @@ import {
   type ConEvent,
 } from '../data/events';
 import type { FeedStatus } from '../hooks/useEventFeed';
+import { useLocationCheck } from '../hooks/useLocationCheck';
 
 interface Props {
   room: Room;
@@ -68,6 +75,12 @@ export function RoomDialog({
 
   const liveCount = dayEvents.filter((event) => isHappeningAt(event, nowMs)).length;
 
+  // Opening a room re-reads the source for the events still to come in it, so a
+  // room change made since the schedule was imported shows up here rather than
+  // waiting for the next full pull.
+  const check = useLocationCheck(room.id, events, nowMs);
+  const movedIds = new Set(check.moved.map((entry) => entry.event.id));
+
   return (
     <div className="dialog__backdrop" onPointerDown={onClose}>
       <div
@@ -113,6 +126,33 @@ export function RoomDialog({
             {liveCount > 0 && <span className="schedule__live">{liveCount} on now</span>}
           </div>
 
+          {check.status !== 'idle' && (
+            <p className={`schedule__check schedule__check--${check.status}`}>
+              {check.status === 'checking' && 'Checking the source that these are still here…'}
+              {check.status === 'confirmed' &&
+                `Still here: the next ${check.checked} ${
+                  check.checked === 1 ? 'event is' : 'events are'
+                } listed in this room on the source right now.`}
+              {check.status === 'unavailable' &&
+                'Could not reach the source to confirm these are still here, so they are as imported. Room changes are not published in the source’s change log, so check the Gen Con program if it matters.'}
+              {check.status === 'moved' && (
+                <>
+                  <strong>
+                    {check.moved.length} of the next {check.checked} {check.checked === 1 ? 'event has' : 'events have'} moved
+                  </strong>{' '}
+                  since the schedule was imported. The source now lists:
+                  <span className="schedule__moved">
+                    {check.moved.map(({ event, locationText, roomText }) => (
+                      <span key={event.id}>
+                        {event.title} → {[locationText, roomText].filter(Boolean).join(' · ') || 'no location'}
+                      </span>
+                    ))}
+                  </span>
+                </>
+              )}
+            </p>
+          )}
+
           {feedStatus !== 'ready' ? (
             <p className="schedule__empty">
               {feedStatus === 'loading'
@@ -154,7 +194,7 @@ export function RoomDialog({
                       key={event.id}
                       className={`schedule__item${live ? ' schedule__item--live' : ''}${
                         done ? ' schedule__item--past' : ''
-                      }`}
+                      }${movedIds.has(event.id) ? ' schedule__item--moved' : ''}`}
                     >
                       <span className="schedule__time">{formatTimeRange(event)}</span>
                       <span className="schedule__body">
@@ -176,7 +216,11 @@ export function RoomDialog({
                             .join(' · ')}
                         </span>
                       </span>
-                      {live && <span className="schedule__badge">Now</span>}
+                      {movedIds.has(event.id) ? (
+                        <span className="schedule__badge schedule__badge--moved">Moved</span>
+                      ) : (
+                        live && <span className="schedule__badge">Now</span>
+                      )}
                     </li>
                   );
                 })}
@@ -201,7 +245,11 @@ export function RoomDialog({
         <p className="dialog__note">
           {room.venueId === 'icc'
             ? 'Room outlines are traced from the convention centre’s official floor plans, which the map draws underneath. Check the official Gen Con program for exact room assignments.'
-            : 'Room outlines are placed within the real building footprint but are a schematic arrangement, not a surveyed floor plan. Check the official Gen Con program for exact room assignments.'}
+            : TRACED_FOOTPRINT.has(room.venueId)
+              ? 'This building is not in OpenStreetMap, so even its outline is traced from a published plan rather than surveyed — it is the one venue on the map whose shape and position are both approximate. Its rooms come from that same plan. Check the official Gen Con program for exact room assignments.'
+              : PLANNED_LAYOUT.has(room.venueId)
+              ? 'Which rooms are on this floor, and how they sit relative to each other, come from a published floor plan of the building. Their outlines are rectangles inside the real footprint rather than measured shapes. Check the official Gen Con program for exact room assignments.'
+              : 'Room outlines are placed within the real building footprint but are a schematic arrangement, not a surveyed floor plan. Check the official Gen Con program for exact room assignments.'}
         </p>
       </div>
     </div>

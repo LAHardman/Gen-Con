@@ -106,9 +106,51 @@ Leaflet renders it in the corner, and it must not be removed.
 | Pinch | Zoom |
 | Double-click / double-tap a room | Open its details and schedule |
 | Single click / tap a room | Select it |
+| Type in the search box | Find a room or an event |
 
 Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
 reserved for opening room details.
+
+### Search
+
+The box in the header searches rooms and events together as you type, and
+picking a result flies the map to that room and opens it — so an event result
+takes you to the place it happens, which is the only thing you can actually
+walk to.
+
+Rooms match on everything they are called: the name, the short name on the map,
+and every alias the schedule uses. So `104` offers the JW's rooms 101–104 *and*
+the convention centre's 101–117, because both buildings have one, and guessing
+between them would be worse than showing both. Events match on title, and the
+same title running twelve times in one room collapses to one result that says
+so rather than twelve identical rows.
+
+Ranking is by how the match was made — a room whose name starts with what you
+typed, then an exact alias, then a word inside a name, then event titles — and
+ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
+
+### Restrooms
+
+Marked with a **WC** dot, and toggled from the legend. They come from two
+places, and the difference matters:
+
+- **The convention centre's are measured.** Its plans key spaces by colour and
+  one of those colours is "Restrooms", so `plan-geometry.ts` already held 25 of
+  them as real outlines — the map just puts a mark in the middle of each.
+- **Everywhere else's are read off Gen Con's plans**, which draw a pictogram
+  rather than a shape, so the mark is where the pictogram is. Same schematic
+  grade as those buildings' rooms.
+
+They follow the same floor rule as the rooms: selecting a room hides the
+amenities on other floors of that building, because a toilet on the wrong
+storey is not a useful direction.
+
+**Water fountains are not marked, and that is not an oversight.** No plan shows
+them. The convention centre's legend has four categories and water is not one;
+its drawings carry no `fountain` or `water` label anywhere; Gen Con's own map
+draws no such icon. Rather than scatter plausible-looking dots, the map marks
+none — `AmenityKind` already allows for water, so the day a source turns up the
+entries drop straight into `src/data/amenities.ts`.
 
 ### How venues are positioned
 
@@ -127,15 +169,60 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 ```
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
-outlines — those are the shapes of the actual buildings, not estimates. The
-**convention centre's interior is real too**: its halls and meeting rooms are
-the outlines from its official floor plans, read into real coordinates and drawn
-as map geometry (below). Every other venue's interior is still a schematic
-arrangement inside its real footprint — rooms are in the right building and the
-right general part of it, but not at surveyed positions. The app says which you
-are looking at in every room pop-up. Three venues with no interior worth
-breaking out — the Indiana Rep, the Escape Room and Circle Centre — are drawn as
-their footprint directly.
+outlines — those are the shapes of the actual buildings, not estimates. There
+are then three grades of interior, and the app says which one you are looking
+at in every room pop-up:
+
+| Grade | Venues | What it means |
+| --- | --- | --- |
+| **Measured** | Convention centre | Halls and meeting rooms are the outlines from the official floor plans, read into real coordinates and drawn as map geometry (below) |
+| **Planned** | JW Marriott, Marriott Downtown, Westin, Crowne Plaza / Union Station, Omni Severin, Hyatt Regency, Hilton, Embassy Suites, Le Méridien | Which rooms exist, which floor each is on and how they sit relative to one another all come off a published plan of that building; the outlines are rectangles inside the real footprint rather than measured shapes |
+| **Schematic** | Lucas Oil | Rooms are in the right building and the right general part of it, and nothing finer than that is claimed |
+
+**One building is not outlined from a survey at all.** Every venue above sits
+on its real OpenStreetMap footprint except **Le Méridien**, which OpenStreetMap
+has no building for — not under that name, not under the Canterbury it used to
+be, not as an untagged shape. The likeliest reason is that the mall relation
+next door swallows it: the hotel is built into the west edge of the Circle
+Centre block, and the traced outline lands inside Circle Centre's, which is
+right rather than a fault to fix. Its outline is therefore traced from Gen
+Con's map of it and georeferenced against the Omni Severin drawn in the same
+frame, whose surveyed footprint fixes the scale — the fit puts the Omni's far
+wall within a metre of where OpenStreetMap has it. It is the one venue whose
+shape *and* position are approximate, `TRACED_FOOTPRINT` in `venues.ts` names
+it, and its room pop-up says so.
+
+Three venues with no interior worth breaking out — the Indiana Rep, the Escape
+Room and Circle Centre — are drawn as their footprint directly.
+
+**One room per named space.** Where a plan letters two rooms separately, the map
+draws two rooms: Union Station's eleven railroad rooms are eleven shapes, not a
+block called "Railroad Rooms", and the same goes for the Marriott's ten state
+and city rooms, the Westin's statehouse rooms and the Omni's universities.
+Sections of one divisible ballroom stay together, because that is one room —
+`Marriott Ballroom 1–10` is a single shape, as `Sagamore Ballroom` is in the
+convention centre. The exception is the JW's White River Ballroom, which its
+plans draw as three walled blocks rather than one span, so it is three.
+
+**On the planned venues.** The plans are Gen Con's own, plus the hotel's own
+sheet for the JW's 1st floor. Reading them takes one correction that is easy to
+miss: **Gen Con draws its floor plans with south at the top.** Its own labels
+give it away — Grand Hall *Southeast* is printed above Grand Hall *Northeast* —
+and it holds against the buildings whose real positions are known: the plans
+put the convention centre north of the Marriott Downtown and Senate Avenue east
+of the Westin, and both are the other way round on the ground. So the
+rectangles in `venues.ts` are those plans turned through half a turn. Every
+room was then checked against the building's real footprint and pulled inside
+where a plan reached past it — the plans and OpenStreetMap disagree by a few
+metres at some edges, and the footprint wins, because it is the line the map
+actually draws.
+
+**Lucas Oil is the one building a plan can't help.** Gen Con draws all three of
+its levels, and not one space on any of them is labelled: the bowl, the
+concourse ring and the lower-level halls are drawn as unnamed blocks. So the
+stadium keeps the interior it had, which comes from its seating diagram — the
+names and the side of the bowl each space is on are right, the positions are
+not.
 
 **A building is outlined by the same source as its interior.** The convention
 centre used to be outlined by its OpenStreetMap footprint while its rooms came
@@ -146,8 +233,11 @@ now traced around everything its plans draw, so the line and the rooms inside it
 can't disagree. Every other venue keeps its OSM footprint, which is also what
 `footprints.ts` still holds for all of them, the convention centre included.
 
-Every room is checked to fall inside the building it belongs to, and all of them
-are.
+Every room is checked two ways: that it falls inside the building it belongs to,
+and that it doesn't sit on another room on the same floor. Both are clean —
+sampled over what the map actually draws for each room, which is its plan
+outline where it has one and its rectangle where it doesn't, with a shared wall
+not counting as a collision.
 
 The convention center's grid is measured in metres, so a room's `rect` reads as
 a real distance from the building's north-west corner; the other venues use a
@@ -198,10 +288,24 @@ along airwalls. `Room.plan` in `venues.ts` lists the labels a room covers:
 { id: 'rooms-130-145', plan: numberRange(130, 145), … }
 ```
 
-19 of the convention centre's 22 rooms are drawn this way, across 132 shapes.
+20 of the convention centre's 23 rooms are drawn this way, across 132 shapes.
 The three that aren't — registration, Gen Con Central and the food court — are
 services the plan doesn't letter, so they keep a schematic rectangle on the
 Level 1 concourse.
+
+**One space, one owner.** Level 1 prints a band called `SWING SPACE` between
+Halls C, E and F, and colours all three halls straight through it, because that
+band is let to whichever of them needs it. Read literally that hands the same
+930 m² to three rooms at once: three outlines stacked on each other, a click in
+the band landing on whichever hall was drawn last, and Hall E's bounds running
+eighty metres west of Hall E. So a space gives up whatever named space is drawn
+inside it — the halls keep every wall the architect drew, they simply stop where
+the swing space starts, and the band is a room of its own. The cut runs along
+the drawing's own walls rather than a raster of them: these plans are square, so
+slicing the pair along every coordinate either outline mentions leaves cells
+that are wholly in or wholly out. Walls within the same 0.25 m the outlines are
+simplified by are taken to be the same wall first, because drawn ones miss each
+other by a hair.
 
 **The outline comes from the plans too.** `plan-to-geometry.mjs` traces a line
 around everything a venue's sheets draw — every floor, since an upper storey
@@ -243,10 +347,24 @@ where they are. Each building therefore draws one floor at a time — its ground
 floor until you select a room in it, then that room's floor — and selecting a
 room fades the rest of its building's floors.
 
-The JW Marriott's own floor plans set the arrangement of its rooms — the big
-halls west, the numbered rooms down the east side, floor by floor — but those
-drawings carry no building outline or scale to fit against, so its interior is
-positioned from them rather than measured, and stays schematic. Lucas Oil's
+The planned venues in the table above stop short of this pipeline for one
+reason: none of their plans can be fitted. The JW's is a line drawing with no
+building outline and no scale; Gen Con's are drawn by its own map application
+and come out as screenshots, which have pixels rather than paths, and no legend
+keying spaces by colour. What they do carry is names and arrangement, and that
+is what has been taken from them — the White River Ballroom's ten lettered
+sections in three columns with rooms 101–104 alongside, Griffin Hall over them
+and the Grand Ballroom over that; the Marriott Ballroom's sections 1–10 filling
+its whole floor above the Indiana Ballroom; the Westin's Grand Ballroom sitting
+directly over the Capitol; Union Station's eleven railroad rooms in two rows
+down the concourse behind the Grand Hall, with the Crowne Plaza's own rooms
+running west from them through the old train shed; the Hyatt's Regency and
+Cosmopolitan ballrooms stacked on its 2nd and 3rd floors with Network, Concept,
+Theory and Vision out on the wings; the Hilton's meeting rooms on its 2nd floor
+and the Victory Ballroom alone nine floors up; the Embassy Suites' four rooms
+ringing the atrium five floors above its lobby; the Omni's Gates, McClellan and
+Fisher halls up on its 2nd floor with the Severin Ballroom left on its 1st.
+Lucas Oil's
 field is measured: its box is a full NFL field including end zones, centred on
 the bowl and turned onto the bowl's own long axis, which the minimum-area
 rectangle around the OSM footprint puts 25.6° off the street grid. Its street-
@@ -305,6 +423,8 @@ The source publishes each event in two places, and the importer reads both:
 
 | Page | What it gives | Cost |
 | --- | --- | --- |
+| `changeList.php` | when the database was last rebuilt, and every change set since | 1 request |
+| `changes.php?ChangeSet=…` | one change set: events added, deleted, or with tickets back on sale | 1 per unseen set |
 | `index.php` | one `category.php` link per event type | 1 request |
 | `dayTimeList.php` | the convention's days, with real dates | 1 request |
 | `categoryAll.php?EventType=…` | every event in a category: title, code, day, time, cost, tickets — **but no location** | 1 per event type |
@@ -319,10 +439,112 @@ prints the labels the site is actually using and how `FIELD_PATTERNS` resolves
 each one; that is the list to adjust if the source ever renames them.
 
 The catalogue pass is cheap. The detail pass is not — roughly 27,000 requests
-for a full year — so detail pages are cached in `.cache/event-details.jsonl` and
-the crawl is resumable: only the first run pays for them. Use `--limit` to
-spread that over several runs, `--no-details` to skip locations entirely, and
-`--delay` / `--concurrency` to control how hard it leans on a hobbyist's server.
+for a full year. Use `--limit` to spread that over several runs, `--no-details`
+to skip locations entirely, and `--delay` / `--concurrency` to control how hard
+it leans on a hobbyist's server.
+
+### Only the first run pays for it
+
+Two files in `.cache/` mean a later run re-reads almost nothing:
+
+| File | What it holds |
+| --- | --- |
+| `event-details.jsonl` | every event record pulled, each with the `pulledAt` of the run that read it |
+| `import-state.json` | the watermark: the source's own last-rebuilt timestamp, the newest change set, and when this repo last pulled in full |
+
+A run starts at `changeList.php`. The whole site is generated from one
+spreadsheet, and that page prints when it was last processed — so while that
+timestamp matches the one in `import-state.json`, nothing on the site has
+changed, and the run stops there having made **one request**:
+
+```
+Source last rebuilt: Sunday August 02, 2026 - 11:51 am EST (change set 345)
+  Unchanged since the last pull at 2026-08-02T17:31:42.663Z.
+public/events.json is already up to date. Nothing fetched.
+```
+
+When it has moved, the change sets published since the last run say which
+events were added, deleted, or had tickets go back on sale. Only those are
+re-pulled; the deleted ones are dropped from the cache:
+
+```
+  2 change set(s) since the last pull; reading them.
+  507 event(s) to re-pull, 32 deleted.
+```
+
+**What that misses, and why there's still a full pass.** The source only
+publishes a change set "when at least one of the three criteria above is met" —
+its words. A title, a time, or a *room* edit changes the data without ever
+appearing in one. Following change sets alone would let a room move go
+unnoticed indefinitely, so a full re-pull falls due every `FULL_REFRESH_DAYS`
+(7) regardless, and `--full` forces one at any time. Being more than
+`MAX_CHANGE_SETS` (40) behind also triggers one, since reading that many sets
+costs more requests than the pull they were meant to save.
+
+Only a run that read everything moves the watermark, and "everything" is
+checked rather than assumed: every event in the catalogue has a cached record,
+and nothing is still failing. A run that ends short — `--no-details`, or event
+pages that never came back — leaves the watermark where it was, so the next run
+sees the same work again and finishes it rather than skipping past events it
+never actually read. A `--limit` run that happens to close the last gap counts;
+one that doesn't, doesn't.
+
+`--limit` also turns a due full re-pull into a top-up, and doesn't reset the
+full-pull clock. Throwing the cache away and then reading only `--limit` of it
+back would lose more than it refreshed, and the next capped run would do the
+same again — which is exactly what the weekly job in
+`.github/workflows/deploy.yml` does, at 4,000 pages a run.
+
+### Getting all of them, first time
+
+A first pull is 27,000 requests, and at even a very low failure rate that is
+hundreds of events with no location. Two mechanisms rather than one:
+
+- **Per request:** up to five attempts with exponential backoff and jitter, on
+  network errors, 429s and 5xxs. A 4xx fails immediately — the page genuinely
+  isn't there, and knocking again won't change that. The jitter matters because
+  a pool of workers that all fail at once would otherwise march back in step.
+- **Per crawl:** whatever still failed is swept up and tried again, up to four
+  sweeps, each waiting longer than the last. A source having a bad minute costs
+  a pause rather than the run.
+
+Progress is appended to the cache as it lands, so an interrupted crawl keeps
+what it got. The file is compacted at the end of a run, because a re-pulled
+event otherwise leaves its old line behind.
+
+### Checking a room's events haven't moved
+
+Opening a room re-reads the source for the events still to come in it, and says
+what it found:
+
+> **1 of the next 3 events has moved** since the schedule was imported. The
+> source now lists: 7 Wonders → Hyatt · Regency Ballroom A
+
+This exists because of the gap above. A change set is published only when an
+event is added, deleted, or has tickets go back on sale — a room edit isn't one
+of those, so between full re-pulls a move is invisible to the importer. The
+room you are standing in front of is the one where that matters.
+
+It checks the **next six** events rather than all of them: a busy room's
+schedule runs to hundreds, the ones already over cannot be walked to, and the
+source is one person's hobby server.
+
+**It needs a same-origin path to the source.** The event database sends no
+`access-control-allow-origin`, which is the same reason the schedule ships as a
+generated file rather than being fetched live. A path on the app's own origin
+that forwards to it lifts that, because the browser is then talking to itself:
+
+| Host | How |
+| --- | --- |
+| `npm run dev` | Already configured, in `vite.config.ts` |
+| Netlify, Cloudflare Pages | Already configured, in `public/_redirects` |
+| Vercel | A `rewrites` entry in `vercel.json` |
+| nginx, Caddy | `proxy_pass` / `reverse_proxy` on `/eventdb` |
+| **GitHub Pages** | **Not possible** — it serves static files only |
+
+Where the path isn't there the check says it couldn't reach the source, rather
+than implying everything is confirmed. Nothing else about the app depends on
+it.
 
 ### Matching events to rooms
 
@@ -348,7 +570,7 @@ browser console on load:
 
 ```
 [gen-con] 412 of 8000 events did not match a room on the map.
-Unrecognised locations (17): Le Meridien : Latitude | ICC : Exhibit Hall ...
+Unrecognised locations (17): 416 Wabash : 416 E Wabash St | ICC : Exhibit Hall ...
 ```
 
 Add those strings to the relevant room's `aliases` and they'll resolve. This is
@@ -361,13 +583,24 @@ tuned to it. It imports the full 2026 catalogue — **27,537 events across 19
 event types**, matching the total the site itself reports — with the days and
 times it publishes.
 
-Of a 3,000-event sample spread evenly across all 19 types, **99.4% resolved to
+Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
 a room on the map**. The source uses 16 distinct `Location` values and several
-hundred `Room` values.
+hundred `Room` values, and every `Location` but two resolves to a building.
 
-The stragglers are small offsite venues OpenStreetMap has no building for (Le
-Meridien, Janus Lofts) and convention-center strings that name no particular
-hall (`Exhibit Hall`, `Exhibit Hall Booth #1229`, `Georgia Street Entrance`).
+One straggler is left in the sample: **416 Wabash** (1 event), an address five
+blocks east of the campus with no building on the map. Nothing else — every
+other `Location` resolves to a building, and nothing inside a building the map
+knows goes unmatched.
+
+That last one used to be worse than unmatched. Its `Room` reads
+`416 E Wabash St`, and with no venue recognised the matcher searched every room
+on the campus and put it in the **convention centre's Wabash Ballroom** — a
+confident answer, in the wrong building, with nothing to say it was a guess.
+An unrecognised `Location` now only matches venues the map draws as a single
+room, whose aliases are that building's own names and street address. Room
+names repeat across the campus, which is the whole reason matching resolves the
+venue first; with no venue at all, a room-name match is exactly the mistake
+that design exists to prevent.
 
 If an import comes back empty, `--inspect` prints the structure it actually
 found — the event types linked, the convention's days, a catalogue page's yield,
@@ -386,13 +619,18 @@ src/
     footprints.ts    Real building outlines, from OpenStreetMap
     plan-geometry.ts Floor-plan geometry and outlines (generated)
     events.ts        Event types, venue/room matching, schedule helpers
+    amenities.ts     Restrooms, from the plans that draw them
+    search.ts        Ranking rooms and events against what you type
     basemaps.ts      Tile providers and their attribution
-  hooks/useEventFeed.ts   Loads public/events.json
+  hooks/
+    useEventFeed.ts       Loads public/events.json
+    useLocationCheck.ts   Re-reads the source to confirm a room's events
   utils/geo.ts       Local-grid ↔ latitude/longitude projection
   components/
-    MapView.tsx      Leaflet map, venue/room layers, labels
+    MapView.tsx      Leaflet map, venue/room layers, labels, amenities
     RoomDialog.tsx   Room details and its schedule
-    Legend.tsx       Category key
+    SearchBar.tsx    Search box and its results
+    Legend.tsx       Category key and the amenities toggle
 plans/
   *.pdf                    The venues' own floor plans
   *.svg, *.labels.json     Converted drawing and printed labels
@@ -409,13 +647,23 @@ scripts/
 
 ## Not built yet
 
-A personal schedule of the events you've got tickets for; search across events;
-walking times between venues (`walkingMinutes` in `src/utils/geo.ts` is there
+A personal schedule of the events you've got tickets for; walking times
+between venues (`walkingMinutes` in `src/utils/geo.ts` is there
 for it); and offline caching of tiles so the map works without signal.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
 (`Hall B : Orange`, `Hall E : Asmodee`); breaking those out would put a demo
-table on the map rather than a hall. The other venues would each need their own
-floor plan before their interiors could be measured the way the convention
-centre's now are.
+table on the map rather than a hall. The eight planned venues would each need a
+vector plan — one with paths and a colour-keyed legend, not a screenshot —
+before their interiors could be measured the way the convention centre's now
+are; the arrangement is right in all of them, but the coordinates are still
+authored rather than read. Lucas Oil needs something else again: a plan that
+names its spaces, which none of the three published for it does.
+
+The convention centre needs no more floors: levels 1 and 2 are the two sheets
+in `plans/` and they are the whole of it. Gen Con's own map offers B, 1, 2, 3
+and 4, but those number the *event levels of the campus* rather than the floors
+of any one building — its level 3 is the JW's 3rd floor, the Hyatt's 3rd, the
+Embassy Suites' 5th and the Hilton's 9th all at once. Nothing of the convention
+centre is on them.

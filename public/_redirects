@@ -1,0 +1,8 @@
+# Netlify and Cloudflare Pages read this file; other hosts ignore it.
+#
+# The event database sends no CORS headers, so a browser can't read it from
+# this app's origin. Forwarding a same-origin path to it is what lets the room
+# dialog re-check that its events haven't moved since the schedule was
+# imported. Without this the app still works — the check just reports that it
+# couldn't reach the source. See src/hooks/useLocationCheck.ts.
+/eventdb/*  https://gencon.eventdb.us/:splat  200

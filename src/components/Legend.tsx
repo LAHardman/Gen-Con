@@ -11,7 +11,12 @@ const ORDER: RoomCategory[] = [
   'venue',
 ];
 
-export function Legend() {
+interface Props {
+  showAmenities: boolean;
+  onToggleAmenities: () => void;
+}
+
+export function Legend({ showAmenities, onToggleAmenities }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -38,6 +43,20 @@ export function Legend() {
               </li>
             );
           })}
+          <li className="legend__amenities">
+            <label>
+              <input type="checkbox" checked={showAmenities} onChange={onToggleAmenities} />
+              <span className="map__amenity map__amenity--restroom legend__wc">
+                <span>WC</span>
+              </span>
+              Restrooms
+            </label>
+            {/* Said here rather than left to be inferred from an empty map. */}
+            <small>
+              From the convention centre’s plans, and from the pictograms on Gen Con’s plans of
+              the hotels. Water fountains aren’t marked — no plan shows them.
+            </small>
+          </li>
         </ul>
       )}
     </div>

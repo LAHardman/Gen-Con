@@ -266,9 +266,23 @@ export function findLargestTable(root) {
  */
 export function parseEventPage(html, context = {}) {
   const root = parse(html);
-  const table = findLargestTable(root);
+
+  /*
+   * Some pages lose their <table> but keep its rows.
+   *
+   * Roughly a tenth of the catalogue — 2,661 events, all roleplaying — comes
+   * back with 22 <tr> and 45 <td> and no <table> element at all, because
+   * something earlier in the markup leaves the parser with an unclosed div and
+   * the table tag doesn't survive it. Insisting on the table dropped every one
+   * of those events silently: they were fetched, parsed to nothing, and went
+   * into the feed with no location.
+   *
+   * Reading rows is all `readFieldTable` does, and the rows are right there, so
+   * the root stands in for the table when there is none.
+   */
+  const table = findLargestTable(root) ?? (root.querySelectorAll('tr').length >= 2 ? root : null);
   if (!table) {
-    return { event: null, diagnostics: { reason: 'no <table> found', labels: [] } };
+    return { event: null, diagnostics: { reason: 'no <table> and no rows found', labels: [] } };
   }
 
   const fields = readFieldTable(table);
@@ -425,4 +439,75 @@ export function readEventTypes(html) {
     if (type) types.push(type);
   }
   return [...new Set(types)];
+}
+
+/* ------------------------------------------------------------------ changes */
+
+/**
+ * Reads `changeList.php`: the source's own record of what it has changed.
+ *
+ * Two things come off it. The headline is the timestamp of the spreadsheet the
+ * whole database was last rebuilt from — "Most recent events.csv file
+ * processed: Sunday August 02, 2026 - 11:51 am EST". Every value on the site
+ * comes from that file, so while it hasn't moved, nothing on the site has
+ * either, and an import has nothing to do.
+ *
+ * The rest is a list of change sets, newest first, each linking to
+ * `changes.php?ChangeSet=<id>` with counts of what it covers. The ids are
+ * consecutive integers, which makes them a far steadier watermark than the
+ * abbreviated dates printed beside them ("Sun Aug 02 - 11:51 am", no year).
+ *
+ * Note what a change set does NOT cover, in the site's own words: it is only
+ * listed "when at least one of the three criteria above is met", so a title,
+ * date, description — or room — edit changes the data without appearing here.
+ * `csvProcessedAt` catches those; the change sets alone do not.
+ */
+export function parseChangeList(html) {
+  const csvProcessedAt =
+    html.match(/Most recent events\.csv file processed:\s*([^<]+?)\s*<\/p>/i)?.[1]?.trim() ?? null;
+
+  const sets = [];
+  const seen = new Set();
+  const pattern =
+    /<strong class='green'>(\d+)[^<]*<\/strong>[\s\S]{0,200}?<strong class='red'>(\d+)<\/strong>[\s\S]{0,200}?<strong class='orange'>(\d+)<\/strong>[\s\S]{0,200}?changes\.php\?ChangeSet=(\d+)'>([^<]*)<\/a>/g;
+
+  for (const match of html.matchAll(pattern)) {
+    const id = Number(match[4]);
+    // The page prints its five most recent sets twice, once in the navigation
+    // drop-down and once in the body.
+    if (seen.has(id)) continue;
+    seen.add(id);
+    sets.push({
+      id,
+      added: Number(match[1]),
+      deleted: Number(match[2]),
+      ticketsReturned: Number(match[3]),
+      label: match[5].trim(),
+    });
+  }
+
+  sets.sort((a, b) => b.id - a.id);
+  return { csvProcessedAt, sets };
+}
+
+/**
+ * Reads one `changes.php?ChangeSet=<id>` page into the three buckets it draws,
+ * which it separates by the colour of their heading: green for new events, red
+ * for deleted, orange for tickets coming back on sale.
+ */
+export function parseChangeSet(html) {
+  const buckets = { added: [], deleted: [], ticketsReturned: [] };
+  const bucketFor = { 'btn-success': 'added', 'btn-danger': 'deleted', 'btn-warning': 'ticketsReturned' };
+
+  // Split on the headings, so each run of game codes is attributed to the
+  // heading above it rather than to the page as a whole.
+  const parts = html.split(/<h4[^>]*class='btn-large (btn-[a-z]+)[^']*'[^>]*>/i);
+  for (let i = 1; i < parts.length; i += 2) {
+    const bucket = buckets[bucketFor[parts[i]]];
+    if (!bucket) continue;
+    for (const match of parts[i + 1].matchAll(/GameCode=([^&'"\s]+)/g)) bucket.push(match[1]);
+  }
+
+  for (const key of Object.keys(buckets)) buckets[key] = [...new Set(buckets[key])];
+  return buckets;
 }

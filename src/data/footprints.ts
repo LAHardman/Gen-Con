@@ -11,6 +11,12 @@
  * object named against it below and take the outer ring, e.g.
  *
  *   [out:json]; relation(9680937); out geom;
+ *
+ * ONE EXCEPTION, and it is marked as such below: Le Meridien. OpenStreetMap
+ * has no building there at all — no hotel, no untagged footprint — so there is
+ * nothing to take. Its outline is traced from Gen Con's own map instead, which
+ * makes it the only ring here that is somebody's drawing rather than a survey.
+ * `TRACED_FOOTPRINT` in `venues.ts` names it so the app can say so.
  */
 
 /** A closed ring of [latitude, longitude] pairs; the last point joins the first. */
@@ -144,6 +150,22 @@ export const VENUE_FOOTPRINTS: Record<string, FootprintRing> = {
   // The Escape Room USA, 200 S. Meridian St — OSM way/340480893 (4 of 7 points kept)
   "escape-room": [
     [39.764139, -86.159084], [39.764119, -86.15836], [39.763862, -86.15837], [39.763883, -86.159092],
+  ],
+
+  // Le Meridien — NOT from OpenStreetMap, which has no building here. Traced
+  // from Gen Con's own map of its 1st floor and georeferenced against the Omni
+  // Severin in the same frame, whose real footprint fixes the scale and origin
+  // (6.59 px/m; the fit puts the Omni's far wall within a metre of its surveyed
+  // position). The small arm is the ground-floor extension the 2nd floor lacks.
+  //
+  // It lands inside Circle Centre's outline, which is not a mistake to correct:
+  // the hotel is the old Canterbury, built into the west edge of that block,
+  // and OpenStreetMap's mall relation swallows it. That is the likeliest reason
+  // there is no separate building here to take.
+  "le-meridien": [
+    [39.765005, -86.159505], [39.765005, -86.159548], [39.765022, -86.159548],
+    [39.765022, -86.159884], [39.765225, -86.159884], [39.765225, -86.159548],
+    [39.765134, -86.159548], [39.765134, -86.159505],
   ],
 
   // Circle Centre Mall — OSM relation/9725853 (27 of 61 points kept)
