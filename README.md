@@ -134,8 +134,21 @@ at in every room pop-up:
 | Grade | Venues | What it means |
 | --- | --- | --- |
 | **Measured** | Convention centre | Halls and meeting rooms are the outlines from the official floor plans, read into real coordinates and drawn as map geometry (below) |
-| **Planned** | JW Marriott, Marriott Downtown, Westin, Crowne Plaza / Union Station, Omni Severin, Hyatt Regency, Hilton, Embassy Suites | Which rooms exist, which floor each is on and how they sit relative to one another all come off a published plan of that building; the outlines are rectangles inside the real footprint rather than measured shapes |
+| **Planned** | JW Marriott, Marriott Downtown, Westin, Crowne Plaza / Union Station, Omni Severin, Hyatt Regency, Hilton, Embassy Suites, Le Méridien | Which rooms exist, which floor each is on and how they sit relative to one another all come off a published plan of that building; the outlines are rectangles inside the real footprint rather than measured shapes |
 | **Schematic** | Lucas Oil | Rooms are in the right building and the right general part of it, and nothing finer than that is claimed |
+
+**One building is not outlined from a survey at all.** Every venue above sits
+on its real OpenStreetMap footprint except **Le Méridien**, which OpenStreetMap
+has no building for — not under that name, not under the Canterbury it used to
+be, not as an untagged shape. The likeliest reason is that the mall relation
+next door swallows it: the hotel is built into the west edge of the Circle
+Centre block, and the traced outline lands inside Circle Centre's, which is
+right rather than a fault to fix. Its outline is therefore traced from Gen
+Con's map of it and georeferenced against the Omni Severin drawn in the same
+frame, whose surveyed footprint fixes the scale — the fit puts the Omni's far
+wall within a metre of where OpenStreetMap has it. It is the one venue whose
+shape *and* position are approximate, `TRACED_FOOTPRINT` in `venues.ts` names
+it, and its room pop-up says so.
 
 Three venues with no interior worth breaking out — the Indiana Rep, the Escape
 Room and Circle Centre — are drawn as their footprint directly.
@@ -394,7 +407,7 @@ browser console on load:
 
 ```
 [gen-con] 412 of 8000 events did not match a room on the map.
-Unrecognised locations (17): Le Meridien : Latitude | ICC : Exhibit Hall ...
+Unrecognised locations (17): 416 Wabash : 416 E Wabash St | ICC : Exhibit Hall ...
 ```
 
 Add those strings to the relevant room's `aliases` and they'll resolve. This is
@@ -411,10 +424,10 @@ Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
 a room on the map**. The source uses 16 distinct `Location` values and several
 hundred `Room` values, and every `Location` but two resolves to a building.
 
-The 11 stragglers are both of those: **Le Meridien** (10 events), a hotel
-OpenStreetMap has no building for, so there is nothing to draw it on; and
-**416 Wabash** (1 event), an address five blocks east of the campus. Nothing
-inside a building the map knows goes unmatched any more.
+One straggler is left in the sample: **416 Wabash** (1 event), an address five
+blocks east of the campus with no building on the map. Nothing else — every
+other `Location` resolves to a building, and nothing inside a building the map
+knows goes unmatched.
 
 That last one used to be worse than unmatched. Its `Room` reads
 `416 E Wabash St`, and with no venue recognised the matcher searched every room

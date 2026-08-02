@@ -324,6 +324,21 @@ export const VENUES: Venue[] = [
     grid: UNIT_GRID,
   },
   {
+    id: 'le-meridien',
+    name: 'Le Méridien Indianapolis',
+    shortName: 'Le Méridien',
+    // The source writes it without the accent, and `normalise` strips one to a
+    // space, so the unaccented form has to be spelled out as an alias.
+    aliases: ['Le Meridien', 'Meridien'],
+    anchor: {
+      nw: { lat: 39.765225, lng: -86.159884 },
+      widthMetres: 33,
+      heightMetres: 25,
+    },
+    footprint: VENUE_FOOTPRINTS['le-meridien'],
+    grid: UNIT_GRID,
+  },
+  {
     id: 'circle-centre',
     name: 'Circle Centre Mall',
     shortName: 'Circle Centre',
@@ -361,7 +376,19 @@ export const PLANNED_LAYOUT = new Set([
   'hyatt',
   'hilton',
   'embassy-suites',
+  'le-meridien',
 ]);
+
+/**
+ * Venues whose outline is traced rather than surveyed.
+ *
+ * Every other building on the map is drawn from its OpenStreetMap footprint or
+ * from its own floor plans. Le Meridien has neither: OpenStreetMap has no
+ * building at its address, so its outline comes from Gen Con's map of it,
+ * georeferenced against the Omni Severin drawn in the same frame. That is a
+ * weaker claim than the rest of the map makes, and the room pop-up says so.
+ */
+export const TRACED_FOOTPRINT = new Set(['le-meridien']);
 
 /** Numeric meeting-room aliases: `numberRange(120, 133)` -> ['120', …, '133']. */
 function numberRange(first: number, last: number): string[] {
@@ -2118,6 +2145,61 @@ export const ROOMS: Room[] = [
     aliases: ['Consulate', 'Envoy'],
     description: 'The north-west side of the atrium, completing the ring of four rooms around it.',
     highlights: ['North-west side', 'Completes the ring', 'A few events daily'],
+  },
+
+  // ------------------------------------------- Le Méridien Indianapolis
+  // A small hotel across Illinois Street from the Omni, with its event rooms
+  // on the 2nd floor. Both floors from Gen Con's plans of them.
+  {
+    id: 'le-meridien-lobby',
+    name: 'Lobby',
+    category: 'amenity',
+    venueId: 'le-meridien',
+    level: '1st floor',
+    rect: { x: 33, y: 18, width: 40, height: 41 },
+    aliases: ['Lobby'],
+    description:
+      'The street-level lobby, with the lifts up to the meeting floor and the hotel’s two restaurants either side of it. No events are scheduled down here.',
+    highlights: ['Lifts to 2nd floor', 'Restaurants either side', 'No events at street level'],
+  },
+  {
+    id: 'le-meridien-latitude',
+    name: 'Latitude A & B',
+    shortName: 'Latitude',
+    category: 'ballroom',
+    venueId: 'le-meridien',
+    level: '2nd floor',
+    rect: { x: 2, y: 3, width: 15, height: 60 },
+    // The source only ever writes the bare name, so it has to resolve.
+    aliases: ['Latitude', 'Latitude A', 'Latitude B'],
+    description:
+      'The hotel’s main event room, divided into A and B down the west side of the 2nd floor. Nearly every event here is listed against it.',
+    highlights: ['Divisible A & B', 'Busiest room here', 'Off the prefunction hall'],
+  },
+  {
+    id: 'le-meridien-longitude',
+    name: 'Longitude',
+    category: 'lodging',
+    venueId: 'le-meridien',
+    level: '2nd floor',
+    rect: { x: 2, y: 66, width: 26, height: 22 },
+    aliases: ['Longitude'],
+    description:
+      'The second room on the meeting floor, across the south end from Latitude and named to match it.',
+    highlights: ['South end of the floor', 'Smaller sessions', 'Next to Latitude'],
+  },
+  {
+    id: 'le-meridien-prefunction',
+    name: 'Prefunction Hall',
+    shortName: 'Prefunction',
+    category: 'amenity',
+    venueId: 'le-meridien',
+    level: '2nd floor',
+    rect: { x: 19, y: 14, width: 41, height: 49 },
+    aliases: ['Pre-Function', 'Prefunction'],
+    description:
+      'The open hall the meeting rooms run off, with the lifts at one end and the stairs down to the lobby at the other.',
+    highlights: ['Lifts at one end', 'Stairs down to the lobby', 'Serves both rooms'],
   },
 
   // ------------------------------------------------------- Offsite venues

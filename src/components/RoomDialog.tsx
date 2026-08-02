@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CATEGORY_STYLES, PLANNED_LAYOUT, VENUES_BY_ID, type Room } from '../data/venues';
+import {
+  CATEGORY_STYLES,
+  PLANNED_LAYOUT,
+  TRACED_FOOTPRINT,
+  VENUES_BY_ID,
+  type Room,
+} from '../data/venues';
 import {
   dayKey,
   formatDayLabel,
@@ -201,7 +207,9 @@ export function RoomDialog({
         <p className="dialog__note">
           {room.venueId === 'icc'
             ? 'Room outlines are traced from the convention centre’s official floor plans, which the map draws underneath. Check the official Gen Con program for exact room assignments.'
-            : PLANNED_LAYOUT.has(room.venueId)
+            : TRACED_FOOTPRINT.has(room.venueId)
+              ? 'This building is not in OpenStreetMap, so even its outline is traced from a published plan rather than surveyed — it is the one venue on the map whose shape and position are both approximate. Its rooms come from that same plan. Check the official Gen Con program for exact room assignments.'
+              : PLANNED_LAYOUT.has(room.venueId)
               ? 'Which rooms are on this floor, and how they sit relative to each other, come from a published floor plan of the building. Their outlines are rectangles inside the real footprint rather than measured shapes. Check the official Gen Con program for exact room assignments.'
               : 'Room outlines are placed within the real building footprint but are a schematic arrangement, not a surveyed floor plan. Check the official Gen Con program for exact room assignments.'}
         </p>
