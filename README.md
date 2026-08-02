@@ -171,7 +171,20 @@ Room rectangles then come from the plans themselves: the exhibit halls from the
 polygons the plan draws for them, the meeting-room blocks from the extent of
 their numbered labels, which the PDFs carry as ordinary text.
 
-For the other venues, neither obvious source gives plans away:
+Measuring floors has one consequence worth knowing: rooms genuinely stack. The
+convention centre's rooms 201-212 sit directly over 101-117, because that is
+where they are. Selecting a room therefore fades the rest of its building's
+floors, matching the plan drawn underneath, so the two don't fight.
+
+The JW Marriott's own floor plans set the arrangement of its rooms — the big
+halls west, the numbered rooms down the east side, floor by floor — but those
+drawings carry no building outline or scale to fit against, so its interior is
+positioned from them rather than measured, and stays schematic. Lucas Oil's
+field is measured: its box is a full NFL field including end zones, centred on
+the bowl and turned onto the bowl's own long axis, which the minimum-area
+rectangle around the OSM footprint puts 25.6° off the street grid.
+
+For the remaining venues, neither obvious source gives plans away:
 
 - **OpenStreetMap has no interior rooms** in any Gen Con venue. Across the whole
   campus there are 28 indoor-tagged elements and not one is a room — they are

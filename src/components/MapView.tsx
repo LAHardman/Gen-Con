@@ -238,6 +238,19 @@ export function MapView({
     };
   }, []);
 
+  /*
+   * A flat map of a building with several floors stacks them: the convention
+   * centre's rooms 201-212 sit directly over 101-117, because that is where
+   * they are. Selecting a room therefore drops the rest of its building's
+   * floors out of the way, matching the floor plan the map draws underneath.
+   */
+  const hiddenByFloor = (room: Room) => {
+    const selected = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+    return Boolean(
+      selected && room.venueId === selected.venueId && room.level !== selected.level,
+    );
+  };
+
   /* ----------------------------------------------- labels, counts, selection */
   useEffect(() => {
     const map = mapRef.current;
@@ -250,7 +263,7 @@ export function MapView({
         if (!layer) continue;
 
         layer.unbindTooltip();
-        if (!showLabels) continue;
+        if (!showLabels || hiddenByFloor(room)) continue;
 
         const count = eventCounts.get(room.id) ?? 0;
         const label = room.shortName ?? room.name;
@@ -273,13 +286,17 @@ export function MapView({
     return () => {
       map.off('zoomend', applyLabels);
     };
-  }, [eventCounts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventCounts, selectedRoomId]);
 
   useEffect(() => {
     for (const [roomId, layer] of roomLayersRef.current) {
+      const room = ROOMS_BY_ID[roomId];
       const element = layer.getElement();
       element?.classList.toggle('map__room--selected', roomId === selectedRoomId);
+      element?.classList.toggle('map__room--other-floor', room ? hiddenByFloor(room) : false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoomId]);
 
   /* -------------------------------------------------------- focus requests */

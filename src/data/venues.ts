@@ -607,7 +607,7 @@ export const ROOMS: Room[] = [
     category: 'gaming',
     venueId: 'lucas-oil',
     level: 'Field level',
-    rect: { x: 26, y: 36, width: 36, height: 28 },
+    rect: { x: 33, y: 30, width: 34, height: 41 },
     aliases: ['Field'],
     description:
       'The playing field, boarded over and divided into colour-coded and sponsor-named blocks. The single busiest space at the convention outside the exhibit hall, and the one most worth allowing extra time to find your way around.',
@@ -620,7 +620,7 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'lucas-oil',
     level: 'Level 1',
-    rect: { x: 30, y: 68, width: 30, height: 16 },
+    rect: { x: 34, y: 75, width: 30, height: 13 },
     aliases: ['Exhibit Hall 1', 'Exhibit Hall 2', 'Exhibit Hall 1--2'],
     description:
       'The stadium’s own exhibit halls, numbered rather than lettered like the convention centre’s. Scheduled play and overflow from the main hall.',
@@ -632,7 +632,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Concourse level',
-    rect: { x: 64, y: 30, width: 22, height: 22 },
+    rect: { x: 70, y: 34, width: 18, height: 22 },
     aliases: ['East Concourse'],
     description:
       'The wide east walkway, lined with tables. Easy to find and easy to get turned around in — it wraps the whole bowl.',
@@ -644,7 +644,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Concourse level',
-    rect: { x: 10, y: 60, width: 20, height: 16 },
+    rect: { x: 10, y: 52, width: 18, height: 22 },
     aliases: ['West Concourse'],
     description:
       'The west side of the concourse ring, quieter than the east and closer to the skywalk back to the convention centre.',
@@ -657,7 +657,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Club level',
-    rect: { x: 34, y: 22, width: 24, height: 11 },
+    rect: { x: 36, y: 18, width: 28, height: 10 },
     aliases: ['East Club Lounge', 'West Club Lounge', 'Club Lounge'],
     description:
       'The stadium’s club lounges, used for smaller sessions. Carpeted, seated and considerably calmer than the field below.',
@@ -670,7 +670,7 @@ export const ROOMS: Room[] = [
     category: 'meeting',
     venueId: 'lucas-oil',
     level: 'Meeting level',
-    rect: { x: 60, y: 56, width: 18, height: 14 },
+    rect: { x: 68, y: 58, width: 14, height: 12 },
     aliases: ['Meeting Room', 'Meeting Rooms'],
     description:
       'A dozen numbered breakout rooms off the concourse, running RPG and workshop slots away from the noise of the field.',
@@ -683,7 +683,7 @@ export const ROOMS: Room[] = [
     category: 'amenity',
     venueId: 'lucas-oil',
     level: 'Suite level',
-    rect: { x: 12, y: 40, width: 20, height: 16 },
+    rect: { x: 16, y: 36, width: 16, height: 14 },
     aliases: ['Lower Suites', 'Suites'],
     description:
       'Private suites let out as small event spaces. The most sheltered rooms in the building, and the hardest to find without directions.',
@@ -696,8 +696,8 @@ export const ROOMS: Room[] = [
     name: 'Griffin Hall',
     category: 'ballroom',
     venueId: 'jw-marriott',
-    level: 'Meeting floors',
-    rect: { x: 16, y: 52, width: 34, height: 22 },
+    level: '2nd floor',
+    rect: { x: 16, y: 76, width: 38, height: 18 },
     aliases: ['Griffin Hall', 'Griffin'],
     description:
       'The JW’s largest event space, and the busiest single room outside the convention centre. Long banks of tables running scheduled play all four days.',
@@ -705,16 +705,16 @@ export const ROOMS: Room[] = [
   },
   {
     id: 'jw-white-river',
-    name: 'White River Ballrooms A–H',
+    name: 'White River Ballrooms A–J',
     shortName: 'White River',
     category: 'ballroom',
     venueId: 'jw-marriott',
-    level: 'Meeting floors',
-    rect: { x: 54, y: 52, width: 34, height: 22 },
+    level: '1st floor',
+    rect: { x: 16, y: 52, width: 38, height: 20 },
     aliases: ['White River Ballroom', 'White River'],
     description:
-      'Lettered ballroom sections that split and combine as the schedule needs. Seminars, society play and the larger RPG blocks.',
-    highlights: ['Divisible A–H', 'Seminars & society play', 'Large RPG blocks'],
+      'Ten lettered sections, A to J, that split and combine as the schedule needs. Seminars, society play and the larger RPG blocks.',
+    highlights: ['Divisible A–J', 'Seminars & society play', 'Large RPG blocks'],
   },
   {
     id: 'jw-grand-ballroom',
@@ -722,8 +722,8 @@ export const ROOMS: Room[] = [
     shortName: 'Grand Ballroom',
     category: 'ballroom',
     venueId: 'jw-marriott',
-    level: 'Meeting floors',
-    rect: { x: 48, y: 28, width: 18, height: 16 },
+    level: '3rd floor',
+    rect: { x: 46, y: 27, width: 42, height: 18 },
     aliases: ['Grand Ballroom'],
     description:
       'Numbered ballroom sections on the JW’s main meeting floor, used for the events that outgrow the White River rooms.',
@@ -735,8 +735,8 @@ export const ROOMS: Room[] = [
     shortName: '101–109',
     category: 'lodging',
     venueId: 'jw-marriott',
-    level: 'Level 1',
-    rect: { x: 70, y: 28, width: 18, height: 16 },
+    level: '1st floor',
+    rect: { x: 58, y: 52, width: 30, height: 20 },
     aliases: ['101', '102', '103', '104', '105', '106', '107', '108', '109'],
     description:
       'First-floor breakout rooms. Small tables, and numbered the same way the convention centre numbers its own — check the building before you set off.',
@@ -748,8 +748,8 @@ export const ROOMS: Room[] = [
     shortName: '201–209',
     category: 'lodging',
     venueId: 'jw-marriott',
-    level: 'Level 2',
-    rect: { x: 16, y: 80, width: 34, height: 12 },
+    level: '2nd floor',
+    rect: { x: 58, y: 76, width: 14, height: 18 },
     aliases: ['201', '202', '203', '204', '205', '206', '207', '208', '209'],
     description:
       'Second-floor breakout rooms, reached from the main escalators. Mostly four- to six-player tables.',
@@ -757,13 +757,13 @@ export const ROOMS: Room[] = [
   },
   {
     id: 'jw-rooms-300',
-    name: 'Rooms 301–314',
-    shortName: '301–314',
+    name: 'Rooms 300–314',
+    shortName: '300–314',
     category: 'lodging',
     venueId: 'jw-marriott',
-    level: 'Level 3',
-    rect: { x: 54, y: 80, width: 34, height: 12 },
-    aliases: ['301', '302', '303', '304', '305', '306', '307', '308', '309', '310', '311', '312', '313', '314'],
+    level: '3rd floor',
+    rect: { x: 74, y: 76, width: 14, height: 18 },
+    aliases: ['300', '301', '302', '303', '304', '305', '306', '307', '308', '309', '310', '311', '312', '313', '314'],
     description:
       'Third-floor breakout rooms — the quietest scheduled space in the building, and the longest lift queue.',
     highlights: ['Quietest floor', 'Small tables', 'Allow time for lifts'],
