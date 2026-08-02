@@ -127,15 +127,31 @@ To refresh a footprint, re-run its Overpass query and replace the ring:
 ```
 
 **Accuracy, stated plainly:** the basemap is real, and so are the venue
-outlines — those are the shapes of the actual buildings, not estimates. The
-**convention centre's interior is real too**: its halls and meeting rooms are
-the outlines from its official floor plans, read into real coordinates and drawn
-as map geometry (below). Every other venue's interior is still a schematic
-arrangement inside its real footprint — rooms are in the right building and the
-right general part of it, but not at surveyed positions. The app says which you
-are looking at in every room pop-up. Three venues with no interior worth
-breaking out — the Indiana Rep, the Escape Room and Circle Centre — are drawn as
-their footprint directly.
+outlines — those are the shapes of the actual buildings, not estimates. There
+are then three grades of interior, and the app says which one you are looking
+at in every room pop-up:
+
+| Grade | Venues | What it means |
+| --- | --- | --- |
+| **Measured** | Convention centre | Halls and meeting rooms are the outlines from the official floor plans, read into real coordinates and drawn as map geometry (below) |
+| **Planned** | JW Marriott, Marriott Downtown, Westin, Crowne Plaza / Union Station, Omni Severin | Which rooms exist, which floor each is on and how they sit relative to one another all come off a published plan of that building; the outlines are rectangles inside the real footprint rather than measured shapes |
+| **Schematic** | Hyatt, Hilton, Embassy Suites, Lucas Oil | Rooms are in the right building and the right general part of it, and nothing finer than that is claimed |
+
+Three venues with no interior worth breaking out — the Indiana Rep, the Escape
+Room and Circle Centre — are drawn as their footprint directly.
+
+**On the planned venues.** The plans are Gen Con's own for four of them and the
+hotel's own for the JW's 1st floor. Reading them takes one correction that is
+easy to miss: **Gen Con draws its floor plans with south at the top.** Its own
+labels give it away — Grand Hall *Southeast* is printed above Grand Hall
+*Northeast* — and it holds against the buildings whose real positions are
+known: the plans put the convention centre north of the Marriott Downtown and
+Senate Avenue east of the Westin, and both are the other way round on the
+ground. So the rectangles in `venues.ts` are those plans turned through half a
+turn. Every room was then checked against the building's real footprint and
+pulled inside where a plan reached past it — the plans and OpenStreetMap
+disagree by a few metres at some edges, and the footprint wins, because it is
+the line the map actually draws.
 
 **A building is outlined by the same source as its interior.** The convention
 centre used to be outlined by its OpenStreetMap footprint while its rooms came
@@ -243,10 +259,19 @@ where they are. Each building therefore draws one floor at a time — its ground
 floor until you select a room in it, then that room's floor — and selecting a
 room fades the rest of its building's floors.
 
-The JW Marriott's own floor plans set the arrangement of its rooms — the big
-halls west, the numbered rooms down the east side, floor by floor — but those
-drawings carry no building outline or scale to fit against, so its interior is
-positioned from them rather than measured, and stays schematic. Lucas Oil's
+The planned venues in the table above stop short of this pipeline for one
+reason: none of their plans can be fitted. The JW's is a line drawing with no
+building outline and no scale; Gen Con's are drawn by its own map application
+and come out as screenshots, which have pixels rather than paths, and no legend
+keying spaces by colour. What they do carry is names and arrangement, and that
+is what has been taken from them — the White River Ballroom's ten lettered
+sections in three columns with rooms 101–104 alongside; the Marriott Ballroom's
+sections 1–10 filling its whole floor above the Indiana Ballroom; the Westin's
+Grand Ballroom sitting directly over the Capitol; Union Station's railroad rooms
+in two rows down the concourse behind the Grand Hall, with the Crowne Plaza's
+own rooms running west from them through the old train shed; the Omni's Gates,
+McClellan and Fisher halls up on its 2nd floor with the Severin Ballroom left on
+its 1st. Lucas Oil's
 field is measured: its box is a full NFL field including end zones, centred on
 the bowl and turned onto the bowl's own long axis, which the minimum-area
 rectangle around the OSM footprint puts 25.6° off the street grid. Its street-
@@ -416,6 +441,10 @@ for it); and offline caching of tiles so the map works without signal.
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
 (`Hall B : Orange`, `Hall E : Asmodee`); breaking those out would put a demo
-table on the map rather than a hall. The other venues would each need their own
-floor plan before their interiors could be measured the way the convention
-centre's now are.
+table on the map rather than a hall. The five planned venues would each need a
+vector plan — one with paths and a colour-keyed legend, not a screenshot —
+before their interiors could be measured the way the convention centre's now
+are; the arrangement is right in all of them, but the coordinates are still
+authored rather than read. The Hyatt, the Hilton and the Embassy Suites have no
+plan at all yet, and are the cheapest things on this list to improve: a
+published floor plan of each would move them a grade.

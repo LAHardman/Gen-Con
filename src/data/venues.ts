@@ -20,6 +20,15 @@
  * building and the right general part of it, not at surveyed coordinates. The
  * basemap underneath is real. See README.md.
  *
+ * ORIENTATION: for the JW Marriott, the Marriott Downtown, the Westin, the
+ * Crowne Plaza and the Omni, that arrangement is read off published floor
+ * plans — Gen Con's own for all but the JW, whose 1st floor comes from the
+ * hotel's. Gen Con draws its plans with south at the top, which its own room
+ * names confirm (Grand Hall Southeast is drawn above Grand Hall Northeast),
+ * so the rectangles below are those plans turned through half a turn. What
+ * that fixes is which rooms exist, which floor each is on, and how they sit
+ * relative to one another; it does not make them surveyed.
+ *
  * The venues and aliases below were tuned against the live event database:
  * every `Venue.aliases` entry is a `Location` string the source actually
  * publishes, and every `Room.aliases` entry is drawn from its `Room` values.
@@ -328,6 +337,23 @@ export const VENUES: Venue[] = [
 export const VENUES_BY_ID: Record<string, Venue> = Object.fromEntries(
   VENUES.map((venue) => [venue.id, venue]),
 );
+
+/**
+ * Venues whose rooms are laid out from a published floor plan of the building
+ * rather than invented: which rooms exist, which floor each is on, and how
+ * they sit relative to one another all come off the plan. The coordinates
+ * still don't — the plans carry no scale that can be fitted, so these rooms
+ * are drawn as rectangles inside the real footprint, not as measured outlines.
+ * The convention centre is not in this list because its rooms are better than
+ * this: they are the plan's own geometry (`plan-geometry.ts`).
+ */
+export const PLANNED_LAYOUT = new Set([
+  'jw-marriott',
+  'marriott-downtown',
+  'westin',
+  'crowne-plaza',
+  'omni',
+]);
 
 /** Numeric meeting-room aliases: `numberRange(120, 133)` -> ['120', …, '133']. */
 function numberRange(first: number, last: number): string[] {
@@ -749,56 +775,125 @@ export const ROOMS: Room[] = [
   },
 
   // ------------------------------------------------- JW Marriott Indianapolis
+  // The 1st floor is laid out from the hotel's own published plan of it: the
+  // White River Ballroom's ten lettered sections in three columns, rooms
+  // 101–104 down one side, and 105–109 with registration in a row along the
+  // far side of the prefunction hall. That drawing carries no building outline
+  // and no scale, so what it fixes is the arrangement, not the coordinates.
+  {
+    id: 'jw-white-river-ghij',
+    name: 'White River Ballroom G–J',
+    shortName: 'White River G–J',
+    category: 'ballroom',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 16, y: 42, width: 12, height: 32 },
+    aliases: [
+      'White River Ballroom G', 'White River Ballroom H', 'White River Ballroom I',
+      'White River Ballroom J', 'White River G', 'White River H', 'White River I',
+      'White River J',
+    ],
+    description:
+      'The outer column of the White River Ballroom — four sections in a stack, divided from the rest of the room by airwalls. Society play and the larger RPG blocks.',
+    highlights: ['Sections G, H, I & J', 'Society play', 'Airwall-divided'],
+  },
+  {
+    id: 'jw-white-river-ef',
+    name: 'White River Ballroom E–F',
+    shortName: 'White River E–F',
+    category: 'ballroom',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 28, y: 42, width: 24, height: 32 },
+    // The bare name has to land somewhere: the centre of the room is the least
+    // wrong place for an event that says only "White River Ballroom".
+    aliases: [
+      'White River Ballroom', 'White River', 'White River Ballroom E',
+      'White River Ballroom F', 'White River E', 'White River F',
+    ],
+    description:
+      'The two centre sections, and the widest single span in the ballroom. Combined with its neighbours this is the largest event space on the floor.',
+    highlights: ['Sections E & F', 'Widest span here', 'Combines either way'],
+  },
+  {
+    id: 'jw-white-river-abcd',
+    name: 'White River Ballroom A–D',
+    shortName: 'White River A–D',
+    category: 'ballroom',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 52, y: 42, width: 12, height: 32 },
+    aliases: [
+      'White River Ballroom A', 'White River Ballroom B', 'White River Ballroom C',
+      'White River Ballroom D', 'White River A', 'White River B', 'White River C',
+      'White River D',
+    ],
+    description:
+      'The inner column of four sections, nearest the numbered breakout rooms. Seminars and the sessions that want a smaller room than the full ballroom.',
+    highlights: ['Sections A, B, C & D', 'Seminars', 'Next to rooms 101–104'],
+  },
+  {
+    id: 'jw-rooms-101-104',
+    name: 'Rooms 101–104',
+    shortName: '101–104',
+    category: 'lodging',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 68, y: 42, width: 12, height: 32 },
+    aliases: ['101', '102', '103', '104'],
+    description:
+      'Four breakout rooms in a column alongside the ballroom, with the restrooms at the end of the run. Numbered the same way the convention centre numbers its own — check the building before you set off.',
+    highlights: ['Small scheduled tables', 'Numbered like the ICC', 'Check the building!'],
+  },
+  {
+    id: 'jw-room-109',
+    name: 'Room 109',
+    shortName: '109',
+    category: 'lodging',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 16, y: 78, width: 10, height: 9 },
+    aliases: ['109'],
+    description:
+      'On its own at the far end of the lower corridor, past registration and well away from the other numbered rooms. The easiest room in the building to walk past.',
+    highlights: ['Off on its own', 'Past registration', 'Allow extra time to find it'],
+  },
+  {
+    id: 'jw-registration',
+    name: 'Registration',
+    category: 'amenity',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 28, y: 78, width: 9, height: 9 },
+    aliases: ['Registration'],
+    description:
+      'The hotel’s own registration desk, on the corridor below the prefunction hall between room 109 and the 105–108 block.',
+    highlights: ['Hotel registration', 'On the lower corridor', 'Not Gen Con badge pickup'],
+  },
+  {
+    id: 'jw-rooms-105-108',
+    name: 'Rooms 105–108',
+    shortName: '105–108',
+    category: 'lodging',
+    venueId: 'jw-marriott',
+    level: '1st floor',
+    rect: { x: 39, y: 78, width: 25, height: 9 },
+    aliases: ['105', '106', '107', '108'],
+    description:
+      'Two pairs of breakout rooms off the corridor below the prefunction hall, with the stairs down between them. Mostly four- to six-player tables.',
+    highlights: ['Four to six players', 'Below the prefunction hall', 'Stairs between the pairs'],
+  },
   {
     id: 'jw-griffin-hall',
     name: 'Griffin Hall',
     category: 'ballroom',
     venueId: 'jw-marriott',
     level: '2nd floor',
-    rect: { x: 16, y: 76, width: 38, height: 18 },
+    rect: { x: 16, y: 42, width: 48, height: 32 },
     aliases: ['Griffin Hall', 'Griffin'],
     description:
       'The JW’s largest event space, and the busiest single room outside the convention centre. Long banks of tables running scheduled play all four days.',
     highlights: ['Busiest room offsite', 'Large scheduled blocks', 'Skywalk connected'],
-  },
-  {
-    id: 'jw-white-river',
-    name: 'White River Ballrooms A–J',
-    shortName: 'White River',
-    category: 'ballroom',
-    venueId: 'jw-marriott',
-    level: '1st floor',
-    rect: { x: 16, y: 52, width: 38, height: 20 },
-    aliases: ['White River Ballroom', 'White River'],
-    description:
-      'Ten lettered sections, A to J, that split and combine as the schedule needs. Seminars, society play and the larger RPG blocks.',
-    highlights: ['Divisible A–J', 'Seminars & society play', 'Large RPG blocks'],
-  },
-  {
-    id: 'jw-grand-ballroom',
-    name: 'Grand Ballroom 1–10',
-    shortName: 'Grand Ballroom',
-    category: 'ballroom',
-    venueId: 'jw-marriott',
-    level: '3rd floor',
-    rect: { x: 46, y: 27, width: 42, height: 18 },
-    aliases: ['Grand Ballroom'],
-    description:
-      'Numbered ballroom sections on the JW’s main meeting floor, used for the events that outgrow the White River rooms.',
-    highlights: ['Numbered 1–10', 'Large sessions', 'Main meeting floor'],
-  },
-  {
-    id: 'jw-rooms-100',
-    name: 'Rooms 101–109',
-    shortName: '101–109',
-    category: 'lodging',
-    venueId: 'jw-marriott',
-    level: '1st floor',
-    rect: { x: 58, y: 52, width: 30, height: 20 },
-    aliases: ['101', '102', '103', '104', '105', '106', '107', '108', '109'],
-    description:
-      'First-floor breakout rooms. Small tables, and numbered the same way the convention centre numbers its own — check the building before you set off.',
-    highlights: ['Small scheduled tables', 'Numbered like the ICC', 'Check the building!'],
   },
   {
     id: 'jw-rooms-200',
@@ -807,11 +902,24 @@ export const ROOMS: Room[] = [
     category: 'lodging',
     venueId: 'jw-marriott',
     level: '2nd floor',
-    rect: { x: 58, y: 76, width: 14, height: 18 },
+    rect: { x: 68, y: 42, width: 12, height: 32 },
     aliases: ['201', '202', '203', '204', '205', '206', '207', '208', '209'],
     description:
-      'Second-floor breakout rooms, reached from the main escalators. Mostly four- to six-player tables.',
-    highlights: ['Four to six players', 'Off the escalators', 'Quiet floor'],
+      'Second-floor breakout rooms, stacked over the 100s and reached from the main escalators. Mostly four- to six-player tables.',
+    highlights: ['Four to six players', 'Off the escalators', 'Directly over the 100s'],
+  },
+  {
+    id: 'jw-grand-ballroom',
+    name: 'Grand Ballroom 1–10',
+    shortName: 'Grand Ballroom',
+    category: 'ballroom',
+    venueId: 'jw-marriott',
+    level: '3rd floor',
+    rect: { x: 16, y: 42, width: 48, height: 32 },
+    aliases: ['Grand Ballroom'],
+    description:
+      'Numbered ballroom sections on the JW’s main meeting floor, used for the events that outgrow the White River rooms.',
+    highlights: ['Numbered 1–10', 'Large sessions', 'Main meeting floor'],
   },
   {
     id: 'jw-rooms-300',
@@ -820,7 +928,7 @@ export const ROOMS: Room[] = [
     category: 'lodging',
     venueId: 'jw-marriott',
     level: '3rd floor',
-    rect: { x: 74, y: 76, width: 14, height: 18 },
+    rect: { x: 68, y: 42, width: 12, height: 32 },
     aliases: ['300', '301', '302', '303', '304', '305', '306', '307', '308', '309', '310', '311', '312', '313', '314'],
     description:
       'Third-floor breakout rooms — the quietest scheduled space in the building, and the longest lift queue.',
@@ -828,98 +936,287 @@ export const ROOMS: Room[] = [
   },
 
   // -------------------------------------- Indianapolis Marriott Downtown
+  // Two floors, read off Gen Con's own plans of them: the Indiana Ballroom and
+  // the state rooms on the 1st, the Marriott Ballroom's ten sections and the
+  // city rooms on the 2nd. Gen Con draws its plans with south at the top, so
+  // everything below is turned through half a turn to face the map's north.
   {
     id: 'marriott-indiana-ballroom',
     name: 'Indiana Ballroom A–G',
     shortName: 'Indiana Ballroom',
     category: 'ballroom',
     venueId: 'marriott-downtown',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 8, width: 40, height: 24 },
+    level: '1st floor',
+    rect: { x: 20, y: 7, width: 40, height: 27 },
     aliases: ['Indiana Ballroom', 'Indiana'],
     description:
-      'The Marriott’s main ballroom, lettered into sections. Takes the bulk of the hotel’s scheduled play.',
+      'The Marriott’s 1st-floor ballroom, lettered A to G along its length: A, B and C across one end, then D and E, with F and G at the other. Takes the bulk of the hotel’s scheduled play.',
     highlights: ['Divisible A–G', 'Bulk of the schedule', 'Skywalk connected'],
   },
   {
+    id: 'marriott-kentucky-tennessee',
+    name: 'Kentucky & Tennessee',
+    shortName: 'Kentucky & Tennessee',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '1st floor',
+    rect: { x: 20, y: 42, width: 34, height: 8 },
+    aliases: ['Kentucky', 'Tennessee'],
+    description:
+      'The pair of rooms straight off the lobby, behind the registration desk. The easiest scheduled rooms in the building to find.',
+    highlights: ['Straight off the lobby', 'Single-table sessions', 'Easy to find'],
+  },
+  {
+    id: 'marriott-rooms-east',
+    name: 'Utah, Texas, Michigan, Illinois & Florida',
+    shortName: 'Utah–Florida',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '1st floor',
+    rect: { x: 3, y: 8, width: 11, height: 38 },
+    aliases: ['Utah', 'Texas', 'Michigan', 'Illinois', 'Florida'],
+    description:
+      'A run of five small rooms down one side of the 1st floor, alongside the Indiana Ballroom and past the lifts. One table each, and all named for states.',
+    highlights: ['Five rooms in a row', 'One table each', 'Past the lifts'],
+  },
+  {
+    id: 'marriott-california-arizona',
+    name: 'California & Arizona',
+    shortName: 'California & Arizona',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '1st floor',
+    rect: { x: 63, y: 34, width: 18, height: 12 },
+    aliases: ['California', 'Arizona'],
+    description:
+      'Two rooms tucked against the guest-room tower, on the corridor between the lobby and the ballroom.',
+    highlights: ['Small sessions', 'Between lobby & ballroom', 'Against the tower'],
+  },
+  {
+    id: 'marriott-colorado',
+    name: 'Colorado',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '1st floor',
+    rect: { x: 63, y: 8, width: 12, height: 7 },
+    aliases: ['Colorado'],
+    description:
+      'A single room at the far corner of the 1st floor, beyond the ballroom’s A–C end.',
+    highlights: ['One table', 'Far corner', 'Beyond the ballroom'],
+  },
+  {
+    id: 'marriott-lobby',
+    name: 'Lobby & Registration',
+    shortName: 'Lobby',
+    category: 'amenity',
+    venueId: 'marriott-downtown',
+    level: '1st floor',
+    rect: { x: 14, y: 56, width: 59, height: 15 },
+    aliases: ['Lobby'],
+    description:
+      'The hotel lobby, with its registration desk, the escalators up to the ballroom floor and the lifts down to parking. The skywalk from the convention centre lands here.',
+    highlights: ['Skywalk lands here', 'Escalators to 2nd floor', 'Lifts to parking'],
+  },
+  {
     id: 'marriott-ballroom',
-    name: 'Marriott Ballroom 1–8',
+    name: 'Marriott Ballroom 1–10',
     shortName: 'Marriott Ballroom',
     category: 'ballroom',
     venueId: 'marriott-downtown',
-    level: 'Meeting floors',
-    rect: { x: 52, y: 8, width: 42, height: 24 },
+    level: '2nd floor',
+    rect: { x: 20, y: 9, width: 47, height: 51 },
     aliases: ['Marriott Ballroom'],
     description:
-      'Numbered ballroom sections alongside the Indiana rooms, used for tournaments and multi-table events.',
-    highlights: ['Numbered 1–8', 'Tournaments', 'Multi-table events'],
+      'The whole 2nd floor is this one room, divided into ten numbered sections: 1–4 in a row along the foyer, 5 and 6 as broad spans across the middle, and 7–10 at the far end. Tournaments, the auction, and the events that need a hall to themselves.',
+    highlights: ['Numbered 1–10', 'Auction & tournaments', 'Foyer along one side'],
   },
   {
-    id: 'marriott-state-rooms',
-    name: 'State & City Rooms',
-    shortName: 'State Rooms',
+    id: 'marriott-city-rooms',
+    name: 'Albany, Atlanta, Austin, Boston & Columbus',
+    shortName: 'City Rooms',
     category: 'lodging',
     venueId: 'marriott-downtown',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 40, width: 88, height: 26 },
-    aliases: ['Kentucky', 'California', 'Michigan', 'Texas', 'Illinois', 'Albany', 'Utah', 'Denver', 'Arizona', 'Lincoln', 'Phoenix', 'Florida', 'Boston', 'Tennessee', 'Colorado', 'Santa Fe', 'Atlanta'],
+    level: '2nd floor',
+    rect: { x: 21, y: 2, width: 54, height: 5 },
+    aliases: ['Albany', 'Atlanta', 'Austin', 'Boston', 'Columbus'],
     description:
-      'A row of small rooms named after American states and cities — Kentucky, California, Denver, Santa Fe. Single-table sessions, and easy to walk straight past.',
-    highlights: ['Single-table sessions', 'Named for states & cities', 'Easy to miss'],
+      'Five small rooms in a row along the far side of the ballroom foyer, named after American cities. Single-table sessions, and easy to walk straight past.',
+    highlights: ['Single-table sessions', 'Named for cities', 'Along the foyer'],
+  },
+  {
+    id: 'marriott-north-rooms',
+    name: 'Santa Fe, Phoenix & Lincoln',
+    shortName: 'Santa Fe & Lincoln',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '2nd floor',
+    rect: { x: 78, y: 78, width: 16, height: 18 },
+    aliases: ['Santa Fe', 'Phoenix', 'Lincoln'],
+    description:
+      'Three rooms in a stack at the corner of the 2nd floor where the skywalk arrives, well away from the ballroom.',
+    highlights: ['By the skywalk', 'Small sessions', 'Away from the ballroom'],
+  },
+  {
+    id: 'marriott-denver',
+    name: 'Denver',
+    category: 'lodging',
+    venueId: 'marriott-downtown',
+    level: '2nd floor',
+    rect: { x: 3, y: 74, width: 11, height: 7 },
+    aliases: ['Denver'],
+    description:
+      'A single room by the escalators down to the lobby, on the opposite corner of the floor from Santa Fe.',
+    highlights: ['One table', 'By the escalators', 'Opposite Santa Fe'],
   },
 
   // ----------------------------- Crowne Plaza at Historic Union Station
+  // One venue, two halves of one complex, as Gen Con's plans of it draw them:
+  // the head house with the Grand Hall at the north-east end, and the hotel
+  // running west from it through the old train shed. Illinois Street cuts
+  // between the two at street level; the Illinois Street Ballroom bridges them
+  // on the mezzanine above.
+  {
+    id: 'union-grand-hall',
+    name: 'Grand Hall',
+    category: 'ballroom',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 59, y: 4, width: 10, height: 18 },
+    aliases: ['Grand Hall', 'Grand Hall Southeast', 'Grand Hall Northeast', 'Gen Con Dance'],
+    description:
+      'The head house’s great room, under the barrel vault and the rose window, with its own south-east and north-east corners lettered off it. The busiest room in the complex, and where the Gen Con dance runs.',
+    highlights: ['Busiest room here', 'Gen Con dance', 'Under the barrel vault'],
+  },
+  {
+    id: 'union-grand-bar',
+    name: 'Grand Bar',
+    category: 'amenity',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 59, y: 23, width: 8, height: 5 },
+    aliases: ['Grand Hall Bar', 'Iron Horse'],
+    description:
+      'The bar in the corner of the Grand Hall, by the entrance to the Iron Horse. The obvious place to arrange to meet somebody in this building.',
+    highlights: ['In the Grand Hall', 'Entrance to Iron Horse', 'Easy meeting point'],
+  },
+  {
+    id: 'union-railroad-east',
+    name: 'Illinois Central, Wabash, Erie, Southern & L & N',
+    shortName: 'Railroad Rooms E',
+    category: 'lodging',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 71, y: 40, width: 7, height: 36 },
+    aliases: ['Illinois Central', 'Wabash', 'Erie', 'Southern', 'L & N'],
+    description:
+      'One side of the long concourse behind the head house: five small rooms in a row, each named for a railroad that once ran through here. Single-table sessions.',
+    highlights: ['Named for railroads', 'Single-table sessions', 'Along the concourse'],
+  },
+  {
+    id: 'union-railroad-west',
+    name: 'Nickel Plate, B & O, Milwaukee, C & O, New York Central & Monon',
+    shortName: 'Railroad Rooms W',
+    category: 'lodging',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 57, y: 34, width: 7, height: 40 },
+    aliases: [
+      'Nickel Plate', 'B & O', 'Milwaukee', 'Milwaukee Alcove', 'C & O',
+      'New York Central', 'Monon', 'Edison North', 'Edison South',
+    ],
+    description:
+      'The other side of the concourse, six rooms deep, with the lift and stairway up to the Crowne Plaza at its far end. Charming, and genuinely confusing to navigate — bring the room name written down.',
+    highlights: ['Named for railroads', 'Lift up to the Crowne', 'Bring the room name'],
+  },
+  {
+    id: 'crowne-conrail',
+    name: 'Conrail Station',
+    shortName: 'Conrail',
+    category: 'lodging',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 40, y: 78, width: 8, height: 5 },
+    aliases: ['Conrail Station', 'Conrail'],
+    description:
+      'A single room at the end of the hotel’s meeting corridor, furthest from everything else in the building.',
+    highlights: ['One table', 'End of the corridor', 'Allow time to find it'],
+  },
+  {
+    id: 'crowne-haymarket',
+    name: 'Haymarket Station A–B & Executive Boardroom',
+    shortName: 'Haymarket',
+    category: 'lodging',
+    venueId: 'crowne-plaza',
+    level: '1st floor',
+    rect: { x: 38, y: 60, width: 10, height: 17 },
+    aliases: ['Haymarket Station', 'Haymarket', 'Executive Boardroom'],
+    description:
+      'Two lettered rooms and the boardroom next to them, at the Illinois Street end of the hotel’s meeting rooms.',
+    highlights: ['Lettered A–B', 'Boardroom style', 'Nearest Illinois Street'],
+  },
   {
     id: 'crowne-grand-central',
     name: 'Grand Central A–D',
     shortName: 'Grand Central',
     category: 'ballroom',
     venueId: 'crowne-plaza',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 38, width: 40, height: 20 },
+    level: '1st floor',
+    rect: { x: 19, y: 60, width: 6, height: 20 },
     aliases: ['Grand Central'],
     description:
-      'The Crowne Plaza’s largest space and the busiest room in the building, under the barrel roof of the old train shed.',
+      'The Crowne Plaza’s largest space and the busiest room on the hotel side, running back from the concourse under the roof of the old train shed. Lettered A to D along its length.',
     highlights: ['Busiest room here', 'Divisible A–D', 'Under the train shed'],
   },
   {
-    id: 'crowne-illinois-ballroom',
-    name: 'Illinois Street Ballroom',
-    shortName: 'Illinois St Ballroom',
+    id: 'crowne-victoria-station',
+    name: 'Victoria Station A–D',
+    shortName: 'Victoria Station',
     category: 'ballroom',
     venueId: 'crowne-plaza',
-    level: 'Meeting floors',
-    rect: { x: 52, y: 38, width: 40, height: 20 },
-    aliases: ['Illinois Street Ballroom', 'Illinois Street'],
+    level: '1st floor',
+    rect: { x: 11, y: 60, width: 6, height: 20 },
+    aliases: ['Victoria Station', 'Victoria'],
     description:
-      'Second ballroom on the Illinois Street side, used for the mid-size scheduled blocks.',
-    highlights: ['Mid-size blocks', 'Illinois Street side', 'Street entrance nearby'],
+      'The matching room alongside Grand Central, the same shape and lettered the same way. The two together take most of the hotel’s schedule.',
+    highlights: ['Divisible A–D', 'Alongside Grand Central', 'Mid-size blocks'],
   },
   {
     id: 'crowne-pennsylvania',
-    name: 'Pennsylvania & Penn Station Rooms',
+    name: 'Pennsylvania Station A–C',
     shortName: 'Penn Station',
     category: 'lodging',
     venueId: 'crowne-plaza',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 64, width: 40, height: 18 },
-    aliases: ['Pennsylvania Station', 'Penn Station', 'Haymarket'],
+    level: '1st floor',
+    rect: { x: 3, y: 62, width: 6, height: 16 },
+    aliases: ['Pennsylvania Station', 'Penn Station', 'Pennsylvania'],
     description:
-      'Lettered rooms named for the Pennsylvania Railroad, plus the Haymarket rooms. Small scheduled tables.',
-    highlights: ['Small tables', 'Lettered A–C', 'Named for the railroad'],
+      'Three lettered rooms at the far west end of the hotel, past Victoria Station and the restrooms. The longest walk from the Grand Hall.',
+    highlights: ['Lettered A–C', 'Far west end', 'Longest walk here'],
   },
   {
-    id: 'crowne-railroad-rooms',
-    name: 'Railroad Rooms',
-    shortName: 'Railroad Rooms',
+    id: 'crowne-illinois-ballroom',
+    name: 'Illinois Street Ballroom East & West',
+    shortName: 'Illinois St Ballroom',
+    category: 'ballroom',
+    venueId: 'crowne-plaza',
+    level: 'Mezzanine',
+    rect: { x: 50, y: 60, width: 10, height: 8 },
+    aliases: ['Illinois Street Ballroom', 'Illinois Street'],
+    description:
+      'Two halves, East and West, on the mezzanine above Illinois Street — the level that ties the hotel to the head house without going outside. Stairs at its east end drop into Union Station.',
+    highlights: ['East & West halves', 'Above Illinois Street', 'Stairs down to Union Station'],
+  },
+  {
+    id: 'union-lincoln',
+    name: 'Lincoln',
     category: 'lodging',
     venueId: 'crowne-plaza',
-    level: 'Meeting floors',
-    rect: { x: 52, y: 64, width: 40, height: 18 },
-    aliases: ['Illinois Central', 'C & O', 'Edison North', 'Edison South', 'Erie', 'Nickel Plate', 'Iron Horse', 'Milwaukee', 'Milwaukee Alcove', 'Monon', 'Southern', 'L & N', 'Wabash', 'Conrail Station', 'Grand Hall', 'Grand Hall Bar', 'Lincoln'],
+    level: 'Mezzanine',
+    rect: { x: 59, y: 24, width: 8, height: 10 },
+    aliases: ['Lincoln'],
     description:
-      'Small rooms named after the railroads that once ran through Union Station — Monon, Nickel Plate, Erie, Wabash. Charming, and genuinely confusing to navigate.',
-    highlights: ['Named for railroads', 'Single-table sessions', 'Bring the room name'],
+      'A single room on the head house mezzanine, up above the Grand Hall and reached by its own lift. Quiet, and nobody finds it first time.',
+    highlights: ['Over the Grand Hall', 'Its own lift', 'Very quiet'],
   },
 
   // ------------------------------------------- Hyatt Regency Indianapolis
@@ -977,18 +1274,71 @@ export const ROOMS: Room[] = [
   },
 
   // ------------------------------------------------ Westin Indianapolis
+  // Both floors from Gen Con's plans of them. The two ballrooms genuinely
+  // stack — the Grand Ballroom sits directly over the Capitol — so selecting a
+  // room here drops the other floor out of the way.
   {
     id: 'westin-capitol-ballroom',
     name: 'Capitol Ballroom I–III',
     shortName: 'Capitol Ballroom',
     category: 'ballroom',
     venueId: 'westin',
-    level: 'Meeting floors',
-    rect: { x: 32, y: 24, width: 44, height: 14 },
+    level: '1st floor',
+    rect: { x: 2, y: 68, width: 50, height: 14 },
     aliases: ['Capitol Ballroom', 'Capitol'],
     description:
-      'Numbered in roman numerals, and where the film festival screens most of its programme.',
+      'Numbered in roman numerals, and where the film festival screens most of its programme. Three sections in a row along the 1st-floor concourse.',
     highlights: ['Film festival screenings', 'Divisible I–III', 'Roman numerals!'],
+  },
+  {
+    id: 'westin-committee-rooms',
+    name: 'Cabinet, Caucus, Chambers & Council',
+    shortName: 'Committee Rooms',
+    category: 'lodging',
+    venueId: 'westin',
+    level: '1st floor',
+    rect: { x: 21, y: 86, width: 42, height: 8 },
+    aliases: ['Cabinet', 'Caucus', 'Chambers', 'Council'],
+    description:
+      'Four small rooms in a row along the outside wall of the 1st floor, named after the workings of a statehouse. Single-table sessions.',
+    highlights: ['Single-table sessions', 'Statehouse names', 'Four in a row'],
+  },
+  {
+    id: 'westin-congress-chancellor',
+    name: 'Congress & Chancellor',
+    shortName: 'Congress',
+    category: 'lodging',
+    venueId: 'westin',
+    level: '1st floor',
+    rect: { x: 63, y: 68, width: 12, height: 16 },
+    aliases: ['Congress', 'Chancellor'],
+    description:
+      'Two rooms stacked beside the escalators up to the ballroom floor, on the far side of the 1st floor from the Capitol rooms.',
+    highlights: ['By the escalators', 'Small sessions', 'Away from the ballroom'],
+  },
+  {
+    id: 'westin-cameral',
+    name: 'Cameral',
+    category: 'lodging',
+    venueId: 'westin',
+    level: '1st floor',
+    rect: { x: 63, y: 86, width: 12, height: 7 },
+    aliases: ['Cameral'],
+    description:
+      'The room in the hotel’s rounded corner, at the end of the 1st-floor run past Congress. One table, and a curved wall.',
+    highlights: ['One table', 'In the rounded corner', 'Past Congress'],
+  },
+  {
+    id: 'westin-lobby',
+    name: 'Lobby',
+    category: 'amenity',
+    venueId: 'westin',
+    level: '1st floor',
+    rect: { x: 80, y: 46, width: 18, height: 10 },
+    aliases: ['Lobby'],
+    description:
+      'The hotel lobby, with the lifts and the way down to parking. The shortest walk to the convention centre of any of the hotels.',
+    highlights: ['Shortest walk to the ICC', 'Lifts here', 'Down to parking'],
   },
   {
     id: 'westin-grand-ballroom',
@@ -996,25 +1346,51 @@ export const ROOMS: Room[] = [
     shortName: 'Grand Ballroom',
     category: 'ballroom',
     venueId: 'westin',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 50, width: 64, height: 18 },
+    level: '2nd floor',
+    rect: { x: 2, y: 60, width: 60, height: 30 },
     aliases: ['Grand Ballroom'],
     description:
-      'The Westin’s largest space, and the busiest room in the building. Also in roman numerals, which the schedule mixes with ampersands.',
-    highlights: ['Busiest room here', 'Divisible I–V', 'Shortest walk to the ICC'],
+      'The Westin’s largest space, and the busiest room in the building: I, II and III stacked at one end, then IV and V as full-depth spans. Section V takes Gen Con’s second stage. Roman numerals, which the schedule mixes with ampersands.',
+    highlights: ['Busiest room here', 'Divisible I–V', 'Second stage in V'],
   },
   {
-    id: 'westin-committee-rooms',
-    name: 'Caucus, House, Senate & Cabinet',
-    shortName: 'Committee Rooms',
+    id: 'westin-house-senate',
+    name: 'House & Senate I–III',
+    shortName: 'House & Senate',
     category: 'lodging',
     venueId: 'westin',
-    level: 'Meeting floors',
-    rect: { x: 6, y: 76, width: 64, height: 14 },
-    aliases: ['Caucus', 'House', 'Senate', 'Cabinet', 'Council'],
+    level: '2nd floor',
+    rect: { x: 64, y: 62, width: 12, height: 30 },
+    aliases: ['House', 'Senate'],
     description:
-      'Small rooms named after the workings of a statehouse — Caucus, House, Senate, Cabinet, Council. Single-table sessions.',
-    highlights: ['Single-table sessions', 'Statehouse names', 'Quiet floor'],
+      'House, and the three numbered Senate rooms below it, in a stack along the outside wall of the ballroom floor by the escalators down.',
+    highlights: ['Senate I–III', 'By the escalators', 'Single-table sessions'],
+  },
+  {
+    id: 'westin-executive-club',
+    name: 'Executive Club Lounge',
+    shortName: 'Club Lounge',
+    category: 'amenity',
+    venueId: 'westin',
+    level: '2nd floor',
+    rect: { x: 64, y: 20, width: 12, height: 16 },
+    aliases: ['Executive Club Lounge', 'Club Lounge'],
+    description:
+      'The hotel’s club lounge, on the wing that runs off the far end of the ballroom floor.',
+    highlights: ['Club lounge', 'Off the ballroom floor', 'Quiet corner'],
+  },
+  {
+    id: 'westin-capitol-overlook',
+    name: 'Capitol Overlook East & North',
+    shortName: 'Capitol Overlook',
+    category: 'lodging',
+    venueId: 'westin',
+    level: '2nd floor',
+    rect: { x: 66, y: 3, width: 11, height: 13 },
+    aliases: ['Capitol Overlook', 'Capitol Overlook East', 'Capitol Overlook North'],
+    description:
+      'Two long rooms at the end of the club wing, looking out over the statehouse. The furthest scheduled rooms from the ballroom, and worth the walk for the view.',
+    highlights: ['East & North', 'Statehouse view', 'Furthest from the ballroom'],
   },
 
   // --------------------------------- Hilton Indianapolis Hotel & Suites
@@ -1059,18 +1435,59 @@ export const ROOMS: Room[] = [
   },
 
   // -------------------------------------------------- Omni Severin Hotel
+  // Two floors from Gen Con's plans of them: the Severin Ballroom and the tree
+  // and flower rooms off the 1st-floor lobby, and everything else — Gates,
+  // McClellan, Fisher, and the university rooms — up on the 2nd.
+  {
+    id: 'omni-severin-ballroom',
+    name: 'Severin Ballroom',
+    shortName: 'Severin',
+    category: 'ballroom',
+    venueId: 'omni',
+    level: '1st floor',
+    rect: { x: 62, y: 4, width: 32, height: 22 },
+    aliases: ['Severin Ballroom', 'Severin'],
+    description:
+      'The 1st floor’s own ballroom, off the lower lobby and the stairs up to the meeting floor. The only large room you reach without going upstairs.',
+    highlights: ['Off the lower lobby', 'No stairs needed', 'Mid-size blocks'],
+  },
+  {
+    id: 'omni-cardinal-peony-poplar',
+    name: 'Cardinal, Peony & Poplar',
+    shortName: 'Cardinal & Peony',
+    category: 'lodging',
+    venueId: 'omni',
+    level: '1st floor',
+    rect: { x: 3, y: 4, width: 13, height: 40 },
+    aliases: ['Cardinal', 'Peony', 'Poplar', 'Ralston', 'Salon', 'Parlor', 'Boardroom'],
+    description:
+      'A column of small rooms down one side of the 1st floor, named for a bird, a flower and a tree. One table each, and easy to walk straight past.',
+    highlights: ['One table each', 'Birds, flowers & trees', 'Easy to miss'],
+  },
+  {
+    id: 'omni-sycamore',
+    name: 'Sycamore',
+    category: 'lodging',
+    venueId: 'omni',
+    level: '1st floor',
+    rect: { x: 17, y: 4, width: 13, height: 8 },
+    aliases: ['Sycamore'],
+    description:
+      'A single room at the corner of the 1st floor, past the restrooms and the way down to the basement.',
+    highlights: ['One table', 'Corner of the floor', 'Past the restrooms'],
+  },
   {
     id: 'omni-gates-hall',
     name: 'Gates Hall',
     shortName: 'Gates Hall',
     category: 'ballroom',
     venueId: 'omni',
-    level: 'Meeting floors',
-    rect: { x: 8, y: 10, width: 70, height: 22 },
+    level: '2nd floor',
+    rect: { x: 3, y: 70, width: 28, height: 18 },
     aliases: ['Gates Hall', 'Gates'],
     description:
-      'The Omni’s busiest event room, across from Union Station and next to Circle Centre.',
-    highlights: ['Busiest room here', 'Next to Circle Centre', 'Across from Union Station'],
+      'The Omni’s busiest event room, on the 2nd floor overlooking Union Station, with Illinois alongside it.',
+    highlights: ['Busiest room here', 'Across from Union Station', 'Illinois alongside'],
   },
   {
     id: 'omni-mcclellan-hall',
@@ -1078,25 +1495,62 @@ export const ROOMS: Room[] = [
     shortName: 'McClellan Hall',
     category: 'ballroom',
     venueId: 'omni',
-    level: 'Meeting floors',
-    rect: { x: 8, y: 40, width: 70, height: 20 },
+    level: '2nd floor',
+    rect: { x: 3, y: 54, width: 28, height: 15 },
     aliases: ['McClellan Hall', 'McClellan'],
     description:
-      'Second hall, running scheduled play alongside Gates.',
-    highlights: ['Scheduled play', 'Mid-size blocks', 'Short walk to the ICC'],
+      'Second hall, directly below Gates on the same corridor and running scheduled play alongside it.',
+    highlights: ['Scheduled play', 'Mid-size blocks', 'Next to Gates'],
   },
   {
-    id: 'omni-salons',
-    name: 'Severin & Meridian Salons',
-    shortName: 'Salons',
+    id: 'omni-fisher-ballroom',
+    name: 'Fisher Ballroom',
+    shortName: 'Fisher',
+    category: 'ballroom',
+    venueId: 'omni',
+    level: '2nd floor',
+    rect: { x: 66, y: 52, width: 17, height: 34 },
+    aliases: ['Fisher Ballroom', 'Fisher'],
+    description:
+      'The largest room on the meeting floor, facing Gates and McClellan across the atrium, with Meridian at its far end.',
+    highlights: ['Largest room here', 'Across the atrium', 'Meridian alongside'],
+  },
+  {
+    id: 'omni-meridian',
+    name: 'Meridian',
     category: 'lodging',
     venueId: 'omni',
-    level: 'Meeting floors',
-    rect: { x: 8, y: 66, width: 70, height: 18 },
-    aliases: ['Severin Ballroom', 'Meridian Ballroom', 'Illinois Ballroom', 'Butler', 'Purdue', 'Indiana (Salon B)', 'Cardinal', 'Peony', 'Ralston', 'Salon', 'Parlor', 'Boardroom'],
+    level: '2nd floor',
+    rect: { x: 60, y: 85, width: 22, height: 5 },
+    aliases: ['Meridian Ballroom', 'Meridian'],
     description:
-      'Small salons, parlours and boardrooms named after Indiana universities and flowers — Butler, Purdue, Cardinal, Peony. One table each.',
-    highlights: ['One table each', 'Universities & flowers', 'Easy to walk past'],
+      'A long room across the end of the Fisher Ballroom, on the Meridian Street side of the building.',
+    highlights: ['Off the Fisher', 'Meridian Street side', 'Small sessions'],
+  },
+  {
+    id: 'omni-illinois',
+    name: 'Illinois',
+    category: 'lodging',
+    venueId: 'omni',
+    level: '2nd floor',
+    rect: { x: 26, y: 89, width: 22, height: 7 },
+    aliases: ['Illinois Ballroom', 'Illinois'],
+    description:
+      'The matching room at the end of Gates Hall, on the Illinois Street side and looking across at Union Station.',
+    highlights: ['Off Gates Hall', 'Illinois Street side', 'Small sessions'],
+  },
+  {
+    id: 'omni-university-rooms',
+    name: 'Butler, Indiana, Notre Dame & Purdue',
+    shortName: 'University Rooms',
+    category: 'lodging',
+    venueId: 'omni',
+    level: '2nd floor',
+    rect: { x: 3, y: 4, width: 11, height: 46 },
+    aliases: ['Butler', 'Indiana', 'Indiana (Salon B)', 'Notre Dame', 'Purdue'],
+    description:
+      'Four small rooms in a column running off the end of the meeting-floor corridor, each named for an Indiana university. One table each.',
+    highlights: ['One table each', 'Named for universities', 'End of the corridor'],
   },
 
   // ------------------------------ Embassy Suites Indianapolis Downtown
