@@ -115,9 +115,16 @@ way.
 **And the lines are drawn to be followed.** A dark tileset puts its streets a
 few percent off its own background, which vanishes under a map with this much
 drawn over it, so the dark basemap's contrast is lifted as a whole — the roads
-are somebody else's raster and can't be restyled one line at a time. The app's
-own outlines are heavier to match: a room's wall, a corridor's edge and a
-building's own line each read at the zoom you would use them at.
+are somebody else's raster and can't be restyled one line at a time. The plan's
+own lines are heavier to match: a corridor's edge and a building's outline each
+read at the zoom you would use them at.
+
+**A room is a wash of colour, not a box.** The colour says what sort of room it
+is; the floor plan underneath says where the walls are. It used to be outlined
+in a bright version of the same hue, which welded a run of meeting rooms into
+one loud shape and buried the drawing it sat on. Now the fill is muted and the
+outline is the map's own background — so where two rooms of a sort meet you see
+the seam between them rather than one block with a line in it.
 
 | Gesture | Result |
 | --- | --- |

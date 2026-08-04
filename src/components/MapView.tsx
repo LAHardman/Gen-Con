@@ -431,12 +431,14 @@ export function MapView({
       const style = CATEGORY_STYLES[room.category];
       const shape: L.PathOptions = {
         className: 'map__room',
-        color: style.stroke,
+        // Not the room's own colour: an outline in the same hue welds a run of
+        // meeting rooms into one shape. This is the map's background, drawn as
+        // a seam — so where two rooms of a sort meet, you see the gap between
+        // them rather than a single block with a line in it.
+        color: '#141822',
         fillColor: style.fill,
-        fillOpacity: 0.5,
-        // Heavy enough to read as the wall of a room at the zoom you pick a
-        // room at, and to tell two rooms sharing one apart.
-        weight: 3,
+        fillOpacity: 0.38,
+        weight: 2.5,
       };
       const drawn = roomShapes(room);
       const shapeLayer =

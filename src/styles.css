@@ -295,21 +295,22 @@ body {
 
 .map__room {
   cursor: pointer;
-  /* The room's own colour at full strength: the fill is what says which sort of
-     room it is, the outline is what says where it ends. */
-  stroke-opacity: 1;
+  /* The seam is the map's own background, so it reads as a gap between rooms
+     rather than as a line drawn round each. */
+  stroke-opacity: 0.9;
   stroke-linejoin: round;
   transition: fill-opacity 120ms ease, stroke-width 120ms ease;
 }
 
 .map__room:hover {
-  fill-opacity: 0.75;
+  fill-opacity: 0.58;
 }
 
 .map__room--selected {
   stroke: #ffffff !important;
-  stroke-width: 4 !important;
-  fill-opacity: 0.85;
+  stroke-width: 3.5 !important;
+  stroke-opacity: 1;
+  fill-opacity: 0.6;
 }
 
 /* Labels ----------------------------------------------------------------- */
@@ -460,7 +461,7 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 2px solid;
+  border: 2px solid #141822;
   flex: 0 0 auto;
 }
 
@@ -674,7 +675,7 @@ body {
 
 .dialog__tag {
   padding: 4px 10px;
-  border: 1px solid;
+  border: 1px solid #141822;
   border-radius: 999px;
   font-size: 11px;
   text-transform: uppercase;

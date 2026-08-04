@@ -37,7 +37,7 @@ export function Legend({ showAmenities, onToggleAmenities }: Props) {
               <li key={category}>
                 <span
                   className="legend__swatch"
-                  style={{ background: style.fill, borderColor: style.stroke }}
+                  style={{ background: style.fill }}
                 />
                 {style.label}
               </li>

@@ -62,17 +62,26 @@ export type RoomCategory =
 export interface CategoryStyle {
   label: string;
   fill: string;
-  stroke: string;
 }
 
+/**
+ * A wash of colour over the floor plan, and nothing more.
+ *
+ * These used to be drawn with a bright outline in the same hue, which made two
+ * neighbouring rooms of one sort — a run of meeting rooms, a block of halls —
+ * into one loud shape with lines through it, and buried the plan underneath.
+ * The colour now says what sort of room it is and the plan says where the walls
+ * are, so it is deliberately muted: enough to sort a floor at a glance, not
+ * enough to compete with the drawing it sits on.
+ */
 export const CATEGORY_STYLES: Record<RoomCategory, CategoryStyle> = {
-  exhibit: { label: 'Exhibit hall', fill: '#3f7f8c', stroke: '#7fd4e0' },
-  ballroom: { label: 'Ballroom', fill: '#7a5698', stroke: '#c9a3e6' },
-  meeting: { label: 'Meeting rooms', fill: '#4a8c5f', stroke: '#8fe0a8' },
-  gaming: { label: 'Open gaming', fill: '#b07a2a', stroke: '#f0c471' },
-  amenity: { label: 'Services', fill: '#6b7189', stroke: '#b6bdd4' },
-  lodging: { label: 'Hotel', fill: '#a0505f', stroke: '#e69aa8' },
-  venue: { label: 'Offsite venue', fill: '#3a6d94', stroke: '#8cc2e8' },
+  exhibit: { label: 'Exhibit hall', fill: '#4d7b85' },
+  ballroom: { label: 'Ballroom', fill: '#77628b' },
+  meeting: { label: 'Meeting rooms', fill: '#55836a' },
+  gaming: { label: 'Open gaming', fill: '#9a8050' },
+  amenity: { label: 'Services', fill: '#6d7285' },
+  lodging: { label: 'Hotel', fill: '#94636d' },
+  venue: { label: 'Offsite venue', fill: '#4a6d8a' },
 };
 
 export interface Room {
