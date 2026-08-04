@@ -18,6 +18,10 @@
  *     node scripts/venue-plans.mjs            # all of them
  *     node scripts/venue-plans.mjs westin-2   # one, with its fit reported
  *
+ * It also does the reverse of the same trick: the plan colours the *rooms* too,
+ * so where it can be told which drawn room is which authored one, that room
+ * gives up its rectangle for the outline the plan draws. See `snap`.
+ *
  * Writes src/data/venue-plan.ts.
  *
  * WHAT IS NOT HERE. The JW Marriott's own sheet for its 1st floor is the
@@ -61,6 +65,9 @@ const CELL = 1;
 
 /** Below this a patch of cream is a doorway or a smear, not a hall. Square metres. */
 const MIN_AREA = 25;
+
+/** And below this a patch of tan is a cupboard, not a room anyone books. */
+const MIN_ROOM = 12;
 
 /** Simplification tolerance, in metres. A corridor is metres wide; this is centimetres. */
 const SIMPLIFY = 0.6;
@@ -244,13 +251,14 @@ function fit(plan, venue, report) {
 
 /* ------------------------------------------------------------------- trace */
 
-/** Connected runs of one kind, four-connected, as lists of pixel indices. */
+/** Connected runs of the wanted kinds, four-connected, as lists of pixel indices. */
 function components(plan, wanted) {
   const { width, height, map } = plan;
+  const want = (at) => wanted.has(map[at]);
   const seen = new Uint8Array(width * height);
   const out = [];
   for (let start = 0; start < map.length; start += 1) {
-    if (map[start] !== wanted || seen[start]) continue;
+    if (!want(start) || seen[start]) continue;
     const queue = [start];
     const piece = [];
     seen[start] = 1;
@@ -265,7 +273,7 @@ function components(plan, wanted) {
         const ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
         const next = ny * width + nx;
-        if (map[next] !== wanted || seen[next]) continue;
+        if (!want(next) || seen[next]) continue;
         seen[next] = 1;
         queue.push(next);
       }
@@ -359,10 +367,10 @@ function simplify(ring, tolerance) {
 
 /* ------------------------------------------------------------------- build */
 
-function convert(file, venue, level, report) {
+function convert(file, venue, level, rooms, report) {
   const image = decodePng(readFileSync(join(PLANS, file)));
   const plan = classify(image);
-  const wanted = plan.kinds.indexOf('circulation') + 1;
+  const kind = (name) => plan.kinds.indexOf(name) + 1;
 
   const frame = fit(plan, venue, report);
   if (!frame) return null;
@@ -378,29 +386,181 @@ function convert(file, venue, level, report) {
   };
 
   const perPixel = frame.scale * frame.scale;
-  const shapes = [];
-  for (const piece of components(plan, wanted)) {
-    if (piece.length * perPixel < MIN_AREA) continue;
-    const loops = outline(piece, plan.width, plan.height);
-    const rings = [];
-    for (const loop of loops) {
-      // A hole smaller than the shapes worth drawing is a column or a doorway.
-      if (rings.length && loop.length * frame.scale < Math.sqrt(MIN_AREA) * 4) continue;
-      const cut = simplify(loop, SIMPLIFY / frame.scale);
-      if (cut.length >= 3) rings.push(cut.map(project));
+  const trace = (wanted, minArea) => {
+    const out = [];
+    for (const piece of components(plan, wanted)) {
+      if (piece.length * perPixel < minArea) continue;
+      const loops = outline(piece, plan.width, plan.height);
+      const rings = [];
+      for (const loop of loops) {
+        // A hole smaller than the shapes worth drawing is a column or a doorway.
+        if (rings.length && loop.length * frame.scale < Math.sqrt(minArea) * 4) continue;
+        const cut = simplify(loop, SIMPLIFY / frame.scale);
+        if (cut.length >= 3) rings.push(cut);
+      }
+      if (rings.length) out.push({ piece, rings });
     }
-    if (rings.length) shapes.push(rings);
+    return out;
+  };
+
+  const halls = trace(new Set([kind('circulation')]), MIN_AREA)
+    .map(({ rings }) => rings.map((ring) => ring.map(project)));
+
+  return { halls, snapped: snap(plan, frame, trace, rooms, venue, project, report) };
+}
+
+/**
+ * Each room's rectangle replaced by the shape the plan draws for it.
+ *
+ * The rectangles were read off these same plans by eye and are good to about
+ * five metres, which is wider than the corridors now drawn beside them — so
+ * where a rectangle and the drawing disagree, the drawing wins. The plan colours
+ * a bookable room, so the shape is already there; all that is needed is to say
+ * which drawn room is which authored one, and the rectangle answers that: it is
+ * roughly right, which is enough to point at the blob underneath it.
+ *
+ * Only where the answer is unambiguous, and only where the answer is an
+ * improvement. A ballroom the plan draws as one space with three authored
+ * sections in it stays three rectangles, because one outline shared three ways
+ * would be three rooms the map could no longer tell apart. And a traced shape
+ * is taken only if it lands inside the building and clear of its neighbours —
+ * the plan and OpenStreetMap are two tracings of one building and they disagree
+ * at the edges, so a shape that reads better against the drawing can still read
+ * worse against everything else the map draws. Where it does, the rectangle
+ * stays: swapping one kind of wrongness for another is not progress.
+ */
+const CLAIMED = 0.35;
+const AMBIGUOUS = 0.55;
+/** Slack in the two comparisons below: a wall's thickness, in square metres. */
+const TOUCHING = 2;
+
+function snap(plan, frame, trace, rooms, venue, project, report) {
+  const drawn = trace(new Set([plan.kinds.indexOf('room') + 1, plan.kinds.indexOf('roomAlt') + 1]), MIN_ROOM);
+  if (!drawn.length || !rooms.length) return [];
+
+  // Each drawn room as the set of metre cells it covers, so overlap with a
+  // rectangle is a count rather than a polygon intersection.
+  const cells = drawn.map(({ piece }) => {
+    const set = new Set();
+    for (const at of piece) {
+      const px = at % plan.width;
+      const py = (at - px) / plan.width;
+      const east = frame.east0 - frame.scale * px;
+      const south = frame.south0 - frame.scale * py;
+      set.add(`${Math.floor(east)},${Math.floor(south)}`);
+    }
+    return set;
+  });
+
+  const wide = venue.anchor.widthMetres / venue.grid.width;
+  const tall = venue.anchor.heightMetres / venue.grid.height;
+
+  /** A room's hand-placed rectangle as the same metre cells. */
+  const rect = (room) => {
+    const east0 = (room.rect.x - venue.grid.x) * wide;
+    const south0 = (room.rect.y - venue.grid.y) * tall;
+    const set = new Set();
+    for (let e = 0; e < room.rect.width * wide; e += 1) {
+      for (let s = 0; s < room.rect.height * tall; s += 1) {
+        set.add(`${Math.floor(east0 + e)},${Math.floor(south0 + s)}`);
+      }
+    }
+    return set;
+  };
+
+  const wants = new Map();
+  for (const room of rooms) {
+    const mine = rect(room);
+    const scores = cells.map((set) => {
+      let both = 0;
+      for (const key of mine) if (set.has(key)) both += 1;
+      return both / mine.size;
+    });
+
+      const order = scores.map((value, at) => ({ value, at })).sort((a, b) => b.value - a.value);
+    if (!order.length || order[0].value < CLAIMED) continue;
+    if (order[1] && order[1].value > order[0].value * AMBIGUOUS) continue;
+    if (!wants.has(order[0].at)) wants.set(order[0].at, []);
+    wants.get(order[0].at).push({ room, value: order[0].value });
   }
 
-  return { shapes, frame };
+  // The building, so a traced shape can be checked against it before it is
+  // believed, and every room's cells as the map has them now.
+  const target = footprintMask(venue);
+  const inBuilding = (key) => {
+    const [east, south] = key.split(',').map(Number);
+    const i = Math.floor(east / CELL);
+    const j = Math.floor(south / CELL);
+    return i >= 0 && j >= 0 && i < target.w && j < target.h && target.mask[j * target.w + i] === 1;
+  };
+  const current = new Map(rooms.map((room) => [room.id, rect(room)]));
+
+  const candidates = [];
+  for (const [at, claimants] of wants) {
+    // One drawn room, several authored: an airwalled ballroom. Leave them be.
+    if (claimants.length !== 1) continue;
+    candidates.push({ at, room: claimants[0].room, value: claimants[0].value });
+  }
+  candidates.sort((a, b) => b.value - a.value);
+
+  // The test is not whether the traced shape is perfect but whether it is
+  // better than the rectangle it would replace, on the two things that can go
+  // visibly wrong: leaving the building, and landing on the room next door.
+  const spill = (shape) => {
+    let out = 0;
+    for (const key of shape) if (!inBuilding(key)) out += 1;
+    return out * CELL * CELL;
+  };
+  const clash = (shape, mine) => {
+    let worst = { area: 0, id: null };
+    for (const other of rooms) {
+      if (other.id === mine) continue;
+      let both = 0;
+      for (const key of shape) if (current.get(other.id).has(key)) both += 1;
+      const area = both * CELL * CELL;
+      if (area > worst.area) worst = { area, id: other.id };
+    }
+    return worst;
+  };
+
+  const out = [];
+  const refused = [];
+  for (const { at, room } of candidates) {
+    const shape = cells[at];
+    const was = current.get(room.id);
+
+    // No slack at all on leaving the building: the footprint is surveyed, the
+    // check in `check-geometry.mjs` treats any spill as a finding, and a shape
+    // that pokes through a wall is the one thing worse than a rough rectangle.
+    const spilt = spill(shape);
+    if (spilt > spill(was)) {
+      refused.push(`${room.id} — ${Math.round(spilt)} m2 of it outside the building, worse than its rectangle`);
+      continue;
+    }
+    const hit = clash(shape, room.id);
+    if (hit.area > clash(was, room.id).area + TOUCHING) {
+      refused.push(`${room.id} — would sit ${Math.round(hit.area)} m2 on ${hit.id}`);
+      continue;
+    }
+
+    current.set(room.id, shape);
+    out.push({ roomId: room.id, rings: drawn[at].rings.map((ring) => ring.map(project)) });
+  }
+
+  if (report) {
+    console.log(`      rooms: ${out.length} of ${rooms.length} snapped to the drawing`);
+    for (const why of refused) console.log(`        kept its rectangle: ${why}`);
+  }
+  return out;
 }
 
 async function main() {
   const only = process.argv[2];
-  const venues = await loadVenues();
+  const { venues, rooms, hasPlanShape } = await loadVenues();
   const sheets = readdirSync(PLANS).filter((name) => name.endsWith('.png')).sort();
 
-  const out = new Map();
+  const halls = new Map();
+  const snapped = new Map();
   for (const file of sheets) {
     const id = file.replace(/\.png$/, '');
     if (only && id !== only) continue;
@@ -414,21 +574,30 @@ async function main() {
       console.warn(`  ${id}: no venue ${sheet.venueId}, skipped`);
       continue;
     }
-    const built = convert(file, venue, sheet.level, true);
-    if (!built || !built.shapes.length) {
+
+    // Only rooms the floor plans don't already outline, and only ones drawn as
+    // a rectangle — a room that is its whole venue has nothing to snap to.
+    const floor = rooms.filter((room) => room.venueId === sheet.venueId
+      && room.level === sheet.level
+      && !room.fillsVenue
+      && !hasPlanShape(room));
+
+    const built = convert(file, venue, sheet.level, floor, true);
+    if (!built) {
       console.warn(`  ${id}: nothing traced`);
       continue;
     }
-    const holes = built.shapes.reduce((n, rings) => n + rings.length - 1, 0);
-    console.log(`  ${id}: ${built.shapes.length} hall shape(s)${holes ? `, ${holes} hole(s)` : ''}`);
-    out.set(`${sheet.venueId}/${sheet.level}`, built.shapes);
+    const holes = built.halls.reduce((n, rings) => n + rings.length - 1, 0);
+    console.log(`  ${id}: ${built.halls.length} hall shape(s)${holes ? `, ${holes} hole(s)` : ''}`);
+    if (built.halls.length) halls.set(`${sheet.venueId}/${sheet.level}`, built.halls);
+    for (const room of built.snapped) snapped.set(room.roomId, room.rings);
   }
 
   if (only) return;
-  writeFileSync(OUT, render(out));
+  writeFileSync(OUT, render(halls, snapped));
   const size = Math.round(readFileSync(OUT).length / 1024);
-  const shapes = [...out.values()].reduce((n, list) => n + list.length, 0);
-  console.log(`${OUT}: ${shapes} shapes over ${out.size} floors, ${size} KB`);
+  const shapes = [...halls.values()].reduce((n, list) => n + list.length, 0);
+  console.log(`${OUT}: ${shapes} halls over ${halls.size} floors, ${snapped.size} rooms snapped, ${size} KB`);
 }
 
 /**
@@ -470,19 +639,28 @@ async function loadVenues() {
   });
   try {
     const module = await import(pathToFileURL(out).href);
-    return Object.fromEntries(module.VENUES.map((venue) => [venue.id, venue]));
+    return {
+      venues: Object.fromEntries(module.VENUES.map((venue) => [venue.id, venue])),
+      rooms: module.ROOMS,
+      // A room the convention centre's plans already letter keeps that
+      // outline; nothing here is better than the architect's own drawing.
+      // Asked of the authored labels rather than of `roomShapes`, which after
+      // the first run would already be answering with this script's own output.
+      hasPlanShape: (room) => (room.plan ?? []).length > 0,
+    };
   } finally {
     await rm(out, { force: true });
   }
 }
 
-function render(out) {
+function render(halls, snapped) {
+  const ring = ([lat, lng]) => `[${lat}, ${lng}]`;
   const lines = [];
   lines.push('/**');
-  lines.push(' * Hallways in the hotels, read off Gen Con\'s plans. GENERATED — do not edit.');
+  lines.push(" * The hotels' floors, read off Gen Con's plans. GENERATED — do not edit.");
   lines.push(' *');
   lines.push(' * Run `node scripts/venue-plans.mjs` to rebuild this. See that script for how a');
-  lines.push(' * picture of a floor becomes map geometry, and for the two buildings it can\'t');
+  lines.push(" * picture of a floor becomes map geometry, and for the two buildings it can't");
   lines.push(' * read.');
   lines.push(' *');
   lines.push(' * Source: Gen Con LLC.');
@@ -494,19 +672,32 @@ function render(out) {
   lines.push(' * Prefunction space and corridors, by `venue/level`.');
   lines.push(' *');
   lines.push(' * Each shape is a polygon with holes: the first ring is its outside and the');
-  lines.push(' * rest are the rooms it runs around, because a hotel\'s circulation is one');
+  lines.push(" * rest are the rooms it runs around, because a hotel's circulation is one");
   lines.push(' * connected thing and drawing only its outside would cover them over.');
   lines.push(' */');
   lines.push('export const VENUE_HALLS: Record<string, readonly (readonly PlanRing[])[]> = {');
-  for (const [key, shapes] of [...out].sort()) {
+  for (const [key, shapes] of [...halls].sort()) {
     lines.push(`  '${key}': [`);
     for (const rings of shapes) {
       lines.push('    [');
-      for (const ring of rings) {
-        lines.push(`      [${ring.map(([lat, lng]) => `[${lat}, ${lng}]`).join(', ')}],`);
-      }
+      for (const points of rings) lines.push(`      [${points.map(ring).join(', ')}],`);
       lines.push('    ],');
     }
+    lines.push('  ],');
+  }
+  lines.push('};');
+  lines.push('');
+  lines.push('/**');
+  lines.push(' * The shape the plan draws for a room, where it could be told which is which.');
+  lines.push(' *');
+  lines.push(' * Replaces that room’s hand-placed rectangle. Rooms missing from here are the');
+  lines.push(' * ones the match was not sure about — chiefly the sections of a ballroom the');
+  lines.push(' * plan draws as a single space — and they keep their rectangle.');
+  lines.push(' */');
+  lines.push('export const VENUE_ROOM_SHAPES: Record<string, readonly PlanRing[]> = {');
+  for (const [id, rings] of [...snapped].sort()) {
+    lines.push(`  '${id}': [`);
+    for (const points of rings) lines.push(`    [${points.map(ring).join(', ')}],`);
     lines.push('  ],');
   }
   lines.push('};');

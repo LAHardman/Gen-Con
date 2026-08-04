@@ -49,6 +49,7 @@ import {
   type PlanDetail,
   type PlanRing,
 } from './plan-geometry';
+import { VENUE_ROOM_SHAPES } from './venue-plan';
 
 export type RoomCategory =
   | 'exhibit'
@@ -2336,6 +2337,9 @@ const ROOM_SHAPES = new Map<string, readonly PlanRing[]>(
       const ring = PLAN_SHAPES[`${room.venueId}/${room.level}/${label.trim().toUpperCase()}`];
       if (ring) rings.add(ring);
     }
+    // Failing a lettered plan, the shape read off Gen Con's picture of the
+    // floor, where `venue-plans.mjs` could tell which drawn room is this one.
+    if (!rings.size) for (const ring of VENUE_ROOM_SHAPES[room.id] ?? []) rings.add(ring);
     return [room.id, [...rings]];
   }),
 );

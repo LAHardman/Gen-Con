@@ -241,6 +241,27 @@ belongs to on thirteen of the fourteen floors — Union Station is the exception
 at 76%, because its plan draws the train shed and its OpenStreetMap footprint
 does not.
 
+**The same reading also tightens the rooms — where it can prove it should.** The
+plans colour the rooms as well as the halls, so a room's hand-placed rectangle
+can point at the shape drawn underneath it and take that instead. Fed in
+straight, that made the map worse rather than better: `check:geometry` went from
+clean to twenty findings, thirteen rooms poking out through a wall and seven
+pairs newly on top of each other. The plan and OpenStreetMap are two independent
+tracings of one building and they disagree at the edges by a metre or two, so a
+shape that reads better against the drawing can read worse against everything
+else the map draws.
+
+So a traced outline has to earn the swap. It is taken only when it is no worse
+than the rectangle it replaces on the two things that go visibly wrong — leaving
+the building, with no slack at all because the footprint is surveyed, and
+landing on the room next door, with a wall's thickness of it. **16 of 94 rooms**
+clear that bar, and the check is clean afterwards. The rest keep their
+rectangles and the script says why for each: mostly *spills further outside the
+building than its rectangle does*, sometimes *would sit on the room next door*.
+A ballroom the plan draws as one space with three authored sections in it is
+refused earlier and for a different reason — one outline shared three ways would
+be three rooms the map could no longer tell apart.
+
 **Two buildings this can't read, and neither is faked.** The JW Marriott's sheet
 for its 1st floor is the hotel's own drawing rather than Gen Con's and uses none
 of these colours; Lucas Oil's plans letter nothing and shade everything alike.
