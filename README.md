@@ -131,12 +131,21 @@ the seam between them rather than one block with a line in it.
 | Drag / one-finger drag | Pan |
 | Scroll wheel or trackpad | Zoom |
 | Pinch | Zoom |
-| Double-click / double-tap a room | Open its details and schedule |
-| Single click / tap a room | Select it |
+| Click / tap a building | Open it, and go there |
+| Click / tap a room | Open its details and schedule |
+| Click / tap the map | Close the building again |
 | Type in the search box | Find a room or an event |
 
-Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
-reserved for opening room details.
+**Buildings keep their insides to themselves until you open one.** Fourteen sets
+of rooms over one downtown is a mess nobody can read, and at the zoom you see
+the whole campus at, none of them are legible anyway — so the campus view is
+buildings, streets and skywalks, and clicking a building takes you into it and
+draws its rooms, its floor plan, its restrooms and its floor picker. Clicking
+the map puts it away.
+
+Leaflet's double-click-to-zoom is deliberately disabled, and a room opens on one
+click. There is nothing else a click on a room could mean, and making people
+find that out by double-clicking helped nobody.
 
 **Nothing should vanish while you drag.** Leaflet draws every vector into one
 SVG sized to the screen plus a margin, and redraws it only when a drag ends — so
@@ -189,24 +198,17 @@ your way to a game, the corridor is the route and the rooms are what it passes.
 
 A flat map has one surface and a building has several, and the rooms on them
 land on top of each other: the convention centre's 201–212 sit directly over
-101–117, and the JW has three floors of meeting rooms in one stack. So the map
-draws **one floor of a building at a time**, and the picker on the right of the
-map changes which. It names the building whose floors it is offering — the one
-under the middle of the screen, or filling most of it — and follows you as you
-move between them. A building with one floor has nothing to switch and shows no
-picker. The floors you aren't on are left as ghosts: faint enough not to read as
-rooms, present enough to say there is more here than one storey.
+101–117, and the JW has three floors of meeting rooms in one stack. So an open
+building draws **one floor at a time**, and the picker on the right of the map
+changes which. It appears with the building and names it, because "2nd floor" on
+its own doesn't say whose. The floors you aren't on are left as ghosts: faint
+enough not to read as rooms, present enough to say there is more here than one
+storey.
 
-Each building holds its own floor, so reading the JW's 3rd doesn't move the
-Hyatt. Anything that takes you to a room takes you to its floor as well —
-clicking it, or picking it out of the search box.
-
-**A building opens on the floor the convention uses, not its lowest.** That is
-the one with most of its rooms on it. The obvious rule is the wrong one here:
-the Hyatt's ground floor is a single room, the Embassy's is a single room, and a
-building that opens on an empty storey looks like a building with no interior.
-The stadium is the exception the count gets wrong — its field is one room and
-the concourse ring above it is two — so `opensOn` in `venues.ts` says which.
+A building opens on its **ground floor** — where you would come in from the
+street, and where the picker's own list starts. Each building holds its own
+floor while it is open, and anything that takes you to a room takes you to that
+room's floor instead: clicking it, or picking it out of the search box.
 
 Note that a floor here is a floor of *that building*. Gen Con's own level
 switcher numbers campus event levels instead, so its "level 3" is at once the

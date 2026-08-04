@@ -22,7 +22,8 @@ export default function App() {
   // The floor each building is showing, and the building the map is looking at.
   // Only buildings moved off the floor they open on appear here.
   const [levels, setLevels] = useState<Record<string, string>>({});
-  const [venueInView, setVenueInView] = useState<string | null>(null);
+  // The building you have opened. Nothing draws an inside until one is.
+  const [openVenueId, setOpenVenueId] = useState<string | null>(null);
 
   const { status, feed, index } = useEventFeed();
 
@@ -66,10 +67,25 @@ export default function App() {
     return total;
   }, [index, nowMs]);
 
-  // Going to a room means going to its floor, however you got there: the room
-  // is on the 3rd and drawing it over the 1st would put it in the wrong
-  // building's worth of walls.
-  const showRoomsFloor = useCallback((room: Room) => {
+  // Opening a building starts you on the ground floor, wherever you left it
+  // last time. Closing it is the same call with null.
+  const openVenue = useCallback((venueId: string | null) => {
+    setOpenVenueId(venueId);
+    if (venueId) {
+      setLevels((current) => {
+        if (!(venueId in current)) return current;
+        const next = { ...current };
+        delete next[venueId];
+        return next;
+      });
+    }
+  }, []);
+
+  // Going to a room means opening its building on its floor, however you got
+  // there: the room is on the 3rd and drawing it over the 1st would put it in
+  // the wrong building's worth of walls.
+  const showRoom = useCallback((room: Room) => {
+    setOpenVenueId(room.venueId);
     setLevels((current) =>
       current[room.venueId] === room.level ? current : { ...current, [room.venueId]: room.level },
     );
@@ -79,9 +95,9 @@ export default function App() {
     (roomId: string | null) => {
       setSelectedRoomId(roomId);
       const room = roomId ? ROOMS_BY_ID[roomId] : undefined;
-      if (room) showRoomsFloor(room);
+      if (room) showRoom(room);
     },
-    [showRoomsFloor],
+    [showRoom],
   );
 
   // Changing floor under a selected room leaves it a storey away and no longer
@@ -105,11 +121,11 @@ export default function App() {
   const handlePickSearchResult = useCallback(
     (room: Room) => {
       setSelectedRoomId(room.id);
-      showRoomsFloor(room);
+      showRoom(room);
       setFocusRequest({ room, token: Date.now() });
       setOpenRoom(room);
     },
-    [showRoomsFloor],
+    [showRoom],
   );
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
@@ -176,12 +192,13 @@ export default function App() {
           eventCounts={eventCounts}
           showAmenities={showAmenities}
           levels={levels}
-          onVenueInView={setVenueInView}
+          openVenueId={openVenueId}
+          onOpenVenue={openVenue}
         />
         <Legend showAmenities={showAmenities} onToggleAmenities={() => setShowAmenities((on) => !on)} />
         <FloorPicker
-          venueId={venueInView}
-          level={(venueInView && (levels[venueInView] ?? defaultLevel(venueInView))) ?? null}
+          venueId={openVenueId}
+          level={(openVenueId && (levels[openVenueId] ?? defaultLevel(openVenueId))) ?? null}
           onPick={handlePickFloor}
         />
       </main>

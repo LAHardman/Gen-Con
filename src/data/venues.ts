@@ -144,11 +144,6 @@ export interface Venue {
    * writes that field verbatim, so these are the source's own short forms.
    */
   aliases?: string[];
-  /**
-   * The floor the map opens this building on, where counting its rooms picks
-   * the wrong one. See `defaultLevel`.
-   */
-  opensOn?: string;
 }
 
 /**
@@ -202,10 +197,6 @@ export const VENUES: Venue[] = [
     },
     footprint: VENUE_FOOTPRINTS['lucas-oil'],
     grid: UNIT_GRID,
-    // The boarded-over field is one room and the concourse ring above it is
-    // two, so counting rooms would open the stadium on the wrong one. The
-    // field is the reason anyone walks down here.
-    opensOn: 'Field level',
   },
   {
     id: 'jw-marriott',
@@ -2320,29 +2311,14 @@ export const VENUE_LEVELS: Record<string, string[]> = (() => {
 })();
 
 /**
- * The floor a building opens on.
+ * The floor a building opens on: the lowest it has.
  *
- * Not its lowest, which is the obvious answer and the wrong one here: the
- * Hyatt's ground floor is one room, the Embassy's is one room, and a building
- * that opens on an empty storey looks like a building with no interior. The
- * convention's floor is the one it uses, so that is the one with most of its
- * rooms on it — and the picker names it, so there is no doubt which you are
- * looking at.
- *
- * Counting rooms gets it right everywhere but the stadium, where the field is
- * one room and the concourse above it is two; `opensOn` says so there.
+ * A building opens closed and you click it to look inside, so this is where
+ * that look starts — the ground, where you would come in from the street, and
+ * where the picker's own list starts too. Everything above it is one tap away.
  */
 export function defaultLevel(venueId: string): string | undefined {
-  const venue = VENUES_BY_ID[venueId];
-  if (venue?.opensOn) return venue.opensOn;
-
-  const levels = VENUE_LEVELS[venueId] ?? [];
-  let best: { level: string; rooms: number } | undefined;
-  for (const level of levels) {
-    const rooms = ROOMS.filter((room) => room.venueId === venueId && room.level === level).length;
-    if (!best || rooms > best.rooms) best = { level, rooms };
-  }
-  return best?.level;
+  return VENUE_LEVELS[venueId]?.[0];
 }
 
 /**

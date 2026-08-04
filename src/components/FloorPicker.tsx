@@ -9,10 +9,10 @@ import { VENUES_BY_ID, VENUE_LEVELS } from '../data/venues';
  * all at once turns every multi-storey venue into a pile. So the map draws one
  * floor at a time, and this is how you change it.
  *
- * It names the building it belongs to, because it appears when you are looking
- * at one and follows you to the next: without the name, "2nd floor" on its own
- * doesn't say whose. A building with a single floor has nothing to switch, so
- * nothing is shown for it.
+ * It belongs to the building you have opened and appears with it, so it says
+ * whose floors these are — "2nd floor" on its own doesn't. A building with one
+ * floor still gets the panel, naming the building and the floor: what is open
+ * is worth saying even when there is nothing to switch.
  */
 interface Props {
   venueId: string | null;
@@ -22,7 +22,7 @@ interface Props {
 
 export function FloorPicker({ venueId, level, onPick }: Props) {
   const levels = venueId ? (VENUE_LEVELS[venueId] ?? []) : [];
-  if (!venueId || levels.length < 2) return null;
+  if (!venueId || !levels.length) return null;
 
   const venue = VENUES_BY_ID[venueId];
 
@@ -36,6 +36,7 @@ export function FloorPicker({ venueId, level, onPick }: Props) {
           type="button"
           className={`floors__level${each === level ? ' floors__level--active' : ''}`}
           aria-pressed={each === level}
+          disabled={levels.length < 2}
           onClick={() => onPick(venueId, each)}
         >
           {each}

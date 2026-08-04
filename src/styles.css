@@ -194,11 +194,29 @@ body {
 
 /* Venue and room geometry ------------------------------------------------ */
 
+/*
+ * A building is what you click. Closed, it is a filled shape with a solid edge
+ * — something to press, and at campus zoom the only thing there is to press.
+ * Open, the fill goes and the edge turns dashed, because now it is a line drawn
+ * round the rooms inside rather than an object in its own right.
+ */
 .map__venue {
-  stroke: #7c87ad;
+  stroke: #8894ba;
   stroke-width: 2;
+  fill: #414c6d;
+  fill-opacity: 0.42;
+  cursor: pointer;
+  transition: fill-opacity 140ms ease;
+}
+
+.map__venue:hover {
+  fill-opacity: 0.62;
+}
+
+.map__venue--open {
   stroke-dasharray: 5 4;
-  fill: none;
+  fill-opacity: 0;
+  cursor: default;
 }
 
 /* Floor-plan geometry ----------------------------------------------------- */
@@ -799,6 +817,11 @@ body {
   pointer-events: none;
 }
 
+/* A building that isn't open draws no rooms at all. */
+.map__room--closed {
+  display: none;
+}
+
 /* ------------------------------------------------------------------ floors */
 
 /* On the right, clear of the legend and above Leaflet's own panes. Stacked
@@ -845,8 +868,12 @@ body {
   cursor: pointer;
 }
 
-.floors__level:hover {
+.floors__level:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.floors__level:disabled {
+  cursor: default;
 }
 
 .floors__level--active {
