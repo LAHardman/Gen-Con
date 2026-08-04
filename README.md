@@ -95,9 +95,29 @@ ever needs app-store distribution.
 
 The basemap is real: live tiles of downtown Indianapolis, with real streets and
 buildings, rendered through [Leaflet](https://leafletjs.com/). Three key-free
-providers are wired up (CARTO dark, CARTO light, OpenStreetMap standard) and
-switchable from the header. Each carries the attribution its terms require —
-Leaflet renders it in the corner, and it must not be removed.
+tilesets are wired up (CARTO dark, light and Voyager) and switchable from the
+header. Each carries the attribution its terms require — Leaflet renders it in
+the corner, and it must not be removed.
+
+**The street names are drawn on top of the buildings, not under them.** Each
+tileset is taken in two halves — the map without its writing, and the writing on
+its own — and the second is drawn above everything the app puts on the map. It
+has to be: the rooms and floor plans are opaque enough to bury a street name,
+and once you have zoomed into a building the streets around it are exactly what
+you need to leave it by. Taking the split tileset rather than adding names over
+a map that already has them is also what keeps every name drawn once.
+
+That is why the third option is CARTO's street rendering rather than
+OpenStreetMap's own raster, which it used to be: OSM's bakes its names into the
+tile, so there is no way to lift them clear of the buildings. Same data either
+way.
+
+**And the lines are drawn to be followed.** A dark tileset puts its streets a
+few percent off its own background, which vanishes under a map with this much
+drawn over it, so the dark basemap's contrast is lifted as a whole — the roads
+are somebody else's raster and can't be restyled one line at a time. The app's
+own outlines are heavier to match: a room's wall, a corridor's edge and a
+building's own line each read at the zoom you would use them at.
 
 | Gesture | Result |
 | --- | --- |
@@ -110,6 +130,14 @@ Leaflet renders it in the corner, and it must not be removed.
 
 Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
 reserved for opening room details.
+
+**Nothing should vanish while you drag.** Leaflet draws every vector into one
+SVG sized to the screen plus a margin, and redraws it only when a drag ends — so
+at the stock margin of a tenth of the screen, any real drag runs off the edge of
+what was drawn and the rooms disappear until you let go. The whole campus is a
+few hundred shapes, so the margin is six-tenths instead, over three times the
+area, which outruns a drag for what it costs. The tiles keep a wider ring of
+neighbours for the same reason.
 
 ### Search
 
@@ -128,6 +156,27 @@ so rather than twelve identical rows.
 Ranking is by how the match was made — a room whose name starts with what you
 typed, then an exact alias, then a word inside a name, then event titles — and
 ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
+
+### Getting between buildings
+
+Downtown Indianapolis is stitched together above ground, and in August that is
+not a curiosity — the skywalks are how most people get from a hotel to a game
+without going outside, and none of it shows on a map of the streets. So the map
+draws them, as a dashed line over everything else, with the tunnel running south
+from Union Station drawn the same way in a colder colour.
+
+Be clear about what these are: the **spans**. OpenStreetMap has each bridge and
+the tunnel as a way of its own, but not the corridors inside the buildings that
+join them up, so this is not a route you can trace end to end. It is where a
+covered crossing exists — which is the part you can't work out by looking at the
+street. `src/data/connections.ts` has the query that produced them and the OSM
+way id of each, so any of them can be checked.
+
+Inside the convention centre there is better than that: its plans draw the
+prefunction space and hallways, and the map draws them as open floor a shade
+lighter than the fabric either side. Those used to be styled as the gap between
+the rooms and were nearly invisible, which is backwards — on a map for finding
+your way to a game, the corridor is the route and the rooms are what it passes.
 
 ### Floors
 

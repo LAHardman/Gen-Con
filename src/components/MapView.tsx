@@ -18,6 +18,7 @@ import {
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
+import { CONNECTIONS, type Line } from '../data/connections';
 
 interface Props {
   selectedRoomId: string | null;
@@ -64,7 +65,7 @@ function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
 }
 
 /** OSM footprint and plan rings are both [latitude, longitude] — Leaflet's order. */
-function toLatLngs(ring: Venue['footprint'] | PlanRing) {
+function toLatLngs(ring: Venue['footprint'] | PlanRing | Line) {
   return ring.map(([lat, lng]) => L.latLng(lat, lng));
 }
 
@@ -130,6 +131,7 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const labelLayerRef = useRef<L.TileLayer | null>(null);
   // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
   const roomLayersRef = useRef(new Map<string, L.Path>());
 
@@ -159,6 +161,13 @@ export function MapView({
       touchZoom: true,
       maxZoom: 21,
       minZoom: 13,
+      // Leaflet draws vectors into one SVG sized to the screen plus a margin,
+      // and redraws it only when a drag ends. At the stock margin of a tenth of
+      // the screen, a drag of any length runs off the edge of what was drawn
+      // and rooms vanish until you let go. The whole campus is a few hundred
+      // shapes, so a margin of six-tenths — over three times the area — costs
+      // little and outruns any drag.
+      renderer: L.svg({ padding: 0.6 }),
     });
 
     // The building's fabric belongs under the rooms drawn on top of it, and
@@ -169,6 +178,25 @@ export function MapView({
     if (detailPane) {
       detailPane.style.zIndex = '350';
       detailPane.style.pointerEvents = 'none';
+    }
+
+    // The skywalks cross over the streets and over the rooms either side of
+    // them, so they are drawn over both — above the overlays (400), below the
+    // markers (600).
+    map.createPane('connections');
+    const connectionPane = map.getPane('connections');
+    if (connectionPane) connectionPane.style.zIndex = '450';
+
+    // Street names belong on top of the buildings, not under them. Everything
+    // this app draws is opaque enough to bury the basemap's own labels, and a
+    // map you can't read the streets off is no use for getting anywhere — so
+    // the labels are drawn again above the lot, in a pane of their own above
+    // the overlays (400) and the markers (600).
+    map.createPane('labels');
+    const labelPane = map.getPane('labels');
+    if (labelPane) {
+      labelPane.style.zIndex = '650';
+      labelPane.style.pointerEvents = 'none';
     }
 
     map.fitBounds(allBounds, { padding: [40, 40] });
@@ -209,6 +237,8 @@ export function MapView({
 
     const basemap = BASEMAPS[basemapId] ?? BASEMAPS.dark;
     tileLayerRef.current?.remove();
+    labelLayerRef.current?.remove();
+
     const layer = L.tileLayer(basemap.url, {
       attribution: basemap.attribution,
       maxZoom: 21,
@@ -216,11 +246,29 @@ export function MapView({
       // last real tile rather than showing blank squares.
       maxNativeZoom: basemap.maxNativeZoom,
       subdomains: basemap.subdomains ?? 'abc',
-      className: basemap.filtered ? 'map__tiles map__tiles--filtered' : 'map__tiles',
+      // The id class is what lets one tileset be pushed harder than another —
+      // see `.map__tiles--dark`, whose streets need it.
+      className: `map__tiles map__tiles--${basemap.id}`,
+      // A ring of tiles either side of the screen, so a drag runs onto tiles
+      // that are already there instead of onto blank squares.
+      keepBuffer: 4,
     });
     layer.addTo(map);
     layer.bringToBack();
     tileLayerRef.current = layer;
+
+    const labels = L.tileLayer(basemap.labelsUrl, {
+      maxZoom: 21,
+      maxNativeZoom: basemap.maxNativeZoom,
+      subdomains: basemap.subdomains ?? 'abc',
+      // Not the id class: the writing is already legible and doesn't want
+      // whatever is being done to the map underneath it.
+      className: 'map__tiles',
+      pane: 'labels',
+      keepBuffer: 4,
+    });
+    labels.addTo(map);
+    labelLayerRef.current = labels;
   }, [basemapId]);
 
   /* -------------------------------------------------- floor-plan geometry */
@@ -260,6 +308,46 @@ export function MapView({
       for (const layer of layers) layer.remove();
     };
   }, [levels]);
+
+  /* ----------------------------------------------------------- connections */
+  /*
+   * Skywalks and the tunnel: how you get between buildings in August without
+   * going outside, and the one thing about this campus a street map can't tell
+   * you. Drawn once and left alone — they belong to no floor, and they don't
+   * change when the map does.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const layers: L.Layer[] = [];
+    for (const connection of CONNECTIONS) {
+      const points = toLatLngs(connection.line);
+      // A casing wide enough to notice and to put a pointer on, and a dashed
+      // core over it — one line drawn twice, as a map draws a path.
+      const casing = L.polyline(points, {
+        className: `map__link map__link--${connection.kind}`,
+        pane: 'connections',
+        interactive: true,
+      });
+      casing.bindTooltip(connection.kind === 'skywalk' ? 'Skywalk' : 'Tunnel', {
+        direction: 'top',
+        className: 'map__link-tip',
+      });
+      const core = L.polyline(points, {
+        className: `map__link-core map__link--${connection.kind}`,
+        pane: 'connections',
+        interactive: false,
+      });
+      casing.addTo(map);
+      core.addTo(map);
+      layers.push(casing, core);
+    }
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, []);
 
   /* ------------------------------------------------------------- amenities */
   /*
@@ -345,8 +433,10 @@ export function MapView({
         className: 'map__room',
         color: style.stroke,
         fillColor: style.fill,
-        fillOpacity: 0.55,
-        weight: 2,
+        fillOpacity: 0.5,
+        // Heavy enough to read as the wall of a room at the zoom you pick a
+        // room at, and to tell two rooms sharing one apart.
+        weight: 3,
       };
       const drawn = roomShapes(room);
       const shapeLayer =

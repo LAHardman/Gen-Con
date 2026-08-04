@@ -181,16 +181,23 @@ body {
 
 /* Tiles ------------------------------------------------------------------ */
 
-.map__tiles--filtered {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
+/*
+ * The roads are somebody else's raster and can't be restyled a line at a time,
+ * so they are pushed as a whole: a dark tileset draws its streets a few percent
+ * off its background, which disappears entirely under a map with this much
+ * drawn over it. Lifting the contrast brings the grid back without touching the
+ * palette everything else is built on.
+ */
+.map__tiles--dark {
+  filter: brightness(1.45) contrast(1.3);
 }
 
 /* Venue and room geometry ------------------------------------------------ */
 
 .map__venue {
-  stroke: #5d6688;
-  stroke-width: 1.5;
-  stroke-dasharray: 4 4;
+  stroke: #7c87ad;
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
   fill: none;
 }
 
@@ -205,17 +212,25 @@ body {
  * is background; the rooms the app knows about are drawn over it in colour.
  */
 .map__plan {
-  stroke: #454c66;
-  stroke-width: 0.75;
+  stroke: #5d6688;
+  stroke-width: 1.2;
   fill: #2a3048;
   fill-opacity: 0.55;
 }
 
+/*
+ * Prefunction space and hallways — the part of a plan you actually walk. This
+ * used to be styled as the gap between the rooms and was almost invisible,
+ * which is backwards: on a map for finding your way to a game, the corridor is
+ * the route and the rooms are what it passes. So it reads as open floor, a step
+ * lighter and warmer than the fabric around it, with an edge you can follow.
+ */
 .map__plan--circulation {
-  /* Prefunction and hallways: the space between rooms, so barely there. */
-  fill: #333a54;
-  fill-opacity: 0.4;
-  stroke-opacity: 0.5;
+  fill: #46506f;
+  fill-opacity: 0.6;
+  stroke: #9aa5cb;
+  stroke-width: 1.6;
+  stroke-opacity: 0.95;
 }
 
 .map__plan--service {
@@ -233,13 +248,57 @@ body {
 /* Moveable airwalls: where a hall divides, drawn as the dashed line it is. */
 .map__plan--divider {
   fill: none;
-  stroke: #4c5470;
-  stroke-width: 0.75;
+  stroke: #5f6889;
+  stroke-width: 1;
   stroke-dasharray: 3 3;
+}
+
+/*
+ * Skywalks and the tunnel. Drawn as a route rather than as a shape — a bright
+ * casing under a dashed core, the way a map draws a path over everything else,
+ * so a span crossing a street reads as somewhere you can walk and not as an
+ * edge of the building it lands on. The tunnel is the same line underground,
+ * so it is the same line drawn dimmer.
+ */
+.map__link {
+  fill: none;
+  stroke: #ffcf5c;
+  stroke-width: 5;
+  stroke-opacity: 0.35;
+  stroke-linecap: round;
+  cursor: help;
+}
+
+.map__link-core {
+  fill: none;
+  stroke: #ffcf5c;
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+  stroke-linecap: butt;
+}
+
+.map__link--tunnel {
+  stroke: #9fb4d8;
+  stroke-opacity: 0.3;
+}
+
+.map__link-core.map__link--tunnel {
+  stroke-opacity: 0.8;
+}
+
+.leaflet-tooltip.map__link-tip {
+  background: rgba(26, 29, 40, 0.95);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 11px;
 }
 
 .map__room {
   cursor: pointer;
+  /* The room's own colour at full strength: the fill is what says which sort of
+     room it is, the outline is what says where it ends. */
+  stroke-opacity: 1;
+  stroke-linejoin: round;
   transition: fill-opacity 120ms ease, stroke-width 120ms ease;
 }
 
@@ -932,6 +991,17 @@ body {
   border: 1px solid var(--border);
   color: var(--text);
   font-size: 11px;
+}
+
+/* The same line the map draws, at legend size. */
+.legend__link-mark {
+  width: 16px;
+  height: 5px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  background:
+    repeating-linear-gradient(to right, #ffcf5c 0 5px, transparent 5px 9px),
+    rgba(255, 207, 92, 0.35);
 }
 
 .legend__amenities {
