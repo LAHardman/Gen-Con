@@ -39,6 +39,9 @@ interface Props {
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
 const ROOM_LABEL_MIN_ZOOM = 16;
 
+/** And street names, once you are near enough a street to be walking it. */
+const LABEL_MIN_ZOOM = 17;
+
 /**
  * A label is only drawn once its room is big enough on screen to hold one.
  *
@@ -224,6 +227,11 @@ export function MapView({
 
     const labels = L.tileLayer(basemap.labelsUrl, {
       maxZoom: 21,
+      // Street names arrive when you are close enough for them to mean
+      // something. Over the whole campus they are a screenful of type telling
+      // you what you already know — that this is downtown Indianapolis — and
+      // they bury the buildings, which at that zoom is the only thing to pick.
+      minZoom: LABEL_MIN_ZOOM,
       maxNativeZoom: basemap.maxNativeZoom,
       subdomains: basemap.subdomains ?? 'abc',
       // Not the id class: the writing is already legible and doesn't want

@@ -107,6 +107,11 @@ and once you have zoomed into a building the streets around it are exactly what
 you need to leave it by. Taking the split tileset rather than adding names over
 a map that already has them is also what keeps every name drawn once.
 
+They arrive at zoom 17, not before. Over the whole campus a full set of street
+names is a screenful of type telling you what you already know — that this is
+downtown Indianapolis — and it buries the buildings, which at that zoom are the
+only thing there is to pick.
+
 That is why the third option is CARTO's street rendering rather than
 OpenStreetMap's own raster, which it used to be: OSM's bakes its names into the
 tile, so there is no way to lift them clear of the buildings. Same data either
@@ -229,6 +234,15 @@ places, and the difference matters:
 They follow the same floor rule as the rooms: only the floor a building is
 showing has its restrooms drawn, because a toilet on the wrong storey is not a
 useful direction.
+
+**A pair gets one mark, put between them.** A plan draws the men's and the
+women's as two rooms, because they are two rooms — but they are one place to go,
+off the same bit of corridor, signed together, and two marks a few metres apart
+answer a question nobody asked. The threshold comes from the drawings: measured
+across the convention centre, the distance from a restroom to its nearest
+neighbour falls in two lots, 23–29 m for a pair either side of one entrance and
+34 m and up for the next facility along the concourse. Thirty metres sits in the
+gap between them, and takes the campus from 43 marks to 35.
 
 **Water fountains are not marked, and that is not an oversight.** No plan shows
 them. The convention centre's legend has four categories and water is not one;
