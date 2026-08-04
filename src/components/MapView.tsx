@@ -16,6 +16,7 @@ import {
   type Venue,
 } from '../data/venues';
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
+import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
@@ -270,12 +271,28 @@ export function MapView({
           pane: 'plan-detail',
           interactive: false,
         };
-        // An airwall is a line across a hall, not an enclosure.
+          // An airwall is a line across a hall, not an enclosure.
         const layer =
           shape.kind === 'divider' ? L.polyline(points, options) : L.polygon(points, options);
         layer.addTo(map);
         layers.push(layer);
       }
+    }
+
+    // The hotels' halls, read off Gen Con's plans of them by colour. Each is a
+    // polygon with holes — the circulation on a hotel floor is one connected
+    // thing that runs round the rooms, so its outside alone would cover them.
+    const halls = openVenueId
+      ? (VENUE_HALLS[`${openVenueId}/${levelOf(openVenueId, levels)}`] ?? [])
+      : [];
+    for (const rings of halls) {
+      const layer = L.polygon(rings.map((ring) => toLatLngs(ring)), {
+        className: 'map__plan map__plan--circulation',
+        pane: 'plan-detail',
+        interactive: false,
+      });
+      layer.addTo(map);
+      layers.push(layer);
     }
 
     return () => {

@@ -81,6 +81,8 @@ want to see it on a real device.
 | `npm run dev` | Dev server, bound to all interfaces so you can open it on a phone |
 | `npm run build` | Type-checks, then builds to `dist/` |
 | `npm run preview` | Serves the production build |
+| `npm run check:geometry` | Checks no room leaves its building or sits on another |
+| `npm run plans:venues` | Re-reads the hotel hallways out of `plans/venues/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
@@ -204,11 +206,45 @@ floors are named building by building in `connections.ts`, since every building
 names them differently — the convention centre's skywalk level is its Level 2,
 Union Station's is the mezzanine over the Grand Hall.
 
-Inside the convention centre there is better than that: its plans draw the
-prefunction space and hallways, and the map draws them as open floor a shade
-lighter than the fabric either side. Those used to be styled as the gap between
-the rooms and were nearly invisible, which is backwards — on a map for finding
-your way to a game, the corridor is the route and the rooms are what it passes.
+Inside a building the map draws the **hallways** — the prefunction space and
+corridors, as open floor a shade lighter than the fabric either side. Those used
+to be styled as the gap between the rooms and were nearly invisible, which is
+backwards: on a map for finding your way to a game, the corridor is the route
+and the rooms are what it passes.
+
+The convention centre's come free, from the same PDFs its rooms do — one of the
+colours its legend keys is "Prefunction / Hallways". Nothing else on the campus
+has a PDF. What there is instead is Gen Con's own plan of each hotel as a
+picture, and those are drawn to a palette just as strict, so `venue-plans.mjs`
+reads them the same way from pixels: pale cream is what you walk on, tan is a
+room you can book, darker brown is back of house. Fourteen floors across eight
+hotels come out of it.
+
+Reading them by colour rather than by eye is the point. A corridor is three or
+four metres wide and the room rectangles in `venues.ts` are good to about five,
+so anything traced by hand would look precise and be wrong at exactly the scale
+it is read at. Colour is not a judgement call, and neither is the fit: Gen Con
+draws with south at the top, so the whole transform is a half-turn, a uniform
+scale and an offset — three unknowns, fitted against the building's own surveyed
+footprint by sweeping and then refining on overlap. The script prints what it
+got, and it lands between 76% and 89% of the footprint on every sheet.
+
+```
+node scripts/venue-plans.mjs              # all of them, writing src/data/venue-plan.ts
+node scripts/venue-plans.mjs westin-2     # one, with its fit reported
+```
+
+Each hall is a polygon with holes: a hotel floor's circulation is one connected
+thing that runs around the rooms, so drawing only its outside would cover them
+over. Sampled afterwards, 90–100% of what is drawn falls inside the building it
+belongs to on thirteen of the fourteen floors — Union Station is the exception
+at 76%, because its plan draws the train shed and its OpenStreetMap footprint
+does not.
+
+**Two buildings this can't read, and neither is faked.** The JW Marriott's sheet
+for its 1st floor is the hotel's own drawing rather than Gen Con's and uses none
+of these colours; Lucas Oil's plans letter nothing and shade everything alike.
+Those floors show rooms and no corridors, which is what their source supports.
 
 ### Floors
 
