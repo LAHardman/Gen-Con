@@ -193,6 +193,17 @@ covered crossing exists — which is the part you can't work out by looking at t
 street. `src/data/connections.ts` has the query that produced them and the OSM
 way id of each, so any of them can be checked.
 
+**They belong to a floor.** The network runs at the second level throughout, so
+a span drawn across a building you have open is either the way to the next hotel
+or a line over your head — and which one it is depends on the floor you are on.
+So an open building draws only the spans that reach it, and only while it is
+showing the floor they reach it on: the convention centre's five appear on Level
+2 and none on Level 1. With nothing open they all draw, because that view is the
+campus and where the covered crossings are is the most useful thing on it. The
+floors are named building by building in `connections.ts`, since every building
+names them differently — the convention centre's skywalk level is its Level 2,
+Union Station's is the mezzanine over the Grand Hall.
+
 Inside the convention centre there is better than that: its plans draw the
 prefunction space and hallways, and the map draws them as open floor a shade
 lighter than the fabric either side. Those used to be styled as the gap between

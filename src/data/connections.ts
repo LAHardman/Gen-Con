@@ -26,6 +26,8 @@
  * © OpenStreetMap contributors, ODbL.
  */
 
+import { VENUES, VENUE_LEVELS, venueOutline } from './venues';
+
 /** [latitude, longitude], the order the map draws in. */
 export type Line = ReadonlyArray<readonly [number, number]>;
 
@@ -51,3 +53,87 @@ export const CONNECTIONS: Connection[] = [
   { kind: 'skywalk', way: 340480908, line: [[39.766769, -86.165555], [39.766835, -86.165553], [39.766874, -86.165551]] },
   { kind: 'tunnel', way: 524099194, line: [[39.762024, -86.161795], [39.762918, -86.16176]] },
 ];
+
+/* ------------------------------------------------- which building, which floor */
+
+/**
+ * A skywalk is only a way out of the building you are standing in if you are on
+ * the floor it leaves from. Downtown's network runs at the second level
+ * throughout, so a bridge drawn across the room you are looking at is either
+ * the way to the next hotel or a line over your head, and which one it is
+ * depends entirely on the floor.
+ *
+ * So an open building draws only the spans that reach it, and only while it is
+ * showing the floor they reach it on. With no building open they all draw:
+ * that view is the campus, and where the covered crossings are is the most
+ * useful thing on it.
+ *
+ * The floors are named building by building because every building names them
+ * differently — the convention centre's skywalk level is its Level 2, Union
+ * Station's is the mezzanine over the Grand Hall. A building with one floor
+ * needs no entry: there is nowhere else its skywalk could arrive.
+ */
+const ENTERS_ON: Record<string, string> = {
+  icc: 'Level 2',
+  'marriott-downtown': '2nd floor',
+  westin: '2nd floor',
+  'jw-marriott': '2nd floor',
+  hyatt: '2nd floor',
+  omni: '2nd floor',
+  'le-meridien': '2nd floor',
+  'crowne-plaza': 'Mezzanine',
+};
+
+/** How near a span has to pass a building to be counted as a way into it. */
+const REACH = 35;
+
+/** Metres from a point to a segment, flat-earth, which over 35 m is exact enough. */
+function toSegment(point: readonly [number, number], from: readonly [number, number], to: readonly [number, number]) {
+  const perLng = 111320 * Math.cos((point[0] * Math.PI) / 180);
+  const px = point[1] * perLng;
+  const py = point[0] * 111320;
+  const ax = from[1] * perLng;
+  const ay = from[0] * 111320;
+  const bx = to[1] * perLng;
+  const by = to[0] * 111320;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const length = dx * dx + dy * dy;
+  const along = length ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length)) : 0;
+  return Math.hypot(px - (ax + along * dx), py - (ay + along * dy));
+}
+
+/** For each span, the buildings it reaches and the floor it reaches them on. */
+const REACHES = new Map<Connection, Map<string, string>>(
+  CONNECTIONS.map((connection) => {
+    const ends = [connection.line[0], connection.line[connection.line.length - 1]];
+    const found = new Map<string, string>();
+    for (const venue of VENUES) {
+      const ring = venueOutline(venue);
+      let nearest = Infinity;
+      for (const end of ends) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+          nearest = Math.min(nearest, toSegment(end, ring[j], ring[i]));
+        }
+      }
+      if (nearest > REACH) continue;
+      const levels = VENUE_LEVELS[venue.id] ?? [];
+      const level = ENTERS_ON[venue.id] ?? (levels.length === 1 ? levels[0] : undefined);
+      if (level) found.set(venue.id, level);
+    }
+    return [connection, found];
+  }),
+);
+
+/**
+ * Whether a span is drawn: always with nothing open, and otherwise only where
+ * it reaches the open building on the floor being shown.
+ */
+export function connectionShown(
+  connection: Connection,
+  openVenueId: string | null,
+  level: string | undefined,
+): boolean {
+  if (!openVenueId) return true;
+  return REACHES.get(connection)?.get(openVenueId) === level;
+}

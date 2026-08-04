@@ -18,7 +18,7 @@ import {
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
-import { CONNECTIONS, type Line } from '../data/connections';
+import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
 
 interface Props {
   selectedRoomId: string | null;
@@ -287,8 +287,14 @@ export function MapView({
   /*
    * Skywalks and the tunnel: how you get between buildings in August without
    * going outside, and the one thing about this campus a street map can't tell
-   * you. Drawn once and left alone — they belong to no floor, and they don't
-   * change when the map does.
+   * you.
+   *
+   * They belong to a floor, though — the network runs at the second level
+   * throughout — so a span drawn across a building you have open is either the
+   * way to the next hotel or a line over your head. Which it is depends on the
+   * floor, so an open building draws only the spans that reach it on the floor
+   * it is showing. With nothing open they all draw: that view is the campus,
+   * and where the covered crossings are is the most useful thing on it.
    */
   useEffect(() => {
     const map = mapRef.current;
@@ -296,6 +302,9 @@ export function MapView({
 
     const layers: L.Layer[] = [];
     for (const connection of CONNECTIONS) {
+      if (!connectionShown(connection, openVenueId, openVenueId ? levelOf(openVenueId, levels) : undefined)) {
+        continue;
+      }
       const points = toLatLngs(connection.line);
       // A casing wide enough to notice and to put a pointer on, and a dashed
       // core over it — one line drawn twice, as a map draws a path.
@@ -321,7 +330,7 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, []);
+  }, [openVenueId, levels]);
 
   /* ------------------------------------------------------------- amenities */
   /*
