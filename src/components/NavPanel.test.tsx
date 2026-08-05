@@ -141,7 +141,7 @@ describe('choosing a place', () => {
   it('puts the search away while the map is the one being asked', () => {
     setup({ editing: 'from', pickingOnMap: true });
     expect(screen.queryByLabelText('Choose a starting point')).toBeNull();
-    expect(screen.getByText(/Tap a room to start from it/)).toBeTruthy();
+    expect(screen.getByText(/Tap a building to look inside it/)).toBeTruthy();
   });
 });
 
@@ -175,17 +175,39 @@ describe('what it says about the line', () => {
   const routeOf = (from: NavPlace, to: NavPlace, device = READY.fix) =>
     routeBetween(from, to, device)!;
 
-  it('gives the distance and the walk, both labelled as a straight line', () => {
-    setup({ from: SAGAMORE, to: HALL_B, route: routeOf(SAGAMORE, HALL_B) });
-    expect(screen.getByText(/in a straight line/)).toBeTruthy();
-    expect(screen.getByText(/min/)).toBeTruthy();
+  it('gives the distance to walk, and the steps of the walk', () => {
+    const route = routeOf(SAGAMORE, HALL_B);
+    setup({ from: SAGAMORE, to: HALL_B, route });
+    expect(route.walk).not.toBeNull();
+    expect(screen.getByText(/to walk/)).toBeTruthy();
+    // One step per leg, in the order they are walked.
+    expect(screen.getAllByRole('listitem')).toHaveLength(route.walk!.legs.length);
   });
 
-  it('never lets the line be read as a walking route', () => {
-    setup({ from: SAGAMORE, to: HALL_B, route: routeOf(SAGAMORE, HALL_B) });
-    const note = screen.getByText(/not a walking route/);
-    expect(note.textContent).toMatch(/through walls/);
-    expect(note.textContent).toMatch(/skywalks/);
+  it('says the route follows drawn floors, and never claims a staircase', () => {
+    const route = routeOf(SAGAMORE, HALL_B);
+    setup({ from: SAGAMORE, to: HALL_B, route });
+    expect(screen.getByText(/floors the plans draw/)).toBeTruthy();
+    // The one thing no source here knows. The step may say which stretch the
+    // stairs are on; it may not say "take the stairs" as though it knew.
+    const stairs = route.walk!.legs.filter((leg) => leg.kind === 'stairs');
+    for (const leg of stairs) expect(leg.text).toMatch(/somewhere|off this stretch/i);
+  });
+
+  it('marks an outdoor leg as the straight line it is', () => {
+    // Between two buildings no skywalk joins there is no pavement in the data,
+    // so that leg is a bearing and has to look like one.
+    const far: NavPlace = { kind: 'room', roomId: 'lucas-oil-field' };
+    const route = routeBetween(SAGAMORE, far, READY.fix);
+    setup({ from: SAGAMORE, to: far, route });
+    if (route?.walk) {
+      expect(route.walk.indoors).toBe(false);
+      expect(screen.getByText(/no pavements in the map data/)).toBeTruthy();
+    } else {
+      // No route at all: the summary falls back to the bearing and the note
+      // says the data has no floor for it to follow.
+      expect(screen.getByText(/nothing here has floor drawn/)).toBeTruthy();
+    }
   });
 
   it('drops the walking time from beyond the campus, and says why', () => {
@@ -195,21 +217,23 @@ describe('what it says about the line', () => {
     expect(screen.queryByText(/min\b/)).toBeNull();
   });
 
-  it('warns that a flat map cannot draw the stairs', () => {
-    setup({ from: SAGAMORE, to: HALL_B, route: routeOf(SAGAMORE, HALL_B) });
-    expect(screen.getByText(/Level 2 → Level 1/)).toBeTruthy();
+  it('names the floor it changes to, on the step that changes it', () => {
+    const route = routeOf(SAGAMORE, HALL_B);
+    setup({ from: SAGAMORE, to: HALL_B, route });
+    expect(route.walk!.legs.some((leg) => leg.kind === 'stairs')).toBe(true);
+    expect(screen.getByText(/Change to Level 1/)).toBeTruthy();
   });
 
-  it('draws no line, and no disclaimer, when you are already there', () => {
+  it('draws no route, and no disclaimer, when you are already there', () => {
     setup({ from: HALL_B, to: HALL_B, route: routeOf(HALL_B, HALL_B) });
     expect(screen.getByText('You are already there.')).toBeTruthy();
-    expect(screen.queryByText(/in a straight line/)).toBeNull();
-    expect(screen.queryByText(/not a walking route/)).toBeNull();
+    expect(screen.queryByRole('listitem')).toBeNull();
+    expect(screen.queryByText(/floors the plans draw/)).toBeNull();
   });
 
   it('keeps the summary out of the way while an end is being chosen', () => {
     setup({ from: SAGAMORE, to: HALL_B, editing: 'from', route: routeOf(SAGAMORE, HALL_B) });
-    expect(screen.queryByText(/in a straight line/)).toBeNull();
+    expect(screen.queryByText(/to walk/)).toBeNull();
   });
 });
 

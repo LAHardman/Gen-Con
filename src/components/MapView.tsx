@@ -20,6 +20,7 @@ import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
+import { allVerticals } from '../data/vertical';
 import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
 
 interface Props {
@@ -446,15 +447,13 @@ export function MapView({
       });
       outline.on('click', (event) => {
         L.DomEvent.stopPropagation(event);
-        // A closed building has no rooms drawn to pick, so while a route is
-        // asking for a place it counts as open ground — the point you clicked.
-        // Opening the building and flying to it instead would lose the pick and
-        // take you somewhere you didn't ask to go.
+        // While a route is asking for a place, a building is a way *in* rather
+        // than an answer: what you want from it is one of the rooms inside, and
+        // those aren't drawn until it opens. So this opens it and keeps asking,
+        // and the next tap — on a room — is the one that answers.
         if (handlers.current.picking) {
-          handlers.current.onPickPlace({
-            kind: 'point',
-            position: { lat: event.latlng.lat, lng: event.latlng.lng },
-          });
+          handlers.current.onOpenVenue(venue.id);
+          map.flyToBounds(toLatLngBounds(venueBounds(venue)), { padding: [70, 70], maxZoom: 19 });
           return;
         }
         handlers.current.onSelectRoom(null);
@@ -651,28 +650,92 @@ export function MapView({
     };
   }, [deviceFix]);
 
+  /* --------------------------------------------------------------- stairs */
+  /*
+   * Where you change floor, marked on both floors it joins.
+   *
+   * Drawn only inside the building you have open, because that is the only
+   * building whose floors you can be on — and drawn as a ring rather than a
+   * solid mark, deliberately. No source in this repository says where a
+   * staircase is (see `vertical.ts`); what is known is the stretch of floor it
+   * has to be on, and a ring around that stretch says "along here" where a pin
+   * would say "exactly here" and be making it up.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !openVenueId) return;
+
+    const showing = levelOf(openVenueId, levels);
+    const layers: L.Layer[] = [];
+    for (const link of allVerticals()) {
+      if (link.venueId !== openVenueId) continue;
+      if (link.from !== showing && link.to !== showing) continue;
+      const other = link.from === showing ? link.to : link.from;
+      const marker = L.marker([link.at.lat, link.at.lng], {
+        icon: L.divIcon({
+          className: 'map__stairs',
+          html: '<span>⇅</span>',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        }),
+        pane: 'route',
+        interactive: true,
+        keyboard: false,
+      });
+      marker.bindTooltip(`Stairs and lifts to ${other} — somewhere along here`, {
+        direction: 'top',
+        className: 'map__amenity-tip',
+      });
+      marker.addTo(map);
+      layers.push(marker);
+    }
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [openVenueId, levels]);
+
   /* ---------------------------------------------------------------- routes */
   /*
-   * A dashed line and two marks. Dashed on purpose: a solid line along a road
-   * is a route somebody surveyed, and this is a bearing between two points.
+   * A route is drawn as the legs it is made of, because they are not the same
+   * kind of claim. A walk along a floor is a line over surface the plans drew,
+   * so it is solid. An outdoor leg is a bearing — there are no pavements in the
+   * data — so it stays dashed, as the whole line used to be when the whole line
+   * was a guess.
    */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !route) return;
 
-    const from = L.latLng(route.fromAt.lat, route.fromAt.lng);
-    const to = L.latLng(route.toAt.lat, route.toAt.lng);
     const layers: L.Layer[] = [];
+    const legs = route.walk?.legs ?? [
+      {
+        kind: 'outdoor' as const,
+        points: [route.fromAt, route.toAt],
+        metres: route.straightMetres,
+        text: '',
+        venueId: undefined,
+        level: undefined,
+      },
+    ];
 
-    layers.push(
-      L.polyline([from, to], {
-        className: 'map__route',
-        dashArray: '3 10',
-        weight: 4,
-        pane: 'route',
-        interactive: false,
-      }).addTo(map),
-    );
+    for (const leg of legs) {
+      const points = leg.points.map((point) => L.latLng(point.lat, point.lng));
+      if (points.length < 2) continue;
+      // A leg on a floor the map isn't showing is drawn faintly rather than
+      // hidden: the route goes that way whether or not you are looking at it.
+      const elsewhere =
+        !!leg.venueId && !!leg.level && leg.level !== levelOf(leg.venueId, levels);
+      layers.push(
+        L.polyline(points, {
+          className: `map__route map__route--${leg.kind}${elsewhere ? ' map__route--elsewhere' : ''}`,
+          dashArray: leg.kind === 'outdoor' ? '3 10' : undefined,
+          weight: 5,
+          pane: 'route',
+          interactive: false,
+        }).addTo(map),
+      );
+    }
 
     const endpoint = (at: L.LatLng, kind: 'start' | 'end', label: string) =>
       L.marker(at, {
@@ -689,13 +752,17 @@ export function MapView({
 
     // Where you are standing is already the device dot; a second mark on top of
     // it would just be two marks in one place.
-    if (route.from.kind !== 'device') layers.push(endpoint(from, 'start', 'A'));
-    if (route.to.kind !== 'device') layers.push(endpoint(to, 'end', 'B'));
+    if (route.from.kind !== 'device') {
+      layers.push(endpoint(L.latLng(route.fromAt.lat, route.fromAt.lng), 'start', 'A'));
+    }
+    if (route.to.kind !== 'device') {
+      layers.push(endpoint(L.latLng(route.toAt.lat, route.toAt.lng), 'end', 'B'));
+    }
 
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [route]);
+  }, [route, levels]);
 
   /*
    * Frame a route when it is first drawn, and when either end changes — but not

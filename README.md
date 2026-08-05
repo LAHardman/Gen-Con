@@ -396,29 +396,48 @@ the same place:
 Either end can be changed afterwards, and ⇅ swaps them, which is what makes
 this navigation *between* two places rather than only to one.
 
-**What is drawn is a straight line, and everything about it says so.** It is
-dashed rather than solid, the distance is labelled "in a straight line", and the
-panel spells out that the line goes through walls, ignores the streets, and
-takes no account of the skywalks that are usually the fastest way between these
-buildings. The walking estimate is that straight-line distance at
-`walkingMinutes`' unhurried 70 m/min, and past 3 km it is dropped entirely,
-because a walking time from the next state is a joke rather than an estimate.
+**What is drawn is a walking route wherever the map has floor to walk on.** The
+convention centre's prefunction halls and concourses come from its own plans,
+keyed by colour as "Prefunction/Hallways"; the hotels' corridors come from Gen
+Con's drawings the same way. `walkable.ts` turns those into a grid a metre and a
+half across and searches it with A*, and `route.ts` joins the floors together —
+stairs within a building, skywalks and the tunnel between them — with a second,
+much smaller search over those junctions. A room is not something to route
+*through*: you enter it from the corridor, and that doorway is the last step.
 
-Two ends in the same building on different floors get a note saying so, since a
-flat map cannot draw a staircase — and the map holds the *destination's* floor
-in that case, because that is the one you are walking to. Ends within 25 m of
-each other say "You are already there" instead of drawing a line; that radius
-is wide because the ends are room centres, and the doorway of a hall the size of
-Exhibit Hall A is already tens of metres from its middle.
+So Exhibit Hall B to the Marriott Ballroom comes out as the seven legs it really
+is — along Level 1, up to Level 2, over the skywalk to the Westin, through it,
+over the second skywalk, and along the Marriott's 2nd floor — rather than a
+620 m line through six walls. The panel lists them, and the map draws each leg
+on the floor it belongs to.
 
-A real walking route would need the pedestrian network — pavements, lobbies,
-and above all the skywalks. Half of that is now here: `connections.ts` holds
-every covered crossing on the campus, and the map draws them (see *Getting
-between buildings*). What it does not hold is the corridors inside the buildings
-that join one span to the next, so the spans are a set of disconnected bridges
-rather than a graph anything can be routed over. Until they connect, turn-by-turn
-directions from two points would be a confident-sounding guess. A bearing and a
-range are what the data actually supports.
+**Rooms are entered at their doors.** A room's centre is where its label goes;
+for a hall the size of Exhibit Hall A that is eighty metres from any door, so a
+route measured centre to centre is wrong by the length of the room at both ends.
+No source here marks a door — but a room is entered from the corridor beside it,
+so the point on its outline nearest walkable floor is one, to within the width
+of the door. 117 of the 146 rooms get one; the rest are on floors with no
+corridor drawn, and keep their centres because there is nothing to be near.
+
+**Two things it will not claim.** Outdoors there is no pavement network in this
+repository — OpenStreetMap has the streets but not as anything walkable, with no
+crossings or kerbs — so a leg between buildings that no skywalk joins is drawn
+dashed and called a straight line. And **no source here marks a staircase**: the
+convention centre's plans key five kinds of space and vertical circulation is
+not one of them. What *is* certain is that a stair has to land on walkable floor
+on both storeys, so it lies in the overlap of the two — and that is what
+`vertical.ts` computes and what the map marks, as a dashed ring rather than a
+pin. The step says "the stairs and lifts are off this stretch", not "take the
+stairs", because the stretch is known and the step is not.
+
+Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
+is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
+sheet even letters it DOWN TO 1ST FLOOR; a lift bank is a run of dull-yellow
+squares. Neither collides with the street grey on the same sheets. Reading them
+is a fourth and fifth class in `venue-plans.mjs`'s palette and is the right way
+to finish this; the convention centre would still need Gen Con's tile pyramid,
+and `gencon-tiles.mjs` currently answers 403 from CloudFront itself, so that
+source has moved since it was written.
 
 ### How venues are positioned
 
@@ -891,6 +910,9 @@ src/
     search.ts        Ranking rooms and events against what you type
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
+    walkable.ts      The floor you can stand on, as a grid, and A* over it
+    vertical.ts      Where a route changes floor, and how sure that is
+    route.ts         Joins the floors into one graph and searches it
     venue-plan.ts    Hotel hallways and room outlines, read from plans (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
@@ -928,14 +950,13 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a straight line between two points (see above), and the piece
-that would make them a route is now half-built. The skywalk and tunnel spans are
-in `connections.ts` and the hotels' corridors are in `venue-plan.ts` — but the
-two have never been joined: nothing says which corridor a given bridge lands in,
-and no floor has the doors, stairs or lifts that would let a path leave one
-storey for another. Joining them, and giving each venue its entrances, would
-turn the bearing into a route — including the honest answer that the way there
-is up two floors and across a bridge.
+Directions are a walking route now (see above), and what is left is the two
+things it still guesses. Vertical circulation is inferred from where floors
+overlap rather than read off the drawings that show it — the note above says how
+to read it. And outdoors there is no pavement network at all, so a route between
+buildings no skywalk joins is a straight line: the streets are in OpenStreetMap,
+but as carriageways rather than as anything walkable, and turning them into a
+network means crossings and kerbs nobody has pulled yet.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

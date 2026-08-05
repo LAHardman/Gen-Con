@@ -1368,3 +1368,91 @@ body {
     display: none;
   }
 }
+
+/* --------------------------------------------------------- walking routes */
+
+/* A leg along a floor is a line over surface somebody drew, so it is solid. An
+   outdoor leg is a bearing — there are no pavements in the data — and stays
+   dashed, as the whole route used to be when the whole route was a guess. */
+.map__route {
+  stroke: var(--accent);
+  stroke-opacity: 0.95;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.map__route--outdoor {
+  stroke-opacity: 0.8;
+}
+
+.map__route--skywalk,
+.map__route--tunnel {
+  stroke: #f0c471;
+}
+
+.map__route--stairs {
+  stroke: #f0c471;
+  stroke-width: 7;
+  stroke-opacity: 0.9;
+}
+
+/* A leg on a floor you aren't looking at. It still goes that way; you just
+   aren't being shown that storey. */
+.map__route--elsewhere {
+  stroke-opacity: 0.28;
+}
+
+/* Where you change floor. A ring, not a pin: what is known is the stretch of
+   floor the stairs are on, not the step you put your foot on. */
+.map__stairs {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px dashed #f0c471;
+  background: rgba(26, 29, 40, 0.85);
+  color: #f0c471;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: help;
+}
+
+.nav__steps {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nav__step {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 9px;
+  border-left: 3px solid var(--accent);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.nav__step--skywalk,
+.nav__step--tunnel,
+.nav__step--stairs {
+  border-left-color: #f0c471;
+}
+
+/* Dashed, to match the leg it describes on the map. */
+.nav__step--outdoor {
+  border-left-style: dashed;
+  color: var(--text-muted);
+}
+
+.nav__step-metres {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}

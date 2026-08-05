@@ -174,7 +174,8 @@ export function NavPanel({
 
           {pickingOnMap ? (
             <p className="nav__hint">
-              Tap a room to start from it, or anywhere else on the map to drop a point.
+              Tap a building to look inside it, a room to {editing === 'from' ? 'start from' : 'go to'}{' '}
+              it, or open ground to drop a point.
             </p>
           ) : (
             <>
@@ -240,30 +241,42 @@ export function NavPanel({
           ) : (
             <>
               <p className="nav__distance">
-                <strong>{formatDistance(route.metres)}</strong> in a straight line
+                <strong>{formatDistance(route.metres)}</strong>
+                {route.walk ? ' to walk' : ' in a straight line'}
                 {route.minutes !== null && (
                   <>
                     {' · '}
-                    <strong>
-                      {route.minutes} min
-                    </strong>{' '}
-                    walk
+                    <strong>{route.minutes} min</strong>
                   </>
                 )}
               </p>
               {route.minutes === null && (
                 <p className="nav__leg">Too far to walk — this is the distance to the campus.</p>
               )}
-              {route.floorChange && (
-                <p className="nav__leg">
-                  Same building: {route.floorChange.from} → {route.floorChange.to}. The line is drawn
-                  flat, so it can’t show the stairs.
-                </p>
-              )}
-              {route.venueChange && (
-                <p className="nav__leg">
-                  {route.venueChange.from} → {route.venueChange.to}
-                </p>
+
+              {route.walk ? (
+                <ol className="nav__steps">
+                  {route.walk.legs.map((leg, at) => (
+                    <li key={`${leg.kind}-${at}`} className={`nav__step nav__step--${leg.kind}`}>
+                      <span className="nav__step-text">{leg.text}</span>
+                      <span className="nav__step-metres">{formatDistance(leg.metres)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <>
+                  {route.floorChange && (
+                    <p className="nav__leg">
+                      Same building: {route.floorChange.from} → {route.floorChange.to}. The line is
+                      drawn flat, so it can’t show the stairs.
+                    </p>
+                  )}
+                  {route.venueChange && (
+                    <p className="nav__leg">
+                      {route.venueChange.from} → {route.venueChange.to}
+                    </p>
+                  )}
+                </>
               )}
             </>
           )}
@@ -272,9 +285,11 @@ export function NavPanel({
 
       {route && !editing && !route.arrived && (
         <p className="nav__note">
-          A straight line between the two, not a walking route: it goes through walls, ignores the
-          streets, and takes no account of the skywalks that are usually the quickest way between
-          these buildings.
+          {route.walk
+            ? route.walk.indoors
+              ? 'Followed along the floors the plans draw — corridors, skywalks and the tunnel. Where it changes floor it names the stretch the stairs are on rather than a staircase, because no plan here marks one.'
+              : 'Indoors this follows the floors the plans draw. The dashed leg is outdoors, where there are no pavements in the map data, so it is a straight line rather than a route.'
+            : 'A straight line between the two, not a walking route: nothing here has floor drawn for it to follow, so it goes through walls and ignores the streets.'}
         </p>
       )}
     </section>
