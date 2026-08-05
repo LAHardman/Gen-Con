@@ -419,16 +419,24 @@ so the point on its outline nearest walkable floor is one, to within the width
 of the door. 117 of the 146 rooms get one; the rest are on floors with no
 corridor drawn, and keep their centres because there is nothing to be near.
 
-**Two things it will not claim.** Outdoors there is no pavement network in this
-repository — OpenStreetMap has the streets but not as anything walkable, with no
-crossings or kerbs — so a leg between buildings that no skywalk joins is drawn
-dashed and called a straight line. And **no source here marks a staircase**: the
-convention centre's plans key five kinds of space and vertical circulation is
-not one of them. What *is* certain is that a stair has to land on walkable floor
-on both storeys, so it lies in the overlap of the two — and that is what
-`vertical.ts` computes and what the map marks, as a dashed ring rather than a
-pin. The step says "the stairs and lifts are off this stretch", not "take the
-stairs", because the stretch is known and the step is not.
+**Stairs come two ways, and a link records which.** Gen Con's own sheets of the
+hotels draw the thing itself — an escalator is a hatched grey block, and beside
+the big ones the sheet letters UP TO 2ND FLOOR — so `venue-plans.mjs` reads
+those out, and a block read on two adjacent floors in the same spot is one shaft
+seen twice. That is a measurement, and it covers the hotels.
+
+Where no sheet shows one the link is **inferred**, and the map says so by
+drawing a dashed ring rather than a pin. A stair has to land on walkable floor
+on both storeys, so it lies in the overlap of the two floors' circulation: that
+much is certain, and where in the overlap is not. The step reads "the stairs and
+lifts are off this stretch" rather than "take the stairs", because the stretch is
+known and the step is not. **The convention centre is still inferred**, and it
+is the building with the most floor-changing on it — see below.
+
+**Outdoors it will not claim a route at all.** There is no pavement network in
+this repository: OpenStreetMap has the streets, but as carriageways rather than
+as anything walkable, with no crossings or kerbs. So a leg between buildings
+that no skywalk joins is drawn dashed and called a straight line.
 
 Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
 is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
@@ -439,16 +447,41 @@ to finish this.
 
 The convention centre needs Gen Con's tile pyramid rather than a hotel sheet,
 and that is live: `npm run plans:campus` fetches it from
-`…/maps/v9/floor-<level>/{z}/{x}/{y}.png`. **Two things about that pyramid look
-like the source being gone when it isn't.** It is not a Web Mercator pyramid —
-it is shallow and starts around z2, in the `CRS.Simple` style Gen Con's own
-Leaflet map uses — so a URL built from slippy-map coordinates asks for an object
-that never existed. And an absent object on that bucket answers **403, not
-404**, so a wrong guess is indistinguishable from a refusal. `v7` and `v8`
-answer as well; `v10` does not, so `v9` is current. Note also that
-`gencon.com/map` itself is no longer a floor-plan viewer — it serves Gen Con's
-"Looking Glass" exhibitor browser, whose tiles at `/lg/tiles/v1/` are a galaxy
-backdrop rather than a plan of anything.
+`…/maps/v9/floor-<level>/{z}/{x}/{y}.png` and stitches one PNG per campus level.
+Level 1 does draw its escalators — two of them, hatched on the Hoosier and
+Speedway concourses, each lettered UP TO 2ND FLOOR.
+
+What is missing is a way to *place* that sheet. `fit` puts a plan on the map by
+taking its coloured area to **be** the building and aligning that bounding box
+with the venue's, searching a third of a building either side. That is exactly
+right for a screenshot of one hotel and hopeless for a sheet covering a mile of
+downtown, where the colour is everything and the building is a fortieth of it:
+run `node scripts/venue-plans.mjs --campus` and the convention centre lands at
+0.05 m/px and 32% overlap, against 76–89% for every hotel. What these sheets
+need is a georeference rather than a fit — they are one level of a pyramid at a
+fixed scale drawn with south at the top, so two landmarks with known coordinates
+fix scale and offset for every building at once, the way
+`plans/georeference.json` already does for the PDFs. Until that exists the
+campus sheets sit behind `--campus`, so a rebuild cannot quietly replace good
+hotel geometry with a misplaced convention centre.
+
+**Three things about that pyramid look like a dead source when they aren't.** It
+is not a Web Mercator pyramid — it is shallow and starts around z2, in the
+`CRS.Simple` style Gen Con's own Leaflet map uses — so a URL built from
+slippy-map coordinates asks for an object that never existed. An absent object on
+that bucket answers **403, not 404**, so a wrong guess is indistinguishable from
+a refusal. And `gencon.com/map` is no longer a floor-plan viewer at all: it
+serves Gen Con's "Looking Glass" exhibitor browser, whose tiles at
+`/lg/tiles/v1/` are a galaxy backdrop rather than a plan of anything. `v7` and
+`v8` still answer; `v10` does not, so `v9` is current.
+
+The fetcher takes the deepest level that stays inside a tile budget rather than
+the deepest that exists, and says which it picked. The pyramid is a plain power
+of two — z3 is 8×8, z5 is 32×32, z7 is 128×128 — and z7 would be sixteen
+thousand requests stitching to 32768×32768, four gigabytes of pixels before
+anything read them. z5 puts the whole campus in 8192 pixels and the convention
+centre in a couple of thousand, which is the same grade as Gen Con's own
+single-building screenshots. `--zoom N` overrides it.
 
 ### How venues are positioned
 
@@ -924,7 +957,7 @@ src/
     walkable.ts      The floor you can stand on, as a grid, and A* over it
     vertical.ts      Where a route changes floor, and how sure that is
     route.ts         Joins the floors into one graph and searches it
-    venue-plan.ts    Hotel hallways and room outlines, read from plans (generated)
+    venue-plan.ts    Hotel hallways, room outlines and stairs (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
     useEventFeed.ts       Loads public/events.json

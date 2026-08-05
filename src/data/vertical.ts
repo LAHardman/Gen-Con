@@ -1,30 +1,32 @@
 /**
  * Where you change floor: the stairs, escalators and lifts.
  *
- * **None of this is surveyed, and the map says so wherever it draws it.** No
- * source this repository has marks a staircase. The convention centre's plans
- * key their spaces by colour and the five colours are exhibit halls, meeting
- * rooms, prefunction, restrooms and service — vertical circulation is not one
- * of them. Gen Con's own drawings of the hotels *do* draw escalators and lift
- * banks, and reading those is the right way to do this (see the note at the
- * foot of this file); until that is done, what is here is inferred.
+ * These come two ways, and which one a link came from is recorded on it,
+ * because they are not worth the same.
  *
- * The inference is weak but not arbitrary, and it is worth being precise about
- * what it can and cannot claim. A staircase between two floors has to land on
- * walkable floor at both ends — it cannot arrive inside a locked ballroom — so
- * it must lie within the overlap of the two floors' circulation. That much is
- * certain. What is *not* certain is where in that overlap it is: for a hotel
- * whose corridors stack along their whole length, the overlap is the corridor,
- * and the middle of it is a guess.
+ * **Drawn** (`certainty: 'plan'`). Gen Con's own sheets of the hotels draw the
+ * thing itself: an escalator is a hatched grey block, and beside the big ones
+ * the sheet letters UP TO 2ND FLOOR. `venue-plans.mjs` reads those, and a block
+ * read on two adjacent floors within `SAME_SHAFT` of the same spot is one
+ * shaft seen twice. That is a measurement.
  *
- * So a link is placed at the centre of the largest piece of that overlap, and
- * carries `certainty: 'region'` to say that the *area* is right and the point
- * within it is not. The map draws these differently from anything measured, and
- * a route that uses one says "somewhere along here" rather than naming a
- * staircase that may not be there.
+ * **Inferred** (`certainty: 'region'`), where no sheet shows one. A staircase
+ * has to land on walkable floor at both ends — it cannot arrive inside a locked
+ * ballroom — so it must lie within the overlap of the two floors' circulation.
+ * That much is certain. Where *in* that overlap is not: for a hotel whose
+ * corridors stack along their whole length the overlap is the corridor, and the
+ * middle of it is a guess. So the link goes at the centre of the largest piece
+ * of the overlap, the map draws it as a ring rather than a pin, and a route
+ * using one says "off this stretch" rather than naming a staircase.
+ *
+ * The convention centre is still inferred, and it is the one that matters most.
+ * Its own plans are the architect's and key five kinds of space, none of them
+ * vertical; Gen Con's campus sheets *do* draw its escalators — see the foot of
+ * this file — but those cannot yet be placed on the map.
  */
 
 import { VENUE_LEVELS } from './venues';
+import { VENUE_VERTICAL } from './venue-plan';
 import { between, cellCentre, cellOf, floorOf, toLatLng, toPoint, type Floor } from './walkable';
 import type { LatLng } from '../utils/geo';
 
@@ -36,14 +38,22 @@ export interface Vertical {
   at: LatLng;
   /**
    * `region` — the overlap it lies in is certain, the point within it is not.
-   * `plan` — read off a drawing that draws the thing itself. Nothing is `plan`
-   * yet; the reader for it is described at the foot of this file.
+   * `plan` — read off a sheet that draws the thing itself.
    */
   certainty: 'region' | 'plan';
 }
 
 /** Below this, an overlap is two corridors clipping past each other. Square metres. */
 const MIN_OVERLAP = 12;
+
+/**
+ * How near two drawn marks must be to be the same shaft seen from two floors.
+ *
+ * A staircase is in the same place on both storeys, so the two readings of it
+ * should land on top of each other; this is slack for the fit rather than for
+ * the building.
+ */
+const SAME_SHAFT = 18;
 
 /** A flight of stairs costs about this much walking, one floor. Metres. */
 export const FLOOR_CHANGE_METRES = 25;
@@ -98,6 +108,46 @@ function largestPiece(upper: Floor, both: Uint8Array) {
   return best;
 }
 
+/**
+ * The stairs the plans actually draw, where they draw them.
+ *
+ * `venue-plans.mjs` reads the hatched grey blocks off Gen Con's own sheets —
+ * the shapes it letters UP TO 2ND FLOOR — and a shaft read on two adjacent
+ * floors is one shaft, so a mark on each within `SAME_SHAFT` of the other is a
+ * link between them. This is the measured answer, and it is preferred to the
+ * inference below wherever both floors have one.
+ */
+function drawnBetween(venueId: string, lowerLevel: string, upperLevel: string): Vertical[] {
+  const below = VENUE_VERTICAL[`${venueId}/${lowerLevel}`] ?? [];
+  const above = VENUE_VERTICAL[`${venueId}/${upperLevel}`] ?? [];
+  if (!below.length || !above.length) return [];
+
+  const links: Vertical[] = [];
+  const taken = new Set<number>();
+  for (const [lat, lng] of below) {
+    let best: { at: LatLng; away: number; index: number } | null = null;
+    for (let index = 0; index < above.length; index += 1) {
+      if (taken.has(index)) continue;
+      const [upLat, upLng] = above[index];
+      const away = between(toPoint({ lat, lng }), toPoint({ lat: upLat, lng: upLng }));
+      if (away > SAME_SHAFT) continue;
+      if (!best || away < best.away) best = { at: { lat: upLat, lng: upLng }, away, index };
+    }
+    if (!best) continue;
+    taken.add(best.index);
+    // The two readings straddle the real shaft; halfway is the better guess at
+    // it than either on its own.
+    links.push({
+      venueId,
+      from: lowerLevel,
+      to: upperLevel,
+      at: { lat: (lat + best.at.lat) / 2, lng: (lng + best.at.lng) / 2 },
+      certainty: 'plan',
+    });
+  }
+  return links;
+}
+
 function linkBetween(venueId: string, lowerLevel: string, upperLevel: string): Vertical | null {
   const lower = floorOf(venueId, lowerLevel);
   const upper = floorOf(venueId, upperLevel);
@@ -146,6 +196,12 @@ export function verticalsOf(venueId: string): Vertical[] {
   // Only between floors that are adjacent in the building's own ordering: a
   // link from the 2nd to the 9th would be a lift shaft this cannot see.
   for (let i = 0; i + 1 < levels.length; i += 1) {
+    // What the drawings show, and only failing that what the floors imply.
+    const drawn = drawnBetween(venueId, levels[i], levels[i + 1]);
+    if (drawn.length) {
+      links.push(...drawn);
+      continue;
+    }
     const link = linkBetween(venueId, levels[i], levels[i + 1]);
     if (link) links.push(link);
   }
@@ -162,34 +218,26 @@ export const verticalPoint = (link: Vertical) => toPoint(link.at);
 
 /*
  * ---------------------------------------------------------------------------
- * How to replace this with something measured
+ * What is left: the convention centre
  *
- * Gen Con's own plans of the hotels — the sheets in `plans/venues/`, which
- * `venue-plans.mjs` already reads for corridors — draw the vertical
- * circulation. An escalator is a hatched strip in two greys, #616264 and
- * #949599, both very slightly blue (blue exceeds red by 3 or 4); the Westin's
- * 2nd-floor sheet even letters it DOWN TO 1ST FLOOR. A lift bank is a run of
- * small squares in a dull yellow around #ddd779. Neither collides with the
- * street grey on the same sheets, which is a much lighter #c8c9cd, or with the
- * road markings at a neutral #8a8a8a.
+ * The nine hotels are read from their own sheets. The convention centre is not,
+ * and it is the building with the most floor-changing on it.
  *
- * So the reader is a fourth and fifth class in that script's PALETTE, clustered
- * the way its halls already are, and its output drops in here as
- * `certainty: 'plan'` links, replacing the inference for the nine buildings it
- * covers.
+ * Gen Con's tile pyramid does draw its escalators — `npm run plans:campus`
+ * fetches it, and level 1 shows two of them hatched on the Hoosier and Speedway
+ * concourses, each lettered UP TO 2ND FLOOR. `venue-plans.mjs` will read those
+ * blocks the moment it can place the sheet. What it cannot yet do is place it:
+ * `fit` puts a plan on the map by taking its coloured area to *be* the building
+ * and aligning that box with the venue's, which is exactly right for a
+ * screenshot of one hotel and hopeless for a sheet of a mile of downtown. Run
+ * it with `--campus` and the convention centre lands at 0.05 m/px and 32%
+ * overlap, against 76-89% for every hotel.
  *
- * The convention centre has none of its own: its plans are the architect's
- * rather than Gen Con's, and they draw no stairs at all. But Gen Con's tile
- * pyramid covers the whole campus including it, and it is live —
- *
- *     https://d2lkgynick4c0n.cloudfront.net/maps/v9/floor-<level>/{z}/{x}/{y}.png
- *
- * — which `gencon-tiles.mjs` already fetches. Two things about it are worth
- * writing down, because both look like the source being gone when it isn't.
- * It is not a Web Mercator pyramid: it is shallow and starts around z2, in the
- * `CRS.Simple` style Gen Con's own Leaflet map uses, so a request built from
- * slippy-map coordinates (z16 and a five-figure x) asks for an object that was
- * never there. And an absent object on that bucket answers **403, not 404**, so
- * a wrong guess looks exactly like a refusal. `v7` and `v8` answer too; `v10`
- * does not, so `v9` is current.
+ * The fix is a georeference rather than a fit, and these sheets can have one:
+ * they are a single level of a pyramid at a fixed scale, drawn with south at
+ * the top, so two landmarks with known coordinates fix scale and offset for
+ * every building on the sheet at once — the same thing
+ * `plans/georeference.json` already does for the PDFs. Until then the campus
+ * sheets are behind `--campus` so a rebuild cannot quietly replace good hotel
+ * geometry with a misplaced convention centre.
  */
