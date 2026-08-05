@@ -16,9 +16,11 @@ import {
   type Venue,
 } from '../data/venues';
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
+import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
+import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
 
 interface Props {
   selectedRoomId: string | null;
@@ -31,11 +33,12 @@ interface Props {
   showAmenities: boolean;
   /** The floor each building is showing, where it isn't showing its lowest. */
   levels: Record<string, string>;
-  /** The building the map is looking at, so the floor picker knows whose floors to offer. */
-  onVenueInView: (venueId: string | null) => void;
+  /** The building that is open — the only one drawing an inside. */
+  openVenueId: string | null;
+  onOpenVenue: (venueId: string | null) => void;
   /**
-   * The next click picks a place for a route rather than selecting a room. A
-   * room click means that room; anywhere else means that point.
+   * The next click picks a place for a route rather than opening a building or
+   * a room. A room click means that room; anywhere else means that point.
    */
   picking: boolean;
   onPickPlace: (place: NavPlace) => void;
@@ -47,6 +50,9 @@ interface Props {
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
 const ROOM_LABEL_MIN_ZOOM = 16;
+
+/** And street names, once you are near enough a street to be walking it. */
+const LABEL_MIN_ZOOM = 17;
 
 /**
  * A label is only drawn once its room is big enough on screen to hold one.
@@ -75,7 +81,7 @@ function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
 }
 
 /** OSM footprint and plan rings are both [latitude, longitude] — Leaflet's order. */
-function toLatLngs(ring: Venue['footprint'] | PlanRing) {
+function toLatLngs(ring: Venue['footprint'] | PlanRing | Line) {
   return ring.map(([lat, lng]) => L.latLng(lat, lng));
 }
 
@@ -97,36 +103,6 @@ function planLevelOf(venueId: string, levels: Record<string, string>) {
   return showing && sheets.includes(showing) ? showing : sheets[0];
 }
 
-/**
- * Which building the map is looking at, for the floor picker to offer floors of.
- *
- * The one under the middle of the screen, which is where you point a map at
- * what you want; failing that, the one filling most of it, so a building you
- * have zoomed into but framed off-centre still counts. Below `SHARE` of the
- * view nothing is being looked at in particular and the picker stays away.
- */
-const SHARE = 0.12;
-
-function venueInView(map: L.Map): string | null {
-  const view = map.getBounds();
-  const centre = map.getCenter();
-  const viewArea = (view.getNorth() - view.getSouth()) * (view.getEast() - view.getWest());
-
-  let best: { id: string; share: number } | null = null;
-  for (const venue of VENUES) {
-    const [nw, se] = venueBounds(venue);
-    const bounds = L.latLngBounds([se.lat, nw.lng], [nw.lat, se.lng]);
-    if (bounds.contains(centre)) return venue.id;
-
-    const lat = Math.min(bounds.getNorth(), view.getNorth()) - Math.max(bounds.getSouth(), view.getSouth());
-    const lng = Math.min(bounds.getEast(), view.getEast()) - Math.max(bounds.getWest(), view.getWest());
-    if (lat <= 0 || lng <= 0) continue;
-    const share = (lat * lng) / viewArea;
-    if (!best || share > best.share) best = { id: venue.id, share };
-  }
-  return best && best.share >= SHARE ? best.id : null;
-}
-
 export function MapView({
   selectedRoomId,
   onSelectRoom,
@@ -136,7 +112,8 @@ export function MapView({
   eventCounts,
   showAmenities,
   levels,
-  onVenueInView,
+  openVenueId,
+  onOpenVenue,
   picking,
   onPickPlace,
   route,
@@ -145,14 +122,16 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const labelLayerRef = useRef<L.TileLayer | null>(null);
   // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
   const roomLayersRef = useRef(new Map<string, L.Path>());
+  const venueLayersRef = useRef(new Map<string, L.Path>());
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
-  // `picking` rides along for the same reason: the room click handlers are
-  // bound once, and have to read whether a route is asking for a place *now*.
-  const handlers = useRef({ onSelectRoom, onOpenRoom, onPickPlace, picking });
-  handlers.current = { onSelectRoom, onOpenRoom, onPickPlace, picking };
+  // `picking` rides along for the same reason: the click handlers are bound
+  // once, and have to read whether a route is asking for a place *now*.
+  const handlers = useRef({ onSelectRoom, onOpenRoom, onOpenVenue, onPickPlace, picking });
+  handlers.current = { onSelectRoom, onOpenRoom, onOpenVenue, onPickPlace, picking };
 
   const allBounds = useMemo(() => {
     const bounds = L.latLngBounds([]);
@@ -176,6 +155,13 @@ export function MapView({
       touchZoom: true,
       maxZoom: 21,
       minZoom: 13,
+      // Leaflet draws vectors into one SVG sized to the screen plus a margin,
+      // and redraws it only when a drag ends. At the stock margin of a tenth of
+      // the screen, a drag of any length runs off the edge of what was drawn
+      // and rooms vanish until you let go. The whole campus is a few hundred
+      // shapes, so a margin of six-tenths — over three times the area — costs
+      // little and outruns any drag.
+      renderer: L.svg({ padding: 0.6 }),
     });
 
     // The building's fabric belongs under the rooms drawn on top of it, and
@@ -188,8 +174,27 @@ export function MapView({
       detailPane.style.pointerEvents = 'none';
     }
 
+    // The skywalks cross over the streets and over the rooms either side of
+    // them, so they are drawn over both — above the overlays (400), below the
+    // markers (600).
+    map.createPane('connections');
+    const connectionPane = map.getPane('connections');
+    if (connectionPane) connectionPane.style.zIndex = '450';
+
+    // Street names belong on top of the buildings, not under them. Everything
+    // this app draws is opaque enough to bury the basemap's own labels, and a
+    // map you can't read the streets off is no use for getting anywhere — so
+    // the labels are drawn again above the lot, in a pane of their own above
+    // the overlays (400) and the markers (600).
+    map.createPane('labels');
+    const labelPane = map.getPane('labels');
+    if (labelPane) {
+      labelPane.style.zIndex = '650';
+      labelPane.style.pointerEvents = 'none';
+    }
+
     // A route is the thing you are following, so nothing on the map may cover
-    // it — above the room labels in the tooltip pane (650), below the popups
+    // it — above the street names and the room labels both, below the popups
     // (700). Nothing in it is clickable.
     map.createPane('route');
     const routePane = map.getPane('route');
@@ -200,6 +205,8 @@ export function MapView({
 
     map.fitBounds(allBounds, { padding: [40, 40] });
     map.on('click', (event) => {
+      // While a route is asking for a place, a click on open ground is that
+      // place — and must not also shut the building you are looking inside.
       if (handlers.current.picking) {
         handlers.current.onPickPlace({
           kind: 'point',
@@ -207,7 +214,10 @@ export function MapView({
         });
         return;
       }
+      // Otherwise clicking off a building shuts it: the campus goes back to
+      // outlines, which is the view you pick the next building from.
       handlers.current.onSelectRoom(null);
+      handlers.current.onOpenVenue(null);
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -225,19 +235,6 @@ export function MapView({
     };
   }, [allBounds]);
 
-  /* ------------------------------------------------------- building in view */
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const report = () => onVenueInView(venueInView(map));
-    report();
-    map.on('moveend zoomend', report);
-    return () => {
-      map.off('moveend zoomend', report);
-    };
-  }, [onVenueInView]);
-
   /* --------------------------------------------------------------- basemap */
   useEffect(() => {
     const map = mapRef.current;
@@ -245,6 +242,8 @@ export function MapView({
 
     const basemap = BASEMAPS[basemapId] ?? BASEMAPS.dark;
     tileLayerRef.current?.remove();
+    labelLayerRef.current?.remove();
+
     const layer = L.tileLayer(basemap.url, {
       attribution: basemap.attribution,
       maxZoom: 21,
@@ -252,11 +251,34 @@ export function MapView({
       // last real tile rather than showing blank squares.
       maxNativeZoom: basemap.maxNativeZoom,
       subdomains: basemap.subdomains ?? 'abc',
-      className: basemap.filtered ? 'map__tiles map__tiles--filtered' : 'map__tiles',
+      // The id class is what lets one tileset be pushed harder than another —
+      // see `.map__tiles--dark`, whose streets need it.
+      className: `map__tiles map__tiles--${basemap.id}`,
+      // A ring of tiles either side of the screen, so a drag runs onto tiles
+      // that are already there instead of onto blank squares.
+      keepBuffer: 4,
     });
     layer.addTo(map);
     layer.bringToBack();
     tileLayerRef.current = layer;
+
+    const labels = L.tileLayer(basemap.labelsUrl, {
+      maxZoom: 21,
+      // Street names arrive when you are close enough for them to mean
+      // something. Over the whole campus they are a screenful of type telling
+      // you what you already know — that this is downtown Indianapolis — and
+      // they bury the buildings, which at that zoom is the only thing to pick.
+      minZoom: LABEL_MIN_ZOOM,
+      maxNativeZoom: basemap.maxNativeZoom,
+      subdomains: basemap.subdomains ?? 'abc',
+      // Not the id class: the writing is already legible and doesn't want
+      // whatever is being done to the map underneath it.
+      className: 'map__tiles',
+      pane: 'labels',
+      keepBuffer: 4,
+    });
+    labels.addTo(map);
+    labelLayerRef.current = labels;
   }, [basemapId]);
 
   /* -------------------------------------------------- floor-plan geometry */
@@ -274,6 +296,7 @@ export function MapView({
     const layers: L.Layer[] = [];
 
     for (const venue of VENUES) {
+      if (venue.id !== openVenueId) continue;
       const level = planLevelOf(venue.id, levels);
       if (!level) continue;
 
@@ -284,7 +307,7 @@ export function MapView({
           pane: 'plan-detail',
           interactive: false,
         };
-        // An airwall is a line across a hall, not an enclosure.
+          // An airwall is a line across a hall, not an enclosure.
         const layer =
           shape.kind === 'divider' ? L.polyline(points, options) : L.polygon(points, options);
         layer.addTo(map);
@@ -292,10 +315,75 @@ export function MapView({
       }
     }
 
+    // The hotels' halls, read off Gen Con's plans of them by colour. Each is a
+    // polygon with holes — the circulation on a hotel floor is one connected
+    // thing that runs round the rooms, so its outside alone would cover them.
+    const halls = openVenueId
+      ? (VENUE_HALLS[`${openVenueId}/${levelOf(openVenueId, levels)}`] ?? [])
+      : [];
+    for (const rings of halls) {
+      const layer = L.polygon(rings.map((ring) => toLatLngs(ring)), {
+        className: 'map__plan map__plan--circulation',
+        pane: 'plan-detail',
+        interactive: false,
+      });
+      layer.addTo(map);
+      layers.push(layer);
+    }
+
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [levels]);
+  }, [levels, openVenueId]);
+
+  /* ----------------------------------------------------------- connections */
+  /*
+   * Skywalks and the tunnel: how you get between buildings in August without
+   * going outside, and the one thing about this campus a street map can't tell
+   * you.
+   *
+   * They belong to a floor, though — the network runs at the second level
+   * throughout — so a span drawn across a building you have open is either the
+   * way to the next hotel or a line over your head. Which it is depends on the
+   * floor, so an open building draws only the spans that reach it on the floor
+   * it is showing. With nothing open they all draw: that view is the campus,
+   * and where the covered crossings are is the most useful thing on it.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const layers: L.Layer[] = [];
+    for (const connection of CONNECTIONS) {
+      if (!connectionShown(connection, openVenueId, openVenueId ? levelOf(openVenueId, levels) : undefined)) {
+        continue;
+      }
+      const points = toLatLngs(connection.line);
+      // A casing wide enough to notice and to put a pointer on, and a dashed
+      // core over it — one line drawn twice, as a map draws a path.
+      const casing = L.polyline(points, {
+        className: `map__link map__link--${connection.kind}`,
+        pane: 'connections',
+        interactive: true,
+      });
+      casing.bindTooltip(connection.kind === 'skywalk' ? 'Skywalk' : 'Tunnel', {
+        direction: 'top',
+        className: 'map__link-tip',
+      });
+      const core = L.polyline(points, {
+        className: `map__link-core map__link--${connection.kind}`,
+        pane: 'connections',
+        interactive: false,
+      });
+      casing.addTo(map);
+      core.addTo(map);
+      layers.push(casing, core);
+    }
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [openVenueId, levels]);
 
   /* ------------------------------------------------------------- amenities */
   /*
@@ -314,6 +402,7 @@ export function MapView({
     const layers: L.Layer[] = [];
 
     for (const amenity of AMENITIES) {
+      if (amenity.venueId !== openVenueId) continue;
       if (amenity.level !== levelOf(amenity.venueId, levels)) continue;
       const marker = L.marker([amenity.position.lat, amenity.position.lng], {
         icon: L.divIcon({
@@ -336,7 +425,7 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
     };
-  }, [showAmenities, levels]);
+  }, [showAmenities, levels, openVenueId]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {
@@ -347,13 +436,37 @@ export function MapView({
 
     // Venue outlines: traced from the building's own floor plans where there
     // are any, and otherwise the real footprint straight from OpenStreetMap.
+    // A building is what you click, so the outline is the thing that takes the
+    // click — closed it is a filled shape asking to be opened, open it is a
+    // line round the rooms inside it.
     for (const venue of VENUES) {
       const outline = L.polygon(toLatLngs(venueOutline(venue)), {
         className: 'map__venue',
-        interactive: false,
+        interactive: true,
+      });
+      outline.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        // A closed building has no rooms drawn to pick, so while a route is
+        // asking for a place it counts as open ground — the point you clicked.
+        // Opening the building and flying to it instead would lose the pick and
+        // take you somewhere you didn't ask to go.
+        if (handlers.current.picking) {
+          handlers.current.onPickPlace({
+            kind: 'point',
+            position: { lat: event.latlng.lat, lng: event.latlng.lng },
+          });
+          return;
+        }
+        handlers.current.onSelectRoom(null);
+        handlers.current.onOpenVenue(venue.id);
+        // Opening a building at campus zoom would draw an interior too small to
+        // read, so opening it goes there. Capped, because the smallest venues
+        // would otherwise fill the screen at a zoom the basemap can't serve.
+        map.flyToBounds(toLatLngBounds(venueBounds(venue)), { padding: [70, 70], maxZoom: 19 });
       });
       outline.addTo(map);
       layers.push(outline);
+      venueLayersRef.current.set(venue.id, outline);
 
       // Anchor the name to the top edge rather than binding it to the outline:
       // a tooltip bound to a shape hangs off its centre, which drops the label
@@ -379,10 +492,14 @@ export function MapView({
       const style = CATEGORY_STYLES[room.category];
       const shape: L.PathOptions = {
         className: 'map__room',
-        color: style.stroke,
+        // Not the room's own colour: an outline in the same hue welds a run of
+        // meeting rooms into one shape. This is the map's background, drawn as
+        // a seam — so where two rooms of a sort meet, you see the gap between
+        // them rather than a single block with a line in it.
+        color: '#141822',
         fillColor: style.fill,
-        fillOpacity: 0.55,
-        weight: 2,
+        fillOpacity: 0.38,
+        weight: 2.5,
       };
       const drawn = roomShapes(room);
       const shapeLayer =
@@ -392,6 +509,8 @@ export function MapView({
             ? L.polygon(toLatLngs(venueOutline(VENUES_BY_ID[room.venueId])), shape)
             : L.rectangle(toLatLngBounds(roomBounds(room)), shape);
 
+      // One click opens the room. There is nothing else a room click could
+      // mean, and making people find that out by double-clicking helped nobody.
       shapeLayer.on('click', (event) => {
         L.DomEvent.stopPropagation(event);
         // While a route is asking for a place, a room is that place: picking
@@ -401,13 +520,9 @@ export function MapView({
           return;
         }
         handlers.current.onSelectRoom(room.id);
-      });
-      shapeLayer.on('dblclick', (event) => {
-        L.DomEvent.stopPropagation(event);
-        if (handlers.current.picking) return;
-        handlers.current.onSelectRoom(room.id);
         handlers.current.onOpenRoom(room);
       });
+      shapeLayer.on('dblclick', (event) => L.DomEvent.stopPropagation(event));
 
       shapeLayer.addTo(map);
       layers.push(shapeLayer);
@@ -417,17 +532,27 @@ export function MapView({
     return () => {
       for (const layer of layers) layer.remove();
       roomLayersRef.current.clear();
+      venueLayersRef.current.clear();
     };
   }, []);
 
   /*
-   * A flat map of a building with several floors stacks them: the convention
-   * centre's rooms 201-212 sit directly over 101-117, because that is where
-   * they are. So only the floor the building is showing is drawn properly, and
-   * the rest are left as ghosts — faint enough not to read as rooms, present
-   * enough to say there is more here than one storey.
+   * Whether a room is drawn at all, and how.
+   *
+   * A building keeps its inside to itself until you open it — fourteen sets of
+   * rooms over one downtown is a mess nobody can read, and at the zoom you see
+   * the campus at none of them are legible anyway. So a closed building draws
+   * none of its rooms.
+   *
+   * Within the open one, a flat map still stacks the floors: rooms 201-212 sit
+   * directly over 101-117, because that is where they are. Only the floor it is
+   * showing is drawn properly; the rest are ghosts, faint enough not to read as
+   * rooms, present enough to say there is more here than one storey.
    */
-  const hiddenByFloor = (room: Room) => room.level !== levelOf(room.venueId, levels);
+  const roomState = (room: Room) => {
+    if (room.venueId !== openVenueId) return 'closed';
+    return room.level === levelOf(room.venueId, levels) ? 'shown' : 'ghost';
+  };
 
   /* ----------------------------------------------- labels, counts, selection */
   useEffect(() => {
@@ -441,7 +566,7 @@ export function MapView({
         if (!layer) continue;
 
         layer.unbindTooltip();
-        if (hiddenByFloor(room)) continue;
+        if (roomState(room) !== 'shown') continue;
         // The room you've picked always names itself, however small it is.
         if (room.id !== selectedRoomId && (!showLabels || !roomFitsLabel(map, room))) continue;
 
@@ -467,17 +592,22 @@ export function MapView({
       map.off('zoomend', applyLabels);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventCounts, selectedRoomId, levels]);
+  }, [eventCounts, selectedRoomId, levels, openVenueId]);
 
   useEffect(() => {
     for (const [roomId, layer] of roomLayersRef.current) {
       const room = ROOMS_BY_ID[roomId];
+      const state = room ? roomState(room) : 'closed';
       const element = layer.getElement();
       element?.classList.toggle('map__room--selected', roomId === selectedRoomId);
-      element?.classList.toggle('map__room--other-floor', room ? hiddenByFloor(room) : false);
+      element?.classList.toggle('map__room--other-floor', state === 'ghost');
+      element?.classList.toggle('map__room--closed', state === 'closed');
+    }
+    for (const [venueId, layer] of venueLayersRef.current) {
+      layer.getElement()?.classList.toggle('map__venue--open', venueId === openVenueId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRoomId, levels]);
+  }, [selectedRoomId, levels, openVenueId]);
 
   /* -------------------------------------------------------- focus requests */
   const focusToken = focusRequest?.token ?? null;

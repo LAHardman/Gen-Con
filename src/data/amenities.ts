@@ -136,6 +136,61 @@ function build(): Amenity[] {
     }
   }
 
+  return pairUp(out);
+}
+
+/**
+ * One mark for a pair of facilities, put between them.
+ *
+ * A plan draws the men's and the women's as two rooms, because they are two
+ * rooms — but they are one place to go, off the same bit of corridor, signed
+ * together. Two marks a few metres apart say "there are two of these here",
+ * which is not what anyone is asking. So anything within `TOGETHER` of another
+ * on the same floor collapses into a single mark at the middle of the group.
+ *
+ * The threshold comes from the drawings rather than from taste. Measured across
+ * the convention centre, the gap from one restroom to its nearest neighbour
+ * falls in two lots: 23–29 m, which is a pair either side of one entrance, and
+ * 34 m and up, which is the next facility down the concourse. Thirty metres
+ * sits in the space between them.
+ */
+const TOGETHER = 30;
+
+function pairUp(all: Amenity[]): Amenity[] {
+  const metres = (a: LatLng, b: LatLng) => {
+    const lat = (a.lat - b.lat) * 111320;
+    const lng = (a.lng - b.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+    return Math.hypot(lat, lng);
+  };
+
+  const out: Amenity[] = [];
+  const taken = new Set<Amenity>();
+  for (const amenity of all) {
+    if (taken.has(amenity)) continue;
+
+    // Grow the group until nothing else is within reach of anything in it, so
+    // a row of three cubicles is one mark and not a pair plus a straggler.
+    const group = [amenity];
+    taken.add(amenity);
+    for (let at = 0; at < group.length; at += 1) {
+      for (const other of all) {
+        if (taken.has(other)) continue;
+        if (other.kind !== amenity.kind || other.venueId !== amenity.venueId) continue;
+        if (other.level !== amenity.level) continue;
+        if (metres(group[at].position, other.position) > TOGETHER) continue;
+        group.push(other);
+        taken.add(other);
+      }
+    }
+
+    out.push({
+      ...amenity,
+      position: {
+        lat: group.reduce((sum, one) => sum + one.position.lat, 0) / group.length,
+        lng: group.reduce((sum, one) => sum + one.position.lng, 0) / group.length,
+      },
+    });
+  }
   return out;
 }
 

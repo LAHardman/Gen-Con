@@ -49,6 +49,7 @@ import {
   type PlanDetail,
   type PlanRing,
 } from './plan-geometry';
+import { VENUE_ROOM_SHAPES } from './venue-plan';
 
 export type RoomCategory =
   | 'exhibit'
@@ -62,17 +63,26 @@ export type RoomCategory =
 export interface CategoryStyle {
   label: string;
   fill: string;
-  stroke: string;
 }
 
+/**
+ * A wash of colour over the floor plan, and nothing more.
+ *
+ * These used to be drawn with a bright outline in the same hue, which made two
+ * neighbouring rooms of one sort — a run of meeting rooms, a block of halls —
+ * into one loud shape with lines through it, and buried the plan underneath.
+ * The colour now says what sort of room it is and the plan says where the walls
+ * are, so it is deliberately muted: enough to sort a floor at a glance, not
+ * enough to compete with the drawing it sits on.
+ */
 export const CATEGORY_STYLES: Record<RoomCategory, CategoryStyle> = {
-  exhibit: { label: 'Exhibit hall', fill: '#3f7f8c', stroke: '#7fd4e0' },
-  ballroom: { label: 'Ballroom', fill: '#7a5698', stroke: '#c9a3e6' },
-  meeting: { label: 'Meeting rooms', fill: '#4a8c5f', stroke: '#8fe0a8' },
-  gaming: { label: 'Open gaming', fill: '#b07a2a', stroke: '#f0c471' },
-  amenity: { label: 'Services', fill: '#6b7189', stroke: '#b6bdd4' },
-  lodging: { label: 'Hotel', fill: '#a0505f', stroke: '#e69aa8' },
-  venue: { label: 'Offsite venue', fill: '#3a6d94', stroke: '#8cc2e8' },
+  exhibit: { label: 'Exhibit hall', fill: '#4d7b85' },
+  ballroom: { label: 'Ballroom', fill: '#77628b' },
+  meeting: { label: 'Meeting rooms', fill: '#55836a' },
+  gaming: { label: 'Open gaming', fill: '#9a8050' },
+  amenity: { label: 'Services', fill: '#6d7285' },
+  lodging: { label: 'Hotel', fill: '#94636d' },
+  venue: { label: 'Offsite venue', fill: '#4a6d8a' },
 };
 
 export interface Room {
@@ -135,11 +145,6 @@ export interface Venue {
    * writes that field verbatim, so these are the source's own short forms.
    */
   aliases?: string[];
-  /**
-   * The floor the map opens this building on, where counting its rooms picks
-   * the wrong one. See `defaultLevel`.
-   */
-  opensOn?: string;
 }
 
 /**
@@ -193,10 +198,6 @@ export const VENUES: Venue[] = [
     },
     footprint: VENUE_FOOTPRINTS['lucas-oil'],
     grid: UNIT_GRID,
-    // The boarded-over field is one room and the concourse ring above it is
-    // two, so counting rooms would open the stadium on the wrong one. The
-    // field is the reason anyone walks down here.
-    opensOn: 'Field level',
   },
   {
     id: 'jw-marriott',
@@ -2311,29 +2312,14 @@ export const VENUE_LEVELS: Record<string, string[]> = (() => {
 })();
 
 /**
- * The floor a building opens on.
+ * The floor a building opens on: the lowest it has.
  *
- * Not its lowest, which is the obvious answer and the wrong one here: the
- * Hyatt's ground floor is one room, the Embassy's is one room, and a building
- * that opens on an empty storey looks like a building with no interior. The
- * convention's floor is the one it uses, so that is the one with most of its
- * rooms on it — and the picker names it, so there is no doubt which you are
- * looking at.
- *
- * Counting rooms gets it right everywhere but the stadium, where the field is
- * one room and the concourse above it is two; `opensOn` says so there.
+ * A building opens closed and you click it to look inside, so this is where
+ * that look starts — the ground, where you would come in from the street, and
+ * where the picker's own list starts too. Everything above it is one tap away.
  */
 export function defaultLevel(venueId: string): string | undefined {
-  const venue = VENUES_BY_ID[venueId];
-  if (venue?.opensOn) return venue.opensOn;
-
-  const levels = VENUE_LEVELS[venueId] ?? [];
-  let best: { level: string; rooms: number } | undefined;
-  for (const level of levels) {
-    const rooms = ROOMS.filter((room) => room.venueId === venueId && room.level === level).length;
-    if (!best || rooms > best.rooms) best = { level, rooms };
-  }
-  return best?.level;
+  return VENUE_LEVELS[venueId]?.[0];
 }
 
 /**
@@ -2351,6 +2337,9 @@ const ROOM_SHAPES = new Map<string, readonly PlanRing[]>(
       const ring = PLAN_SHAPES[`${room.venueId}/${room.level}/${label.trim().toUpperCase()}`];
       if (ring) rings.add(ring);
     }
+    // Failing a lettered plan, the shape read off Gen Con's picture of the
+    // floor, where `venue-plans.mjs` could tell which drawn room is this one.
+    if (!rings.size) for (const ring of VENUE_ROOM_SHAPES[room.id] ?? []) rings.add(ring);
     return [room.id, [...rings]];
   }),
 );
