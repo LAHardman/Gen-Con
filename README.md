@@ -109,13 +109,23 @@ document.
 then tests, before anything is built or deployed.
 
 What is covered today is the directions feature and the geometry under it —
-`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the new button
-in `RoomDialog`. **The rest of the codebase is still untested**, and the two
-riskiest parts are the untested ones: the HTML scraper in
-`scripts/lib/parse-events.mjs` and the room matcher in `src/data/events.ts`,
-both of which fail by quietly returning `null` rather than by throwing.
-`docs/code-review.md` §1.2–§1.5 says what to write for them, in the order worth
-writing it.
+`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the directions
+button in `RoomDialog` — plus the two generated data tables, `connections.ts`
+and `venue-plan.ts`. Those two are keyed by strings a human wrote (`icc/Level 2`)
+and a key naming a floor its building calls something else draws *nothing*,
+silently, which looks exactly like a sheet that was never read. So the tests
+assert the keys resolve, and they assert it against the tables rather than
+through the lookups that filter bad keys out — a check made through the lookup
+cannot fail.
+
+**The rest of the codebase is still untested**, and the two riskiest parts are
+among the untested ones: the HTML scraper in `scripts/lib/parse-events.mjs` and
+the room matcher in `src/data/events.ts`, both of which fail by quietly
+returning `null` rather than by throwing. `docs/code-review.md` §1.2–§1.5 says
+what to write for them, in the order worth writing it. The importer's
+resume-an-interrupted-pull logic is verified by running it, not by a test:
+`fetch-events.mjs` takes its lock and runs on import, so nothing in it can be
+called from a test without that happening.
 
 ## The map
 
@@ -402,11 +412,13 @@ is wide because the ends are room centres, and the doorway of a hall the size of
 Exhibit Hall A is already tens of metres from its middle.
 
 A real walking route would need the pedestrian network — pavements, lobbies,
-and above all the skywalks. OpenStreetMap has the footbridges (they are among
-the 28 indoor-tagged elements across the campus) but nothing in this repository
-holds them yet, and inventing turn-by-turn directions from two points and no
-network would be a confident-sounding guess. A bearing and a range are what the
-data actually supports.
+and above all the skywalks. Half of that is now here: `connections.ts` holds
+every covered crossing on the campus, and the map draws them (see *Getting
+between buildings*). What it does not hold is the corridors inside the buildings
+that join one span to the next, so the spans are a set of disconnected bridges
+rather than a graph anything can be routed over. Until they connect, turn-by-turn
+directions from two points would be a confident-sounding guess. A bearing and a
+range are what the data actually supports.
 
 ### How venues are positioned
 
@@ -878,6 +890,8 @@ src/
     amenities.ts     Restrooms, from the plans that draw them
     search.ts        Ranking rooms and events against what you type
     navigation.ts    Route ends, distances and what a straight line can claim
+    connections.ts   Skywalks and the tunnel, and which floor each belongs to
+    venue-plan.ts    Hotel hallways and room outlines, read from plans (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
     useEventFeed.ts       Loads public/events.json
@@ -891,14 +905,19 @@ src/
     NavPanel.tsx     Directions: the two ends, how to choose them, the distance
     Legend.tsx       Category key and the amenities toggle
 plans/
-  *.pdf                    The venues' own floor plans
+  *.pdf                    The convention centre's own floor plans
   *.svg, *.labels.json     Converted drawing and printed labels
   georeference.json        One page-to-world frame per venue
+  venues/*.png             Gen Con's plans of the hotels, as pictures
+  campus/                  Gen Con's floor-plan tiles (fetched, not committed)
 scripts/
   pdf-to-svg.py            Plan PDF to paths
   plan-labels.py           Printed labels, with their positions
   fit-plan.mjs             Fits a venue's frame to its OSM footprint
   plan-to-geometry.mjs     Plans to map geometry (writes plan-geometry.ts)
+  venue-plans.mjs          Reads hotel hallways by colour (writes venue-plan.ts)
+  gencon-tiles.mjs         Fetches and stitches Gen Con's floor-plan tiles
+  lib/png.mjs              PNG decoding, down to 4-bit palette tiles
   fetch-events.mjs         Crawls the source and imports the real schedule
   lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
   make-sample-events.mjs   Fake schedule for offline development
@@ -909,14 +928,14 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a straight line between two points (see above). Making them a
-real walking route needs the pedestrian network the campus actually uses:
-pavements, the lobbies you cut through, and the skywalks that join the
-convention centre to the JW, the Marriott, the Hyatt, Union Station and the
-Westin. OpenStreetMap has those footbridges; an Overpass query like the one that
-produced `footprints.ts` could pull them, and a graph over them with the venue
-entrances would turn the bearing into a route — including the honest answer that
-the way there is up two floors and across a bridge.
+Directions are a straight line between two points (see above), and the piece
+that would make them a route is now half-built. The skywalk and tunnel spans are
+in `connections.ts` and the hotels' corridors are in `venue-plan.ts` — but the
+two have never been joined: nothing says which corridor a given bridge lands in,
+and no floor has the doors, stairs or lifts that would let a path leave one
+storey for another. Joining them, and giving each venue its entrances, would
+turn the bearing into a route — including the honest answer that the way there
+is up two floors and across a bridge.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

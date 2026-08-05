@@ -73,7 +73,7 @@ export const CONNECTIONS: Connection[] = [
  * Station's is the mezzanine over the Grand Hall. A building with one floor
  * needs no entry: there is nowhere else its skywalk could arrive.
  */
-const ENTERS_ON: Record<string, string> = {
+export const ENTERS_ON: Record<string, string> = {
   icc: 'Level 2',
   'marriott-downtown': '2nd floor',
   westin: '2nd floor',
