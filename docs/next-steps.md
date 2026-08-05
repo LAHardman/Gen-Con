@@ -14,40 +14,47 @@ they are to build.
 
 **Measured.** Over every pair of buildings, routing one room to another:
 
-| | Pairs |
-|---|---|
-| Routed entirely under cover | 12 |
-| Need an outdoor straight line | **152** |
-| Get no route at all | **18** |
-| Total | 182 |
+| | Pairs, before doors | after |
+|---|---|---|
+| Routed entirely under cover | 12 | 12 |
+| Need an outdoor straight line | 152 | **170** |
+| Get no route at all | **18** | **0** |
+| Total | 182 | 182 |
 
 So roughly 7% of building-to-building journeys get the thing the router was
-built to give. The rest fall back to a bearing, because the only outdoor
-connections in the repository are the eleven skywalks and the tunnel, and those
-join the convention centre to five hotels and nothing else.
+built to give. The rest are answered, but with a straight line between two
+doors, because the only outdoor connections in the repository are the eleven
+skywalks and the tunnel, and those join the convention centre to five hotels and
+nothing else.
 
-**The 18 with no route at all are a defect, not a data gap.** In `route.ts`,
-outdoor edges are only created *from* a node that has no cell — a loose point
-outdoors. Two rooms that both sit on drawn floors in buildings no skywalk joins
-therefore get no edge between them at all, and `walkBetween` returns null. The
-panel degrades to a straight line, so nothing looks broken, but the router has
-silently declined to answer a question it could answer badly-but-usefully
-("leave by the nearest door, cross, go in").
+**Done: the 18 with no route at all.** They were a defect rather than a data
+gap. Outdoor edges used to be created only *from* a node with no cell — a loose
+point outdoors — so two rooms that both sat on drawn floors in buildings no
+skywalk joined got no edge between them at all and `walkBetween` returned null.
+Every venue now has door nodes on the lowest floor whose circulation is drawn,
+one per connected piece of it, and any two indoor nodes can be joined by
+walk → door → outdoor → door → walk.
 
-**What to do, in order:**
+Two things had to come with it. Doors compete with skywalks, and an
+uncorrected straight line wins nearly every time — Exhibit Hall B to the
+Marriott Ballroom came out as 389 m across the street against 500 m over the
+bridges — so the search runs twice, once over measured surfaces only and again
+with the straight lines switched on, and an outdoor leg is charged the 4/π
+detour a grid of blocks really costs. And one door per *floor* was not enough:
+the JW's ground floor is drawn as several disconnected runs, so a single door
+stranded everything outside the piece it landed in and made the hotel
+unreachable from all thirteen other buildings. `route.test.ts` holds both.
 
-1. **Let a route leave a building.** Give every venue one or more door nodes on
-   its walkable surface — the point on each floor's circulation nearest the
-   street. Then two indoor nodes can always be joined by walk → door → outdoor
-   → door → walk, and the 18 become 0. This alone needs no new data.
-2. **Pull the pedestrian network from OpenStreetMap.** `footway`, `sidewalk`,
+**What to do next:**
+
+1. **Pull the pedestrian network from OpenStreetMap.** `footway`, `sidewalk`,
    `crossing`, and `highway=pedestrian` over the campus bounding box, by the
-   same Overpass query that produced `footprints.ts`. That turns 152 straight
+   same Overpass query that produced `footprints.ts`. That turns 170 straight
    lines into real routes and is the single biggest improvement available.
-3. **Snap the doors to it.** A door node joins the pavement graph at its nearest
+2. **Snap the doors to it.** A door node joins the pavement graph at its nearest
    footway vertex, and the outdoor leg stops being straight.
 
-Until (2), keep the leg dashed and keep the wording. A straight line called a
+Until (1), keep the leg dashed and keep the wording. A straight line called a
 straight line is honest; a straight line called a route is not.
 
 ---
@@ -104,13 +111,18 @@ floors *are* drawn — they are likely rooms whose outline sits further than
 
 ---
 
-## 4. The routing engine has no direct tests
+## 4. The routing engine is only tested over the real campus
 
-`route.ts`, `walkable.ts` and `vertical.ts` are the newest and most intricate
-code in the repository and have no test file of their own. They are exercised
-only through `navigation.test.ts`, which asserts end-to-end outcomes — a
-skywalk appears, the walk exceeds the straight line — and would not localise a
-regression in A\*, in the portal graph, or in the grid.
+`route.ts` now has `route.test.ts`, which asserts the properties a route must
+have across every pair of buildings — no pair unanswered, a measured route never
+passed over for a straight line, a total that agrees with the legs under it.
+That is the coverage the door work needed and it catches the regressions that
+work could cause.
+
+What it cannot do is localise a fault. It runs over real venue data, so a break
+in A\*, in the portal graph or in the grid shows up as "the JW is unreachable"
+rather than as "a diagonal cut a blocked corner". `walkable.ts` and
+`vertical.ts` still have no tests of their own.
 
 **What to write, cheapest first:**
 
@@ -120,8 +132,9 @@ regression in A\*, in the portal graph, or in the grid.
   returns null past its radius; `roomEntrance` picks the wall the corridor is on.
 - `route.ts` — a two-floor toy campus, then: the portal graph prefers the nearer
   of two staircases; a leg's `certainty` reaches its text; `merge` folds
-  consecutive same-floor legs; an unreachable end returns null rather than
-  throwing.
+  consecutive same-floor legs. That last one is worth doing precisely because
+  nothing on the real campus exercises it — no route there merges anything, so
+  `merge` is live code with no coverage at all.
 - `vertical.ts` — a drawn pair within `SAME_SHAFT` becomes one link; beyond it,
   two; a floor with drawn marks never falls back to the inference.
 

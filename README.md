@@ -444,6 +444,22 @@ this repository: OpenStreetMap has the streets, but as carriageways rather than
 as anything walkable, with no crossings or kerbs. So a leg between buildings
 that no skywalk joins is drawn dashed and called a straight line.
 
+It is a line between *doors*, though, rather than between rooms. Every building
+has door nodes on the lowest floor whose circulation is drawn — one per
+connected piece of it, since the JW's ground floor is several disconnected runs
+and a single door would strand the rest — so any two rooms on the campus can be
+joined by walk → door → outdoor → door → walk. All 182 building-to-building
+pairs get an answer; before the doors, 18 got nothing at all and the panel
+quietly fell back to a bearing.
+
+A straight line must not *compete* with a route somebody drew, because it goes
+through whatever stands between the two doors. So the search runs twice — over
+measured surfaces only, and again with the straight lines switched on if that
+found nothing — and an outdoor leg is charged 1.3× its length, near the 4/π a
+walk over a grid of blocks really costs. Without both, Exhibit Hall B to the
+Marriott Ballroom takes 389 m across Maryland St over 500 m on the skywalks that
+exist to keep you out of an Indianapolis August.
+
 Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
 is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
 sheet even letters it DOWN TO 1ST FLOOR; a lift bank is a run of dull-yellow
@@ -1027,8 +1043,8 @@ measured gaps and what to do about them. The largest by far is outdoors: there
 is no pavement network at all, so a route between buildings no skywalk joins is
 a straight line — the streets are in OpenStreetMap, but as carriageways rather
 than as anything walkable, and turning them into a network means crossings and
-kerbs nobody has pulled yet. Of the 182 pairs of buildings, 152 need such a line
-and 18 get no route at all.
+kerbs nobody has pulled yet. Of the 182 pairs of buildings, 170 need such a line
+and 12 are routed under cover the whole way.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

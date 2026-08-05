@@ -391,6 +391,88 @@ export function roomEntrance(
   return best ? { door: toLatLng(best.door), cell: best.cell } : null;
 }
 
+/** Metres from a point to a segment, in the campus frame. */
+function toSegment(point: Point, a: Point, b: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = dx * dx + dy * dy;
+  const along = length
+    ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length))
+    : 0;
+  return Math.hypot(point.x - (a.x + along * dx), point.y - (a.y + along * dy));
+}
+
+/** Ignore a scrap of floor this small when looking for a way out. Cells. */
+const MIN_PIECE = 8;
+
+/**
+ * Where a floor's circulation comes closest to the outside wall — its doors.
+ *
+ * Nothing in this repository marks a door to the street, but a building is left
+ * from the corridor that reaches its perimeter: a door is in an outside wall,
+ * and the only walkable surface touching one is the corridor beside it. So the
+ * open cell nearest the building's outline is where you get out, to within the
+ * width of the lobby.
+ *
+ * **One per connected piece of the floor, not one per floor.** A hotel's
+ * circulation is often drawn as several pieces that do not touch — a lobby here,
+ * a corridor there, whatever the plan happened to colour — and a single door
+ * would sit in one of them. Everything in the others could then reach no door
+ * at all, and, having a square to stand on, would not count as being on the
+ * street either: the JW Marriott went from routable to entirely unreachable
+ * exactly that way. A piece you can stand in is a piece you can leave.
+ *
+ * This is a coarser inference than a room's doorway — that had a room outline
+ * metres from a corridor, this has a building's whole perimeter. It is enough
+ * to answer "leave here, cross, go in there", and the leg it produces is a
+ * straight line that says so.
+ */
+export function doorsOf(
+  floor: Floor,
+  ring: readonly (readonly [number, number])[],
+): Array<{ cx: number; cy: number }> {
+  if (floor.empty || ring.length < 2) return [];
+
+  const wall = ring.map(([lat, lng]) => toPoint({ lat, lng }));
+  const fromWall = (cx: number, cy: number) => {
+    const at = cellCentre(floor, cx, cy);
+    let away = Infinity;
+    for (let i = 0, j = wall.length - 1; i < wall.length; j = i, i += 1) {
+      away = Math.min(away, toSegment(at, wall[j], wall[i]));
+    }
+    return away;
+  };
+
+  const seen = new Uint8Array(floor.open.length);
+  const doors: Array<{ cx: number; cy: number }> = [];
+  for (let start = 0; start < floor.open.length; start += 1) {
+    if (!floor.open[start] || seen[start]) continue;
+    const queue = [start];
+    seen[start] = 1;
+    let size = 0;
+    let best: { cx: number; cy: number; away: number } | null = null;
+    while (queue.length) {
+      const i = queue.pop()!;
+      size += 1;
+      const cx = i % floor.width;
+      const cy = Math.floor(i / floor.width);
+      const away = fromWall(cx, cy);
+      if (!best || away < best.away) best = { cx, cy, away };
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= floor.width || ny >= floor.height) continue;
+        const next = ny * floor.width + nx;
+        if (!floor.open[next] || seen[next]) continue;
+        seen[next] = 1;
+        queue.push(next);
+      }
+    }
+    if (best && size >= MIN_PIECE) doors.push({ cx: best.cx, cy: best.cy });
+  }
+  return doors;
+}
+
 /** How much of a floor was drawn, for the tests and for `--inspect`-style checks. */
 export function floorArea(venueId: string, level: string) {
   const floor = floorOf(venueId, level);
