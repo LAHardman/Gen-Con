@@ -79,6 +79,9 @@ want to see it on a real device.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Dev server, bound to all interfaces so you can open it on a phone |
+| `npm run check` | Types and tests — the same gate CI runs |
+| `npm run test` | Tests once |
+| `npm run test:watch` | Tests, re-running as you edit |
 | `npm run build` | Type-checks, then builds to `dist/` |
 | `npm run preview` | Serves the production build |
 | `npm run fetch:events` | Imports the real schedule from the event database |
@@ -90,6 +93,26 @@ want to see it on a real device.
 `dist/` is fully self-contained and uses relative paths, so it also works
 dropped on any static host, or bundled into a native shell with Capacitor if it
 ever needs app-store distribution.
+
+### Tests
+
+Vitest, reading the same `vite.config.ts` the app is built with, so there is one
+build configuration rather than two that can drift. Tests sit next to the code
+they cover as `*.test.ts` / `*.test.tsx`, and jsdom is the environment
+throughout — the pure modules don't care, and the components and hooks need a
+document.
+
+`npm run check` is what CI runs on every push and every pull request: types,
+then tests, before anything is built or deployed.
+
+What is covered today is the directions feature and the geometry under it —
+`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the new button
+in `RoomDialog`. **The rest of the codebase is still untested**, and the two
+riskiest parts are the untested ones: the HTML scraper in
+`scripts/lib/parse-events.mjs` and the room matcher in `src/data/events.ts`,
+both of which fail by quietly returning `null` rather than by throwing.
+`docs/code-review.md` §1.2–§1.5 says what to write for them, in the order worth
+writing it.
 
 ## The map
 
