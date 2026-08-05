@@ -64,6 +64,7 @@ const DEBUG_DIR = resolve(ROOT, '.cache');
 const DETAIL_CACHE = resolve(DEBUG_DIR, 'event-details.jsonl');
 const STATE_FILE = resolve(DEBUG_DIR, 'import-state.json');
 const LOCK_FILE = resolve(DEBUG_DIR, 'import.lock');
+const FULL_PULL_FILE = resolve(DEBUG_DIR, 'full-pull.json');
 const STATE_VERSION = 1;
 
 /**
@@ -228,6 +229,55 @@ async function readState() {
 async function writeState(state) {
   await mkdir(DEBUG_DIR, { recursive: true });
   await writeFile(STATE_FILE, `${JSON.stringify({ version: STATE_VERSION, ...state }, null, 2)}\n`);
+}
+
+/* ------------------------------------------------------- an unfinished pull */
+
+/**
+ * When the full pull now in progress began.
+ *
+ * A full pull of this source is 27,000 requests and the better part of a
+ * morning, and the watermark that records one is only written when it finishes.
+ * So an interrupted full pull used to leave the worst of both: a cache holding
+ * every page it did fetch, and nothing to say those pages belonged to a pull
+ * still in progress. The next run read no watermark, concluded it had to pull
+ * everything, and — because a full pull may not trust what it already holds —
+ * threw all of them away and asked for them again. Interrupt that one too and
+ * it never finishes, however many times it is run.
+ *
+ * This file is the missing half. While it exists a full pull is unfinished, and
+ * a record fetched since it was written is one this same pull has already
+ * refreshed and needn't fetch twice.
+ */
+async function readFullPull() {
+  try {
+    const held = JSON.parse(await readFile(FULL_PULL_FILE, 'utf8'));
+    return Number.isNaN(Date.parse(held.startedAt)) ? null : held.startedAt;
+  } catch {
+    return null;
+  }
+}
+
+async function beginFullPull(startedAt) {
+  await mkdir(DEBUG_DIR, { recursive: true });
+  await writeFile(FULL_PULL_FILE, `${JSON.stringify({ version: 1, startedAt }, null, 2)}\n`);
+  return startedAt;
+}
+
+const endFullPull = () => rm(FULL_PULL_FILE, { force: true });
+
+/**
+ * The oldest record in the cache, for a pull interrupted before the file above
+ * existed: a cache with records in it and no watermark can only have come from
+ * a full pull that never finished, so its own records date it.
+ */
+async function earliestPullAt() {
+  let earliest = null;
+  for (const record of (await readDetailCache()).values()) {
+    if (typeof record.pulledAt !== 'string') continue;
+    if (!earliest || record.pulledAt < earliest) earliest = record.pulledAt;
+  }
+  return earliest;
 }
 
 const absolute = (path) => new URL(path, SOURCE.url).toString();
@@ -399,16 +449,24 @@ async function readDetailCache() {
 async function crawlDetails(
   codes,
   context,
-  { invalidate = new Set(), drop = new Set(), refresh = false } = {},
+  { invalidate = new Set(), drop = new Set(), refresh = false, refreshedSince = null } = {},
 ) {
   const cached = await readDetailCache();
   const held = cached.size;
 
   if (refresh) {
     // A full pull exists to catch the edits change sets never mention, so it
-    // has to ignore what it already holds rather than trust any of it.
-    cached.clear();
-    if (held) console.log(`  ignoring ${held} cached records; this is a full pull`);
+    // has to ignore what it already holds rather than trust any of it — but
+    // only what it held when this pull started. Anything fetched since is a
+    // page this same pull has already refreshed, and dropping those is what
+    // stopped an interrupted full pull from ever finishing.
+    let kept = 0;
+    for (const [code, record] of cached) {
+      if (refreshedSince && record.pulledAt >= refreshedSince) kept += 1;
+      else cached.delete(code);
+    }
+    if (held - kept) console.log(`  ignoring ${held - kept} cached records; this is a full pull`);
+    if (kept) console.log(`  ${kept} of them were pulled by this same full pull, so they stand`);
   } else {
     let dropped = 0;
     for (const code of drop) if (cached.delete(code)) dropped += 1;
@@ -629,10 +687,24 @@ async function run() {
   if (plan.full && DETAIL_LIMITED) {
     console.log('  --limit is set, so keeping the cache; a full re-pull needs an uncapped run.');
   }
+
+  // Either this full pull is one already in progress, or it starts here. The
+  // second clause adopts a pull interrupted before that marker existed: no
+  // watermark and a cache with records in it can only mean one that never
+  // finished, and its own records say when it began.
+  let startedAt = null;
+  if (fullRefresh) {
+    const resuming = (await readFullPull()) ?? (state ? null : await earliestPullAt());
+    if (resuming) console.log(`  resuming the full pull that began at ${resuming}`);
+    startedAt = await beginFullPull(resuming ?? new Date().toISOString());
+  }
+
   const { cached, failed } = await crawlDetails(
     events.map((event) => event.id),
     context,
-    fullRefresh ? { refresh: true } : { invalidate: plan.invalidate, drop: plan.drop },
+    fullRefresh
+      ? { refresh: true, refreshedSince: startedAt }
+      : { invalidate: plan.invalidate, drop: plan.drop },
   );
 
   const merged = events.map((event) => merge(event, cached.get(event.id)));
@@ -650,10 +722,12 @@ async function run() {
   // past events it never actually read. A `--limit` run that happens to close
   // the last gap therefore counts, and one that doesn't, doesn't.
   const missing = events.filter((event) => !cached.has(event.id)).length;
-  await writeFeed(merged, events.length, plan, {
-    complete: failed.length === 0 && missing === 0,
-    fullRefresh,
-  });
+  const complete = failed.length === 0 && missing === 0;
+  await writeFeed(merged, events.length, plan, { complete, fullRefresh });
+
+  // A full pull that got everything is finished with; one that didn't keeps its
+  // marker, so the next run carries it on rather than starting it again.
+  if (fullRefresh && complete) await endFullPull();
 }
 
 async function writeFeed(events, catalogueCount, plan, { complete = true, fullRefresh = false } = {}) {
@@ -718,6 +792,29 @@ const locked = INSPECT ? true : await takeLock();
 if (!locked) {
   process.exitCode = 1;
 } else {
+  /*
+   * Ctrl-C, or a container being reclaimed under a long crawl.
+   *
+   * Node's default handling for these exits without running the `finally`
+   * below, which leaves the lock file behind. A later run recognises it as
+   * stale by its pid — but only while no other process has been given that pid,
+   * and a container that recycles them quickly can hand it to something else.
+   * Releasing it here costs nothing and removes the case.
+   *
+   * Nothing else needs saving: every page is appended to the cache as it
+   * arrives, and a half-written last line is ignored when it is read back.
+   */
+  let stopping = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      if (stopping) return;
+      stopping = true;
+      console.log(`\n${signal} — stopping. Every page fetched so far is in ${DETAIL_CACHE};`);
+      console.log('run the same command again to carry on from where this left off.');
+      releaseLock().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+    });
+  }
+
   try {
     await (INSPECT ? inspect() : run());
   } catch (error) {
