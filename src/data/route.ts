@@ -158,6 +158,8 @@ interface Edge {
   kind: LegKind;
   /** Filled in for a walk, so the winning route keeps the line it found. */
   points?: LatLng[];
+  /** For a floor change: whether the plans drew it or the floors implied it. */
+  certainty?: 'plan' | 'region';
 }
 
 /**
@@ -191,6 +193,7 @@ export function walkBetween(from: Anchor, to: Anchor): Walk | null {
       metres: FLOOR_CHANGE_METRES,
       kind: 'stairs',
       points: [toLatLng(pair[0].at), toLatLng(pair[1].at)],
+      certainty: link.certainty,
     });
   });
 
@@ -312,14 +315,18 @@ function describe(edge: Edge, from: Node, to: Node): Leg {
   const points = edge.points ?? [toLatLng(from.at), toLatLng(to.at)];
   const base = { points, metres: edge.metres, kind: edge.kind };
   switch (edge.kind) {
+    // Two different claims, and the wording is the difference between them.
+    // A drawn stair is on the plan and the route goes to it; an inferred one is
+    // somewhere along a stretch the floors prove it must be on, and saying
+    // "take the stairs" of that would be inventing a staircase.
     case 'stairs':
       return {
         ...base,
         venueId: to.venueId,
         level: to.level,
-        // Deliberately not "take the stairs": no source in this repository says
-        // where they are, only that they are somewhere along here.
-        text: `Change to ${to.level} — the stairs and lifts are off this stretch`,
+        text: edge.certainty === 'plan'
+          ? `Up the stairs to ${to.level}`
+          : `Change to ${to.level} — the stairs and lifts are off this stretch`,
       };
     case 'skywalk':
       return { ...base, venueId: to.venueId, level: to.level, text: `Skywalk to ${venueName(to.venueId)}` };

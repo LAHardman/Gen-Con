@@ -418,15 +418,25 @@ function simplify(ring, tolerance) {
 
 /* ------------------------------------------------------------------- build */
 
-function convert(path, venue, level, rooms, report, hint = null) {
+function convert(path, venue, level, rooms, report, sheet = {}) {
   const image = decodePng(readFileSync(path));
   const plan = classify(image);
   const kind = (name) => plan.kinds.indexOf(name) + 1;
 
-  const frame = fit(plan, venue, report, hint);
-  if (!frame) return null;
-
   const perLng = metresPerDegreeLng(venue.anchor.nw.lat);
+
+  // A georeferenced sheet needs no fitting: it already knows where it is, and
+  // the frame is just that knowledge written in the venue's own terms.
+  const frame = sheet.geo
+    ? {
+      scale: sheet.geo.scale,
+      east0: (sheet.geo.lng0 - venue.anchor.nw.lng) * perLng,
+      south0: (venue.anchor.nw.lat - sheet.geo.lat0) * METRES_PER_DEGREE_LAT,
+      value: null,
+    }
+    : fit(plan, venue, report, null);
+  if (!frame) return null;
+  if (sheet.geo && report) console.log(`      georeferenced: ${frame.scale} m/px`);
   const project = ([px, py]) => {
     const east = frame.east0 - frame.scale * px;
     const south = frame.south0 - frame.scale * py;
@@ -454,12 +464,26 @@ function convert(path, venue, level, rooms, report, hint = null) {
     return out;
   };
 
+  const found = verticals(plan, perPixel, project, venue);
+
+  /*
+   * A campus sheet is read for its stairs and nothing else.
+   *
+   * The convention centre's corridors already come from its architect's PDFs —
+   * vector, keyed by a printed legend, and the best geometry in this
+   * repository. Reading them again off a raster of Gen Con's rendering would
+   * replace a measurement with a worse measurement, and `walkable.ts` prefers
+   * VENUE_HALLS to the PDF detail, so it would silently win. Vertical
+   * circulation is the one thing the PDFs do not have.
+   */
+  if (sheet.verticalsOnly) return { halls: [], verticals: found, snapped: [] };
+
   const halls = trace(new Set([kind('circulation')]), MIN_AREA)
     .map(({ rings }) => rings.map((ring) => ring.map(project)));
 
   return {
     halls,
-    verticals: verticals(plan, perPixel, project, venue),
+    verticals: found,
     snapped: snap(plan, frame, trace, rooms, venue, project, report),
   };
 }
@@ -679,31 +703,24 @@ function everySheet() {
     else console.warn(`  ${file}: not in SHEETS, skipped`);
   }
   /*
-   * Campus sheets are behind `--campus`, and this is why.
+   * Campus sheets are read whenever they are there, and their absence is said
+   * out loud.
    *
-   * `fit` places a sheet by taking the plan's coloured area to *be* the
-   * building: it aligns that bounding box with the venue's own and searches a
-   * third of a building either side. That is exactly right for a screenshot of
-   * one hotel and cannot work for a sheet of the whole downtown, where the
-   * colour covers a mile and the building is a fortieth of it. Run with
-   * `--campus` and the convention centre fits at 0.05 m/px and 32% overlap,
-   * against 76-89% for every hotel — the fit has found some other cluster of
-   * pixels and settled on it.
-   *
-   * What these sheets need is a georeference rather than a fit, which they can
-   * have: they are one level of a pyramid at a fixed scale, so two landmarks
-   * with known coordinates fix the whole transform for every building at once,
-   * the way `plans/georeference.json` already does for the PDFs. Until that
-   * exists, letting them through would overwrite good hotel geometry with a
-   * misplaced convention centre.
+   * They are not committed — they are Gen Con's drawings and eighteen megabytes
+   * of them — so a fresh clone has none, and a rebuild without them writes a
+   * `venue-plan.ts` with the convention centre's stairs missing. That file
+   * looks perfectly healthy; the only sign is a building that stops changing
+   * floors. Hence the warning rather than a silent skip.
    */
   let campus = [];
-  if (process.argv.includes('--campus')) {
-    try {
-      campus = readdirSync(CAMPUS).filter((n) => n.endsWith('.png')).sort();
-    } catch {
-      console.warn('  no plans/campus — run `npm run plans:campus` first');
-    }
+  try {
+    campus = readdirSync(CAMPUS).filter((n) => n.endsWith('.png')).sort();
+  } catch {
+    campus = [];
+  }
+  if (!campus.length) {
+    console.warn('  no plans/campus — run `npm run plans:campus` first, or the');
+    console.warn("  convention centre's stairs will be missing from the output");
   }
   for (const file of campus) {
     const targets = CAMPUS_SHEETS[file.replace(/\.png$/, '')];
@@ -714,7 +731,9 @@ function everySheet() {
 }
 
 async function main() {
-  const only = process.argv[2];
+  // The first thing that isn't a flag, so `--campus westin-2` reads the same
+  // as `westin-2 --campus`.
+  const only = process.argv.slice(2).find((arg) => !arg.startsWith('--'));
   const { venues, rooms, hasPlanShape } = await loadVenues();
 
   const halls = new Map();
@@ -736,7 +755,7 @@ async function main() {
       && !room.fillsVenue
       && !hasPlanShape(room));
 
-    const built = convert(sheet.path, venue, sheet.level, floor, true, sheet.metresPerPixel ?? null);
+    const built = convert(sheet.path, venue, sheet.level, floor, true, sheet);
     if (!built) {
       console.warn(`  ${id}: nothing traced`);
       continue;
@@ -762,19 +781,32 @@ async function main() {
 }
 
 /**
- * How big a pixel of a campus sheet is on the ground.
+ * Where a campus sheet sits in the world.
  *
- * A sheet from `plans:campus` is the z5 level of Gen Con's pyramid stitched
- * whole: 8192 pixels across about a mile and a half of downtown. The fit cannot
- * guess this the way it guesses a hotel's, because on a campus sheet the
- * coloured area is not the building — so it is measured once here and the
- * sweep refines around it, which is what the sweep is for.
+ * These are not fitted, they are georeferenced, and the difference is the
+ * difference between guessing and knowing. `fit` places a plan by taking its
+ * coloured area to *be* the building and aligning that box with the venue's,
+ * which is right for a screenshot of one hotel and hopeless for a sheet of a
+ * mile of downtown — the convention centre came out at 32% overlap that way.
  *
- * Measured against the convention centre: 420 m of building over about 2,400
- * pixels of sheet. Re-measure if the fetcher's zoom cap changes, since a
- * different level is a different number of pixels for the same ground.
+ * A pyramid level is a single rigid drawing: one scale, one offset, south at
+ * the top, the same for every building on it. So three numbers place all of
+ * them at once, and they were found by starting from two landmarks read off
+ * the sheet by eye — Monument Circle and Lucas Oil's bowl — and then refining
+ * against all fourteen surveyed footprints together, which is a far better
+ * measurement than either landmark.
+ *
+ * The result covers 76% of the surveyed footprints, and the two biggest
+ * buildings, which are the ones with the geometry to be sure about, sit at
+ * 94%: the convention centre and Lucas Oil. Of the rest, the ones that score
+ * badly are the ones Gen Con does not colour as its own venues — Circle
+ * Centre, the Indiana Rep, the escape room.
+ *
+ * This is for the z5 sheet `plans:campus` writes. A different zoom is a
+ * different number of pixels for the same ground, so `scale` would need
+ * halving or doubling with it.
  */
-const CAMPUS_SCALE = 420 / 2400;
+const CAMPUS_GEO = { scale: 0.155266, lat0: 39.758405, lng0: -86.154774 };
 
 /**
  * Which of Gen Con's campus levels holds which building's floor.
@@ -786,8 +818,8 @@ const CAMPUS_SCALE = 420 / 2400;
  * and those are its own Level 1 and Level 2.
  */
 const CAMPUS_SHEETS = {
-  'level-1': [{ venueId: 'icc', level: 'Level 1', metresPerPixel: CAMPUS_SCALE }],
-  'level-2': [{ venueId: 'icc', level: 'Level 2', metresPerPixel: CAMPUS_SCALE }],
+  'level-1': [{ venueId: 'icc', level: 'Level 1', geo: CAMPUS_GEO, verticalsOnly: true }],
+  'level-2': [{ venueId: 'icc', level: 'Level 2', geo: CAMPUS_GEO, verticalsOnly: true }],
 };
 
 /**

@@ -99,11 +99,17 @@ describe('VENUE_VERTICAL', () => {
     }
   });
 
-  it('only claims a drawn stair where a sheet was actually read', () => {
-    // The convention centre has no sheet the fit can place, so it must not be
-    // claiming measured stairs. If this ever fails it is good news — it means
-    // the campus sheets landed — but the docblocks need to stop saying so.
-    expect(VENUE_VERTICAL['icc/Level 1']).toBeUndefined();
-    expect(VENUE_VERTICAL['icc/Level 2']).toBeUndefined();
+  it('reads the convention centre from the campus sheets', () => {
+    // The building with the most floor-changing on it, and for a while the one
+    // this could not read: its own plans are the architect's and key five kinds
+    // of space, none of them vertical. Gen Con's campus sheets draw the
+    // escalators and letter them UP TO 2ND FLOOR, and a georeference rather
+    // than a fit is what finally placed those sheets.
+    //
+    // If this fails with the entries missing, the likely cause is a rebuild
+    // run without `plans/campus` — which is gitignored. `npm run plans:campus`
+    // fetches it, and the script warns when it is absent.
+    expect(VENUE_VERTICAL['icc/Level 1']?.length).toBeGreaterThan(0);
+    expect(VENUE_VERTICAL['icc/Level 2']?.length).toBeGreaterThan(0);
   });
 });

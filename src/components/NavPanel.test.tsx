@@ -184,14 +184,24 @@ describe('what it says about the line', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(route.walk!.legs.length);
   });
 
-  it('says the route follows drawn floors, and never claims a staircase', () => {
-    const route = routeOf(SAGAMORE, HALL_B);
-    setup({ from: SAGAMORE, to: HALL_B, route });
+  it('says the route follows drawn floors', () => {
+    setup({ from: SAGAMORE, to: HALL_B, route: routeOf(SAGAMORE, HALL_B) });
     expect(screen.getByText(/floors the plans draw/)).toBeTruthy();
-    // The one thing no source here knows. The step may say which stretch the
-    // stairs are on; it may not say "take the stairs" as though it knew.
+  });
+
+  it('claims a staircase only where a plan drew one', () => {
+    // The distinction that matters, and the reason a link carries its
+    // certainty at all. A stair Gen Con drew is a stair the route can send you
+    // up. One merely implied by two floors overlapping is a stretch it must be
+    // on, and "take the stairs" of that would be inventing a staircase.
+    const route = routeOf(SAGAMORE, HALL_B);
     const stairs = route.walk!.legs.filter((leg) => leg.kind === 'stairs');
-    for (const leg of stairs) expect(leg.text).toMatch(/somewhere|off this stretch/i);
+    expect(stairs.length).toBeGreaterThan(0);
+    for (const leg of stairs) {
+      const drawn = /^Up the stairs to /.test(leg.text);
+      const implied = /off this stretch/.test(leg.text);
+      expect(drawn || implied, leg.text).toBe(true);
+    }
   });
 
   it('marks an outdoor leg as the straight line it is', () => {
@@ -220,8 +230,9 @@ describe('what it says about the line', () => {
   it('names the floor it changes to, on the step that changes it', () => {
     const route = routeOf(SAGAMORE, HALL_B);
     setup({ from: SAGAMORE, to: HALL_B, route });
-    expect(route.walk!.legs.some((leg) => leg.kind === 'stairs')).toBe(true);
-    expect(screen.getByText(/Change to Level 1/)).toBeTruthy();
+    const stairs = route.walk!.legs.filter((leg) => leg.kind === 'stairs');
+    expect(stairs.length).toBeGreaterThan(0);
+    for (const leg of stairs) expect(leg.text).toContain('Level 1');
   });
 
   it('draws no route, and no disclaimer, when you are already there', () => {

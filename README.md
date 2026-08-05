@@ -419,19 +419,25 @@ so the point on its outline nearest walkable floor is one, to within the width
 of the door. 117 of the 146 rooms get one; the rest are on floors with no
 corridor drawn, and keep their centres because there is nothing to be near.
 
-**Stairs come two ways, and a link records which.** Gen Con's own sheets of the
-hotels draw the thing itself — an escalator is a hatched grey block, and beside
-the big ones the sheet letters UP TO 2ND FLOOR — so `venue-plans.mjs` reads
-those out, and a block read on two adjacent floors in the same spot is one shaft
-seen twice. That is a measurement, and it covers the hotels.
+**Stairs come two ways, and a link records which.** Gen Con's own plans draw the
+thing itself — an escalator is a hatched grey block, and beside the big ones the
+sheet letters UP TO 2ND FLOOR — so `venue-plans.mjs` reads those out, and a
+block read on two adjacent floors in the same spot is one shaft seen twice. That
+is a measurement, and **16 of the 19 floor changes are one**, the convention
+centre's twelve included.
 
-Where no sheet shows one the link is **inferred**, and the map says so by
-drawing a dashed ring rather than a pin. A stair has to land on walkable floor
-on both storeys, so it lies in the overlap of the two floors' circulation: that
-much is certain, and where in the overlap is not. The step reads "the stairs and
-lifts are off this stretch" rather than "take the stairs", because the stretch is
-known and the step is not. **The convention centre is still inferred**, and it
-is the building with the most floor-changing on it — see below.
+Where no sheet shows a stair the link is **inferred**, and everything about it
+says so: the map draws a dashed ring rather than a pin, and the step reads "the
+stairs and lifts are off this stretch" rather than "Up the stairs to Level 2".
+A stair has to land on walkable floor on both storeys, so it lies in the overlap
+of the two floors' circulation — that much is certain, and where in the overlap
+is not. Three buildings still infer: the Crowne Plaza, the Hilton and the Omni,
+whose sheets show no stair the reader recognises.
+
+Reading the real ones is not only a labelling improvement. With twelve
+escalators to choose between rather than one guessed spot, the router picks the
+nearest: Exhibit Hall B to the Marriott Ballroom came down from 620 m and nine
+minutes to 500 m and seven.
 
 **Outdoors it will not claim a route at all.** There is no pavement network in
 this repository: OpenStreetMap has the streets, but as carriageways rather than
@@ -451,19 +457,37 @@ and that is live: `npm run plans:campus` fetches it from
 Level 1 does draw its escalators — two of them, hatched on the Hoosier and
 Speedway concourses, each lettered UP TO 2ND FLOOR.
 
-What is missing is a way to *place* that sheet. `fit` puts a plan on the map by
-taking its coloured area to **be** the building and aligning that bounding box
-with the venue's, searching a third of a building either side. That is exactly
-right for a screenshot of one hotel and hopeless for a sheet covering a mile of
-downtown, where the colour is everything and the building is a fortieth of it:
-run `node scripts/venue-plans.mjs --campus` and the convention centre lands at
-0.05 m/px and 32% overlap, against 76–89% for every hotel. What these sheets
-need is a georeference rather than a fit — they are one level of a pyramid at a
-fixed scale drawn with south at the top, so two landmarks with known coordinates
-fix scale and offset for every building at once, the way
-`plans/georeference.json` already does for the PDFs. Until that exists the
-campus sheets sit behind `--campus`, so a rebuild cannot quietly replace good
-hotel geometry with a misplaced convention centre.
+**These sheets are georeferenced rather than fitted**, and the difference is the
+difference between knowing and guessing. `fit` puts a hotel screenshot on the
+map by taking its coloured area to **be** the building and aligning that box
+with the venue's — right for one building, hopeless for a mile of downtown where
+the colour is everything and the building is a fortieth of it. Fitted that way
+the convention centre lands at 0.05 m/px and 32% overlap, against 76–89% for
+every hotel.
+
+But a pyramid level is one rigid drawing — a single scale and offset, south at
+the top — so three numbers place every building on it at once. `CAMPUS_GEO` in
+`venue-plans.mjs` holds them. They were found by reading two landmarks off the
+sheet by eye, Monument Circle and Lucas Oil's bowl, and then refining against
+all fourteen surveyed footprints together; the eye only had to get close enough
+for the refinement to find the right basin. The result covers 76% of those
+footprints, and the two buildings with enough shape to be sure about — the
+convention centre and Lucas Oil — both land at **94%**, better than any hotel's
+fit. The ones that score badly are the ones Gen Con does not colour as its own
+venues: Circle Centre, the Indiana Rep, the escape room.
+
+A campus sheet is read for its stairs and nothing else. The convention centre's
+corridors already come from its architect's PDFs — vector, keyed by a printed
+legend, the best geometry in this repository — and `walkable.ts` prefers
+`VENUE_HALLS` to that detail, so reading them again off a raster would silently
+replace a measurement with a worse one. Vertical circulation is the one thing
+the PDFs do not have.
+
+The sheets are not committed: they are Gen Con's drawings and eighteen megabytes
+of them. A rebuild without them writes a `venue-plan.ts` whose convention centre
+has no stairs, which looks perfectly healthy — the only sign is a building that
+stops changing floors — so the script warns when they are absent, and a test
+asserts they made it in.
 
 **Three things about that pyramid look like a dead source when they aren't.** It
 is not a Web Mercator pyramid — it is shallow and starts around z2, in the

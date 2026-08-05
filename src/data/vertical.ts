@@ -19,10 +19,11 @@
  * of the overlap, the map draws it as a ring rather than a pin, and a route
  * using one says "off this stretch" rather than naming a staircase.
  *
- * The convention centre is still inferred, and it is the one that matters most.
- * Its own plans are the architect's and key five kinds of space, none of them
- * vertical; Gen Con's campus sheets *do* draw its escalators — see the foot of
- * this file — but those cannot yet be placed on the map.
+ * The convention centre is drawn too, and it took the most work: its own plans
+ * are the architect's and key five kinds of space, none of them vertical, so
+ * its escalators come from Gen Con's campus sheets instead — the ones lettered
+ * UP TO 2ND FLOOR. Those sheets are georeferenced rather than fitted; see the
+ * foot of this file.
  */
 
 import { VENUE_LEVELS } from './venues';
@@ -218,26 +219,24 @@ export const verticalPoint = (link: Vertical) => toPoint(link.at);
 
 /*
  * ---------------------------------------------------------------------------
- * What is left: the convention centre
+ * Placing a campus sheet
  *
- * The nine hotels are read from their own sheets. The convention centre is not,
- * and it is the building with the most floor-changing on it.
+ * The hotels are read from Gen Con's screenshots of single buildings, which
+ * `venue-plans.mjs` places by fitting: it takes the sheet's coloured area to
+ * *be* the building and aligns that box with the venue's. The convention centre
+ * has no such sheet — its escalators are only on Gen Con's campus tiles, which
+ * cover a mile of downtown, and fitting one of those put it at 32% overlap
+ * against 76-89% for every hotel.
  *
- * Gen Con's tile pyramid does draw its escalators — `npm run plans:campus`
- * fetches it, and level 1 shows two of them hatched on the Hoosier and Speedway
- * concourses, each lettered UP TO 2ND FLOOR. `venue-plans.mjs` will read those
- * blocks the moment it can place the sheet. What it cannot yet do is place it:
- * `fit` puts a plan on the map by taking its coloured area to *be* the building
- * and aligning that box with the venue's, which is exactly right for a
- * screenshot of one hotel and hopeless for a sheet of a mile of downtown. Run
- * it with `--campus` and the convention centre lands at 0.05 m/px and 32%
- * overlap, against 76-89% for every hotel.
+ * So those are georeferenced instead. A pyramid level is one rigid drawing —
+ * one scale, one offset, south at the top — so three numbers place every
+ * building on it at once. They were found by reading two landmarks off the
+ * sheet by eye, Monument Circle and Lucas Oil's bowl, and then refining against
+ * all fourteen surveyed footprints together; the eye only had to get close
+ * enough for the refinement to find the right basin. The convention centre and
+ * Lucas Oil, the two buildings with enough shape to be sure about, both land at
+ * 94%.
  *
- * The fix is a georeference rather than a fit, and these sheets can have one:
- * they are a single level of a pyramid at a fixed scale, drawn with south at
- * the top, so two landmarks with known coordinates fix scale and offset for
- * every building on the sheet at once — the same thing
- * `plans/georeference.json` already does for the PDFs. Until then the campus
- * sheets are behind `--campus` so a rebuild cannot quietly replace good hotel
- * geometry with a misplaced convention centre.
+ * What is left is the buildings that still infer: the Crowne Plaza, the Hilton
+ * and the Omni, whose sheets show no stair the reader recognises.
  */
