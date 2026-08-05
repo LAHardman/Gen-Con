@@ -25,6 +25,8 @@ interface Props {
   nowMs: number;
   onClose: () => void;
   onZoomToRoom: (room: Room) => void;
+  /** Start directions with this room as the destination. */
+  onNavigateToRoom: (room: Room) => void;
 }
 
 export function RoomDialog({
@@ -35,6 +37,7 @@ export function RoomDialog({
   nowMs,
   onClose,
   onZoomToRoom,
+  onNavigateToRoom,
 }: Props) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const style = CATEGORY_STYLES[room.category];
@@ -94,15 +97,31 @@ export function RoomDialog({
           <span className="dialog__tag" style={{ background: style.fill, borderColor: style.stroke }}>
             {style.label}
           </span>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="dialog__close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="dialog__header-actions">
+            {/* The one action here rather than in the row at the bottom: it
+                takes over the whole map, so it belongs next to the close
+                button as the other way out of this dialog. */}
+            <button
+              type="button"
+              className="dialog__icon"
+              onClick={() => onNavigateToRoom(room)}
+              aria-label={`Directions to ${room.name}`}
+              title="Directions to this room"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M21.4 2.6 2.9 9.7a.8.8 0 0 0 .06 1.5l7.3 2.5 2.5 7.3a.8.8 0 0 0 1.5.06l7.1-18.5a.8.8 0 0 0-1-1Z" />
+              </svg>
+            </button>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              className="dialog__close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <h2 className="dialog__title" id="room-dialog-title">
