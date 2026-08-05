@@ -13,6 +13,7 @@
  *
  *     node scripts/gencon-tiles.mjs                 # every floor it can find
  *     node scripts/gencon-tiles.mjs --floors 1,2    # just these
+ *     node scripts/gencon-tiles.mjs --zoom 5        # this level, whatever it costs
  *
  * Writes one stitched PNG per floor into `plans/campus/`, which
  * `venue-plans.mjs` then reads exactly as it reads the screenshots — the fit
@@ -24,6 +25,12 @@
  * range of tiles at each are found by probing outward from a tile known to
  * exist, because guessing them from a URL is how you quietly fetch half a
  * campus.
+ *
+ * Note that this is *not* a slippy map: it is a small pyramid in the
+ * `CRS.Simple` style Gen Con's own Leaflet map uses, starting around z2, so a
+ * URL built from Web Mercator coordinates asks for something that was never
+ * there. An absent object on that bucket answers 403 rather than 404, which
+ * makes a wrong guess look exactly like a refusal.
  *
  * Be a good guest: this is somebody's CDN. Requests are made a few at a time
  * with a pause between, tiles already on disk are never fetched twice, and the
@@ -55,6 +62,24 @@ const FLOORS = [['B', 'b', '0'], ['1'], ['2'], ['3'], ['4']];
 /** At once, and how long to wait between rounds. Their CDN, their rules. */
 const AT_ONCE = 4;
 const PAUSE = 120;
+
+/**
+ * The most tiles one level may cost, and why there is a limit at all.
+ *
+ * The pyramid is a plain power of two — z3 is 8x8, z5 is 32x32, z7 is 128x128 —
+ * and it goes deeper than anything here can use. Taking the deepest level is
+ * both rude and useless: z7 is sixteen thousand requests for one floor, and it
+ * stitches to 32768x32768, which is four gigabytes of pixels before anything
+ * reads them.
+ *
+ * What the reading actually needs is a building big enough on the sheet to tell
+ * a hatched escalator from a wall. Gen Con's own screenshots of single hotels
+ * are around 1500 pixels across and are legible at that; z5 puts the whole
+ * campus in 8192 and the convention centre in a couple of thousand, which is
+ * the same grade. So: the deepest level that stays inside this budget, which is
+ * z5, and a flag for anyone who wants otherwise.
+ */
+const MAX_TILES = 1200;
 
 const wait = (ms) => new Promise((done) => { setTimeout(done, ms); });
 
@@ -89,8 +114,17 @@ async function fetchTile(floor, z, x, y) {
 async function survey(floor) {
   // Every level, not up to the first gap: the pyramid need not start at zero,
   // and Gen Con's does not — its shallowest published level is well in.
+  //
+  // `deepest` is the deepest level worth taking rather than the deepest that
+  // exists: a level costs (2^z)^2 tiles, and past MAX_TILES that is a great
+  // many requests for detail nothing here reads. WANTED overrides it.
   let deepest = null;
   for (let z = 0; z <= 10; z += 1) {
+    if (WANTED !== null && z !== WANTED) continue;
+    if (WANTED === null && 4 ** z > MAX_TILES) {
+      console.log(`  level ${floor}: stopping at z${deepest?.z ?? '?'}; z${z} would be ${4 ** z} tiles`);
+      break;
+    }
     const found = await probe(floor, z);
     if (found) deepest = { z, ...found };
   }
@@ -174,6 +208,11 @@ async function stitch(floor, area) {
   writeFileSync(path, encodePng(width, height, sheet));
   console.log(`  level ${floor}: ${width}x${height} from ${done} tiles at z${z} → ${path}`);
 }
+
+/** `--zoom N` takes that level whatever it costs; otherwise MAX_TILES decides. */
+const WANTED = process.argv.includes('--zoom')
+  ? Number(process.argv[process.argv.indexOf('--zoom') + 1])
+  : null;
 
 async function main() {
   const asked = process.argv.includes('--floors')

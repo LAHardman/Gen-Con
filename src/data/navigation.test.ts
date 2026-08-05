@@ -40,8 +40,21 @@ const fixAt = (lat: number, lng: number, accuracy = 20): DeviceFix => ({
 });
 
 describe('placePosition', () => {
-  it('puts a room at the centre of the outline the map draws for it', () => {
-    expect(placePosition(SAGAMORE, null)).toEqual(centre('sagamore-ballroom'));
+  it('puts a room at its door rather than under its label', () => {
+    // The label goes in the middle; the door is on the corridor. For a room the
+    // size of the Sagamore those are tens of metres apart, and a route measured
+    // to the middle is a route drawn through the wall.
+    const at = placePosition(SAGAMORE, null)!;
+    const middle = centre('sagamore-ballroom');
+    expect(at).not.toEqual(middle);
+    expect(distanceMetres(at, middle)).toBeGreaterThan(10);
+  });
+
+  it('falls back to the centre where no corridor was drawn to be near', () => {
+    // Lucas Oil has rooms and no plan of its circulation, so there is nothing
+    // for a door to be nearest to.
+    const field = { kind: 'room' as const, roomId: 'lucas-oil-field' };
+    expect(placePosition(field, null)).toEqual(centre('lucas-oil-field'));
   });
 
   it('reads the device live rather than from the place itself', () => {
@@ -115,19 +128,34 @@ describe('routeBetween', () => {
     expect(routeBetween(HALL_B, { kind: 'device' }, null)).toBeNull();
   });
 
-  it('measures the straight line between the two ends', () => {
+  it('measures the straight line between the two doors', () => {
     const route = routeBetween(SAGAMORE, WABASH, null)!;
-    expect(route.metres).toBeCloseTo(
-      distanceMetres(centre('sagamore-ballroom'), centre('wabash-ballroom')),
-      6,
-    );
-    expect(route.fromAt).toEqual(centre('sagamore-ballroom'));
-    expect(route.toAt).toEqual(centre('wabash-ballroom'));
+    expect(route.straightMetres).toBeCloseTo(distanceMetres(route.fromAt, route.toAt), 6);
+    expect(route.fromAt).toEqual(placePosition(SAGAMORE, null));
+    expect(route.toAt).toEqual(placePosition(WABASH, null));
+  });
+
+  it('walks further than the straight line, because walls are in the way', () => {
+    const route = routeBetween(SAGAMORE, WABASH, null)!;
+    expect(route.walk).not.toBeNull();
+    expect(route.metres).toBeGreaterThan(route.straightMetres);
+    // Every leg of a route inside one building is floor somebody drew.
+    expect(route.walk!.indoors).toBe(true);
   });
 
   it('estimates a walk at the unhurried pace geo.ts sets', () => {
     const route = routeBetween(SAGAMORE, WABASH, null)!;
     expect(route.minutes).toBe(Math.max(1, Math.round(route.metres / 70)));
+  });
+
+  it('routes over the skywalks rather than through the wall between buildings', () => {
+    const route = routeBetween(HALL_B, { kind: 'room', roomId: 'marriott-ballroom' }, null)!;
+    expect(route.walk).not.toBeNull();
+    const kinds = route.walk!.legs.map((leg) => leg.kind);
+    expect(kinds).toContain('skywalk');
+    // Nothing outdoors: the whole way across is under cover, which is the
+    // reason anybody wants this route in August.
+    expect(kinds).not.toContain('outdoor');
   });
 
   it('refuses to estimate a walk from beyond the campus', () => {
@@ -170,11 +198,11 @@ describe('routeBetween', () => {
   });
 
   it('says you have arrived from a point a few paces away', () => {
-    const at = centre('hall-b');
-    // ~11 m north: inside the same hall, and well inside the arrival radius.
-    const near = { kind: 'point' as const, position: { lat: at.lat + 0.0001, lng: at.lng } };
+    const door = placePosition(HALL_B, null)!;
+    // ~5 m north of the door, which is nearer than the arrival radius.
+    const near = { kind: 'point' as const, position: { lat: door.lat + 0.000045, lng: door.lng } };
     const route = routeBetween(near, HALL_B, null)!;
-    expect(route.metres).toBeLessThan(25);
+    expect(route.straightMetres).toBeLessThan(12);
     expect(route.arrived).toBe(true);
   });
 
@@ -190,7 +218,7 @@ describe('routeBetween', () => {
     expect(upstairs.level).not.toBe(downstairs.level);
 
     const route = routeBetween(roomPlace(downstairs), roomPlace(upstairs), null)!;
-    expect(route.metres).toBeLessThan(25);
+    expect(route.straightMetres).toBeLessThan(12);
     expect(route.floorChange).toEqual({ from: '2nd floor', to: '3rd floor' });
     expect(route.arrived).toBe(false);
   });

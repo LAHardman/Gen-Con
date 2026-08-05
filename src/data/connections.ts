@@ -126,6 +126,17 @@ const REACHES = new Map<Connection, Map<string, string>>(
 );
 
 /**
+ * The buildings a span joins, and the floor it joins each of them on.
+ *
+ * The same table the drawing rule below reads, exposed because a route needs it
+ * for a different reason: to know that stepping onto this bridge in one
+ * building puts you on a named floor of another.
+ */
+export function reachesOf(connection: Connection): ReadonlyMap<string, string> {
+  return REACHES.get(connection) ?? new Map();
+}
+
+/**
  * Whether a span is drawn: always with nothing open, and otherwise only where
  * it reaches the open building on the floor being shown.
  */

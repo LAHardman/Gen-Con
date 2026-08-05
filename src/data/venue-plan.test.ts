@@ -9,8 +9,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { VENUE_HALLS, VENUE_ROOM_SHAPES } from './venue-plan';
-import { ROOMS_BY_ID, VENUES_BY_ID, VENUE_LEVELS } from './venues';
+import { VENUE_HALLS, VENUE_ROOM_SHAPES, VENUE_VERTICAL } from './venue-plan';
+import { ROOMS_BY_ID, VENUES_BY_ID, VENUE_LEVELS, venueBounds } from './venues';
 
 describe('VENUE_HALLS', () => {
   it('covers the fifteen floors the plans were read for', () => {
@@ -70,5 +70,46 @@ describe('VENUE_ROOM_SHAPES', () => {
     const count = Object.keys(VENUE_ROOM_SHAPES).length;
     expect(count).toBeGreaterThan(0);
     expect(count).toBeLessThan(30);
+  });
+});
+
+describe('VENUE_VERTICAL', () => {
+  it('keys every stair to a building and a floor that building has', () => {
+    for (const key of Object.keys(VENUE_VERTICAL)) {
+      const at = key.indexOf('/');
+      const [venueId, level] = [key.slice(0, at), key.slice(at + 1)];
+      expect(VENUES_BY_ID[venueId], key).toBeDefined();
+      expect(VENUE_LEVELS[venueId] ?? [], key).toContain(level);
+    }
+  });
+
+  it('puts every mark inside the building it belongs to', () => {
+    // These are read off a sheet by colour and placed by a fit, and the one
+    // failure mode that matters is a fit gone wrong — which shows up as a
+    // staircase out in the street rather than as an exception.
+    for (const [key, marks] of Object.entries(VENUE_VERTICAL)) {
+      const venue = VENUES_BY_ID[key.slice(0, key.indexOf('/'))];
+      const [nw, se] = venueBounds(venue);
+      for (const [lat, lng] of marks) {
+        expect(lat, key).toBeLessThanOrEqual(nw.lat + 0.0005);
+        expect(lat, key).toBeGreaterThanOrEqual(se.lat - 0.0005);
+        expect(lng, key).toBeGreaterThanOrEqual(nw.lng - 0.0005);
+        expect(lng, key).toBeLessThanOrEqual(se.lng + 0.0005);
+      }
+    }
+  });
+
+  it('reads the convention centre from the campus sheets', () => {
+    // The building with the most floor-changing on it, and for a while the one
+    // this could not read: its own plans are the architect's and key five kinds
+    // of space, none of them vertical. Gen Con's campus sheets draw the
+    // escalators and letter them UP TO 2ND FLOOR, and a georeference rather
+    // than a fit is what finally placed those sheets.
+    //
+    // If this fails with the entries missing, the likely cause is a rebuild
+    // run without `plans/campus` — which is gitignored. `npm run plans:campus`
+    // fetches it, and the script warns when it is absent.
+    expect(VENUE_VERTICAL['icc/Level 1']?.length).toBeGreaterThan(0);
+    expect(VENUE_VERTICAL['icc/Level 2']?.length).toBeGreaterThan(0);
   });
 });

@@ -396,29 +396,116 @@ the same place:
 Either end can be changed afterwards, and ⇅ swaps them, which is what makes
 this navigation *between* two places rather than only to one.
 
-**What is drawn is a straight line, and everything about it says so.** It is
-dashed rather than solid, the distance is labelled "in a straight line", and the
-panel spells out that the line goes through walls, ignores the streets, and
-takes no account of the skywalks that are usually the fastest way between these
-buildings. The walking estimate is that straight-line distance at
-`walkingMinutes`' unhurried 70 m/min, and past 3 km it is dropped entirely,
-because a walking time from the next state is a joke rather than an estimate.
+**What is drawn is a walking route wherever the map has floor to walk on.** The
+convention centre's prefunction halls and concourses come from its own plans,
+keyed by colour as "Prefunction/Hallways"; the hotels' corridors come from Gen
+Con's drawings the same way. `walkable.ts` turns those into a grid a metre and a
+half across and searches it with A*, and `route.ts` joins the floors together —
+stairs within a building, skywalks and the tunnel between them — with a second,
+much smaller search over those junctions. A room is not something to route
+*through*: you enter it from the corridor, and that doorway is the last step.
 
-Two ends in the same building on different floors get a note saying so, since a
-flat map cannot draw a staircase — and the map holds the *destination's* floor
-in that case, because that is the one you are walking to. Ends within 25 m of
-each other say "You are already there" instead of drawing a line; that radius
-is wide because the ends are room centres, and the doorway of a hall the size of
-Exhibit Hall A is already tens of metres from its middle.
+So Exhibit Hall B to the Marriott Ballroom comes out as the seven legs it really
+is — along Level 1, up to Level 2, over the skywalk to the Westin, through it,
+over the second skywalk, and along the Marriott's 2nd floor — rather than a
+620 m line through six walls. The panel lists them, and the map draws each leg
+on the floor it belongs to.
 
-A real walking route would need the pedestrian network — pavements, lobbies,
-and above all the skywalks. Half of that is now here: `connections.ts` holds
-every covered crossing on the campus, and the map draws them (see *Getting
-between buildings*). What it does not hold is the corridors inside the buildings
-that join one span to the next, so the spans are a set of disconnected bridges
-rather than a graph anything can be routed over. Until they connect, turn-by-turn
-directions from two points would be a confident-sounding guess. A bearing and a
-range are what the data actually supports.
+**Rooms are entered at their doors.** A room's centre is where its label goes;
+for a hall the size of Exhibit Hall A that is eighty metres from any door, so a
+route measured centre to centre is wrong by the length of the room at both ends.
+No source here marks a door — but a room is entered from the corridor beside it,
+so the point on its outline nearest walkable floor is one, to within the width
+of the door. 117 of the 146 rooms get one; the rest are on floors with no
+corridor drawn, and keep their centres because there is nothing to be near.
+
+**Stairs come two ways, and a link records which.** Gen Con's own plans draw the
+thing itself — an escalator is a hatched grey block, and beside the big ones the
+sheet letters UP TO 2ND FLOOR — so `venue-plans.mjs` reads those out, and a
+block read on two adjacent floors in the same spot is one shaft seen twice. That
+is a measurement, and **16 of the 19 floor changes are one**, the convention
+centre's twelve included.
+
+Where no sheet shows a stair the link is **inferred**, and everything about it
+says so: the map draws a dashed ring rather than a pin, and the step reads "the
+stairs and lifts are off this stretch" rather than "Up the stairs to Level 2".
+A stair has to land on walkable floor on both storeys, so it lies in the overlap
+of the two floors' circulation — that much is certain, and where in the overlap
+is not. Three buildings still infer: the Crowne Plaza, the Hilton and the Omni,
+whose sheets show no stair the reader recognises.
+
+Reading the real ones is not only a labelling improvement. With twelve
+escalators to choose between rather than one guessed spot, the router picks the
+nearest: Exhibit Hall B to the Marriott Ballroom came down from 620 m and nine
+minutes to 500 m and seven.
+
+**Outdoors it will not claim a route at all.** There is no pavement network in
+this repository: OpenStreetMap has the streets, but as carriageways rather than
+as anything walkable, with no crossings or kerbs. So a leg between buildings
+that no skywalk joins is drawn dashed and called a straight line.
+
+Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
+is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
+sheet even letters it DOWN TO 1ST FLOOR; a lift bank is a run of dull-yellow
+squares. Neither collides with the street grey on the same sheets. Reading them
+is a fourth and fifth class in `venue-plans.mjs`'s palette, and is the right way
+to finish this.
+
+The convention centre needs Gen Con's tile pyramid rather than a hotel sheet,
+and that is live: `npm run plans:campus` fetches it from
+`…/maps/v9/floor-<level>/{z}/{x}/{y}.png` and stitches one PNG per campus level.
+Level 1 does draw its escalators — two of them, hatched on the Hoosier and
+Speedway concourses, each lettered UP TO 2ND FLOOR.
+
+**These sheets are georeferenced rather than fitted**, and the difference is the
+difference between knowing and guessing. `fit` puts a hotel screenshot on the
+map by taking its coloured area to **be** the building and aligning that box
+with the venue's — right for one building, hopeless for a mile of downtown where
+the colour is everything and the building is a fortieth of it. Fitted that way
+the convention centre lands at 0.05 m/px and 32% overlap, against 76–89% for
+every hotel.
+
+But a pyramid level is one rigid drawing — a single scale and offset, south at
+the top — so three numbers place every building on it at once. `CAMPUS_GEO` in
+`venue-plans.mjs` holds them. They were found by reading two landmarks off the
+sheet by eye, Monument Circle and Lucas Oil's bowl, and then refining against
+all fourteen surveyed footprints together; the eye only had to get close enough
+for the refinement to find the right basin. The result covers 76% of those
+footprints, and the two buildings with enough shape to be sure about — the
+convention centre and Lucas Oil — both land at **94%**, better than any hotel's
+fit. The ones that score badly are the ones Gen Con does not colour as its own
+venues: Circle Centre, the Indiana Rep, the escape room.
+
+A campus sheet is read for its stairs and nothing else. The convention centre's
+corridors already come from its architect's PDFs — vector, keyed by a printed
+legend, the best geometry in this repository — and `walkable.ts` prefers
+`VENUE_HALLS` to that detail, so reading them again off a raster would silently
+replace a measurement with a worse one. Vertical circulation is the one thing
+the PDFs do not have.
+
+The sheets are not committed: they are Gen Con's drawings and eighteen megabytes
+of them. A rebuild without them writes a `venue-plan.ts` whose convention centre
+has no stairs, which looks perfectly healthy — the only sign is a building that
+stops changing floors — so the script warns when they are absent, and a test
+asserts they made it in.
+
+**Three things about that pyramid look like a dead source when they aren't.** It
+is not a Web Mercator pyramid — it is shallow and starts around z2, in the
+`CRS.Simple` style Gen Con's own Leaflet map uses — so a URL built from
+slippy-map coordinates asks for an object that never existed. An absent object on
+that bucket answers **403, not 404**, so a wrong guess is indistinguishable from
+a refusal. And `gencon.com/map` is no longer a floor-plan viewer at all: it
+serves Gen Con's "Looking Glass" exhibitor browser, whose tiles at
+`/lg/tiles/v1/` are a galaxy backdrop rather than a plan of anything. `v7` and
+`v8` still answer; `v10` does not, so `v9` is current.
+
+The fetcher takes the deepest level that stays inside a tile budget rather than
+the deepest that exists, and says which it picked. The pyramid is a plain power
+of two — z3 is 8×8, z5 is 32×32, z7 is 128×128 — and z7 would be sixteen
+thousand requests stitching to 32768×32768, four gigabytes of pixels before
+anything read them. z5 puts the whole campus in 8192 pixels and the convention
+centre in a couple of thousand, which is the same grade as Gen Con's own
+single-building screenshots. `--zoom N` overrides it.
 
 ### How venues are positioned
 
@@ -855,6 +942,10 @@ Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
 a room on the map**. The source uses 16 distinct `Location` values and several
 hundred `Room` values, and every `Location` but two resolves to a building.
 
+Re-measured since against a full import rather than a sample — 27,467 events,
+every one of them — **nothing is unmatched at all**. The straggler below is
+still five blocks off the map; it simply wasn't in that year's catalogue.
+
 One straggler is left in the sample: **416 Wabash** (1 event), an address five
 blocks east of the campus with no building on the map. Nothing else — every
 other `Location` resolves to a building, and nothing inside a building the map
@@ -891,7 +982,10 @@ src/
     search.ts        Ranking rooms and events against what you type
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
-    venue-plan.ts    Hotel hallways and room outlines, read from plans (generated)
+    walkable.ts      The floor you can stand on, as a grid, and A* over it
+    vertical.ts      Where a route changes floor, and how sure that is
+    route.ts         Joins the floors into one graph and searches it
+    venue-plan.ts    Hotel hallways, room outlines and stairs (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
     useEventFeed.ts       Loads public/events.json
@@ -928,14 +1022,13 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a straight line between two points (see above), and the piece
-that would make them a route is now half-built. The skywalk and tunnel spans are
-in `connections.ts` and the hotels' corridors are in `venue-plan.ts` — but the
-two have never been joined: nothing says which corridor a given bridge lands in,
-and no floor has the doors, stairs or lifts that would let a path leave one
-storey for another. Joining them, and giving each venue its entrances, would
-turn the bearing into a route — including the honest answer that the way there
-is up two floors and across a bridge.
+Directions are a walking route now (see above), and `docs/next-steps.md` has the
+measured gaps and what to do about them. The largest by far is outdoors: there
+is no pavement network at all, so a route between buildings no skywalk joins is
+a straight line — the streets are in OpenStreetMap, but as carriageways rather
+than as anything walkable, and turning them into a network means crossings and
+kerbs nobody has pulled yet. Of the 182 pairs of buildings, 152 need such a line
+and 18 get no route at all.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

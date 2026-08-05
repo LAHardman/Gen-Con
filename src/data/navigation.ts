@@ -9,15 +9,16 @@
  * to a position only when a route is drawn. That way a device fix that updates
  * moves the route with it instead of leaving it pinned where you first stood.
  *
- * What is drawn between the two ends is a straight line, and the wording
- * everywhere says so. A real walking route across this campus runs along
- * pavements, through lobbies, and over the skywalks that join the convention
- * centre to the hotels — none of which is in this repository. A line and a
- * distance are honest about being a bearing and a range; turn-by-turn
- * directions derived from the same two points would not be.
+ * What is drawn between them is a walking route wherever the map has floor to
+ * walk on — see `route.ts` — and a straight line where it hasn't, which is
+ * outdoors and on the floors no plan was read for. Every leg says which of the
+ * two it is, because the difference is the difference between a route and a
+ * bearing.
  */
 
-import { ROOMS_BY_ID, VENUES_BY_ID, roomBounds, type Room } from './venues';
+import { ROOMS_BY_ID, VENUES_BY_ID, roomBounds, roomShapes, type Room } from './venues';
+import { roomEntrance } from './walkable';
+import { walkBetween, type Anchor, type Walk } from './route';
 import { distanceMetres, walkingMinutes, type LatLng } from '../utils/geo';
 
 /** Which end of a route is being chosen. */
@@ -39,6 +40,53 @@ export interface DeviceFix {
 
 export const roomPlace = (room: Room): NavPlace => ({ kind: 'room', roomId: room.id });
 
+function roomCentre(room: Room): LatLng {
+  const [nw, se] = roomBounds(room);
+  return { lat: (nw.lat + se.lat) / 2, lng: (nw.lng + se.lng) / 2 };
+}
+
+/** The outline the map draws for a room, or the rectangle standing in for one. */
+function roomRings(room: Room) {
+  const drawn = roomShapes(room);
+  if (drawn.length) return drawn;
+  const [nw, se] = roomBounds(room);
+  return [[
+    [nw.lat, nw.lng],
+    [nw.lat, se.lng],
+    [se.lat, se.lng],
+    [se.lat, nw.lng],
+  ]] as const as ReturnType<typeof roomShapes>;
+}
+
+/**
+ * Where you go in, which is not where the label goes.
+ *
+ * A room's centre is where its name is drawn; for a hall the size of Exhibit
+ * Hall A that is eighty metres from any door, so a route measured centre to
+ * centre is wrong by the length of the room at both ends and drawn through its
+ * wall. `roomEntrance` finds the point on the outline nearest the corridor
+ * outside it. Rooms on a floor with no corridor drawn keep their centre, since
+ * there is nothing to be near.
+ */
+const DOORS = new Map<string, LatLng | null>();
+
+export function roomDoor(room: Room): LatLng | null {
+  if (!DOORS.has(room.id)) {
+    const found = roomEntrance(roomRings(room), room.venueId, room.level);
+    DOORS.set(room.id, found?.door ?? null);
+  }
+  return DOORS.get(room.id) ?? null;
+}
+
+/** A place as the router wants it: a position, and the floor it stands on. */
+export function placeAnchor(place: NavPlace, device: DeviceFix | null): Anchor | null {
+  const at = placePosition(place, device);
+  if (!at) return null;
+  if (place.kind !== 'room') return { at };
+  const room = ROOMS_BY_ID[place.roomId];
+  return room ? { at, venueId: room.venueId, level: room.level } : { at };
+}
+
 /** The room a place is, where it is one. */
 export function placeRoom(place: NavPlace | null): Room | undefined {
   return place?.kind === 'room' ? ROOMS_BY_ID[place.roomId] : undefined;
@@ -53,10 +101,7 @@ export function placePosition(place: NavPlace, device: DeviceFix | null): LatLng
     case 'room': {
       const room = ROOMS_BY_ID[place.roomId];
       if (!room) return null;
-      // A room's centre. Rooms here are halls and meeting rooms rather than
-      // buildings, so the middle of one is close enough to "there".
-      const [nw, se] = roomBounds(room);
-      return { lat: (nw.lat + se.lat) / 2, lng: (nw.lng + se.lng) / 2 };
+      return roomDoor(room) ?? roomCentre(room);
     }
     case 'device':
       return device?.position ?? null;
@@ -116,10 +161,10 @@ export function placeKey(place: NavPlace | null): string {
 /**
  * Close enough that the walk is over.
  *
- * Wider than it looks: the ends are room centres, so standing in the doorway of
- * a hall the size of Exhibit Hall A is already tens of metres from its middle.
+ * Narrower than it was: the ends are doorways now rather than room centres, so
+ * this no longer has to cover the length of an exhibit hall.
  */
-const ARRIVED_METRES = 25;
+const ARRIVED_METRES = 12;
 
 /**
  * Past this, the two ends are not on the same campus and a walking time would
@@ -132,8 +177,12 @@ export interface RouteSummary {
   to: NavPlace;
   fromAt: LatLng;
   toAt: LatLng;
-  /** Straight-line metres between the two ends. */
+  /** Metres to walk: along the route where there is one, straight line otherwise. */
   metres: number;
+  /** Straight-line metres, always — what the dashed line on the map spans. */
+  straightMetres: number;
+  /** The walk itself, leg by leg, where the map has floor enough to find one. */
+  walk: Walk | null;
   /** A walking estimate, or null when the ends are too far apart to walk. */
   minutes: number | null;
   /** Both ends are rooms in the same building, on different floors. */
@@ -156,7 +205,20 @@ export function routeBetween(
   const toAt = placePosition(to, device);
   if (!fromAt || !toAt) return null;
 
-  const metres = distanceMetres(fromAt, toAt);
+  const straightMetres = distanceMetres(fromAt, toAt);
+
+  // The route is worth looking for only within the campus: past that the two
+  // ends are a drive apart and the search would be over floors nothing walks.
+  const fromAnchor = placeAnchor(from, device);
+  const toAnchor = placeAnchor(to, device);
+  const walk =
+    straightMetres <= NOT_A_WALK_METRES && fromAnchor && toAnchor
+      ? walkBetween(fromAnchor, toAnchor)
+      : null;
+  // A route made only of straight outdoor legs is the bearing again, and saying
+  // "route" of it would claim something the data hasn't got.
+  const usable = walk && !walk.legs.every((leg) => leg.kind === 'outdoor') ? walk : null;
+  const metres = usable ? usable.metres : straightMetres;
   const fromRoom = placeRoom(from);
   const toRoom = placeRoom(to);
 
@@ -172,7 +234,9 @@ export function routeBetween(
     fromAt,
     toAt,
     metres,
-    minutes: metres > NOT_A_WALK_METRES ? null : walkingMinutes(metres),
+    straightMetres,
+    walk: usable,
+    minutes: straightMetres > NOT_A_WALK_METRES ? null : walkingMinutes(metres),
     floorChange:
       sameVenue && fromRoom!.level !== toRoom!.level
         ? { from: fromRoom!.level, to: toRoom!.level }
@@ -184,7 +248,7 @@ export function routeBetween(
     // Two rooms one above the other are metres apart and a staircase away, so
     // a floor change is never an arrival however close the centres are.
     arrived:
-      metres <= ARRIVED_METRES &&
+      straightMetres <= ARRIVED_METRES &&
       !(sameVenue && fromRoom!.level !== toRoom!.level),
   };
 }

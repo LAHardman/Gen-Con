@@ -17,6 +17,8 @@
  *
  *     node scripts/venue-plans.mjs            # all of them
  *     node scripts/venue-plans.mjs westin-2   # one, with its fit reported
+ *     node scripts/venue-plans.mjs --campus   # include Gen Con's campus sheets
+ *                                             # (see everySheet: not yet placeable)
  *
  * It also does the reverse of the same trick: the plan colours the *rooms* too,
  * so where it can be told which drawn room is which authored one, that room
@@ -46,6 +48,7 @@ import { decodePng } from './lib/png.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PLANS = join(ROOT, 'plans/venues');
+const CAMPUS = join(ROOT, 'plans/campus');
 const OUT = join(ROOT, 'src/data/venue-plan.ts');
 
 /**
@@ -65,6 +68,28 @@ const PALETTE = {
 /** How far a pixel may sit from a palette colour and still be it. */
 const TOLERANCE = 10;
 
+/**
+ * Vertical circulation, which is drawn rather than coloured.
+ *
+ * An escalator or stair is a hatched grey block — Gen Con letters the big ones
+ * UP TO 2ND FLOOR — and hatching is not one flat colour, so it cannot go in the
+ * palette above. What it is instead is grey, in a band no other *interior*
+ * surface occupies: the halls are cream and tan, the back of house is brown,
+ * the restroom pictograms are white on tan.
+ *
+ * The streets are grey too, and much bigger, which is what the footprint test
+ * in `verticals` is for: outside the building nothing here is read at all. The
+ * one indoor grey that is not a stair is the odd printed rule, and the area
+ * floor below drops those.
+ */
+const GREY_SPREAD = 8;
+const GREY_MIN = 0x55;
+const GREY_MAX = 0xa8;
+
+/** An escalator pair is a few metres each way. Square metres. */
+const MIN_VERTICAL = 4;
+const MAX_VERTICAL = 160;
+
 /** Metres per cell in the rasters the fit is scored on. */
 const CELL = 1;
 
@@ -83,19 +108,34 @@ function classify(image) {
   const { width, height, pixels } = image;
   const kinds = Object.entries(PALETTE);
   const map = new Uint8Array(width * height); // 0 nothing, else index+1
+  // The hatched greys go in a map of their own rather than into `map`.
+  //
+  // Everything downstream reads `map` as "the building": the fit takes every
+  // non-zero pixel as a point of it, and the streets on a sheet are grey too.
+  // Folding grey into the same map moved the fit on every hotel — the halls
+  // came out in slightly different places for no better reason. So this stays
+  // beside it, read only by `verticals`.
+  const grey = new Uint8Array(width * height);
   for (let at = 0; at < width * height; at += 1) {
     const r = pixels[at * 4];
     const g = pixels[at * 4 + 1];
     const b = pixels[at * 4 + 2];
+    let hit = 0;
     for (let k = 0; k < kinds.length; k += 1) {
       const [, [qr, qg, qb]] = kinds[k];
       if (Math.abs(r - qr) <= TOLERANCE && Math.abs(g - qg) <= TOLERANCE && Math.abs(b - qb) <= TOLERANCE) {
-        map[at] = k + 1;
+        hit = k + 1;
         break;
       }
     }
+    map[at] = hit;
+    if (!hit) {
+      const high = Math.max(r, g, b);
+      const low = Math.min(r, g, b);
+      if (high - low <= GREY_SPREAD && high >= GREY_MIN && high <= GREY_MAX) grey[at] = 1;
+    }
   }
-  return { width, height, map, kinds: kinds.map(([name]) => name) };
+  return { width, height, map, grey, kinds: kinds.map(([name]) => name) };
 }
 
 /* ------------------------------------------------------------------- venue */
@@ -152,7 +192,7 @@ function footprintMask(venue) {
  * coarsely and then refined, which is quick enough at these sizes and immune to
  * the local minima a gradient would fall into.
  */
-function fit(plan, venue, report) {
+function fit(plan, venue, report, hint = null) {
   const target = footprintMask(venue);
 
   // Sample the plan's coloured pixels rather than all of them; the fit is over
@@ -198,7 +238,13 @@ function fit(plan, venue, report) {
   // are the same object at two scales. That fixes the starting point; the
   // search then covers a wide range around it, because a plan can carry the
   // pavement outside the doors or crop the far end of a wing.
-  const guess = Math.max(
+  // On a sheet of one building the coloured area *is* that building, so its box
+  // and the footprint's are the same object at two scales and that fixes the
+  // starting point. On a campus sheet they are not the same object at all — the
+  // colour covers a mile of downtown — and the same arithmetic guesses a scale
+  // several times too fine, from which no sweep this wide can recover. Such a
+  // sheet says what it is instead; see CAMPUS_SHEETS.
+  const guess = hint ?? Math.max(
     venue.anchor.widthMetres / (box.x1 - box.x0),
     venue.anchor.heightMetres / (box.y1 - box.y0),
   );
@@ -372,15 +418,25 @@ function simplify(ring, tolerance) {
 
 /* ------------------------------------------------------------------- build */
 
-function convert(file, venue, level, rooms, report) {
-  const image = decodePng(readFileSync(join(PLANS, file)));
+function convert(path, venue, level, rooms, report, sheet = {}) {
+  const image = decodePng(readFileSync(path));
   const plan = classify(image);
   const kind = (name) => plan.kinds.indexOf(name) + 1;
 
-  const frame = fit(plan, venue, report);
-  if (!frame) return null;
-
   const perLng = metresPerDegreeLng(venue.anchor.nw.lat);
+
+  // A georeferenced sheet needs no fitting: it already knows where it is, and
+  // the frame is just that knowledge written in the venue's own terms.
+  const frame = sheet.geo
+    ? {
+      scale: sheet.geo.scale,
+      east0: (sheet.geo.lng0 - venue.anchor.nw.lng) * perLng,
+      south0: (venue.anchor.nw.lat - sheet.geo.lat0) * METRES_PER_DEGREE_LAT,
+      value: null,
+    }
+    : fit(plan, venue, report, null);
+  if (!frame) return null;
+  if (sheet.geo && report) console.log(`      georeferenced: ${frame.scale} m/px`);
   const project = ([px, py]) => {
     const east = frame.east0 - frame.scale * px;
     const south = frame.south0 - frame.scale * py;
@@ -408,10 +464,78 @@ function convert(file, venue, level, rooms, report) {
     return out;
   };
 
+  const found = verticals(plan, perPixel, project, venue);
+
+  /*
+   * A campus sheet is read for its stairs and nothing else.
+   *
+   * The convention centre's corridors already come from its architect's PDFs —
+   * vector, keyed by a printed legend, and the best geometry in this
+   * repository. Reading them again off a raster of Gen Con's rendering would
+   * replace a measurement with a worse measurement, and `walkable.ts` prefers
+   * VENUE_HALLS to the PDF detail, so it would silently win. Vertical
+   * circulation is the one thing the PDFs do not have.
+   */
+  if (sheet.verticalsOnly) return { halls: [], verticals: found, snapped: [] };
+
   const halls = trace(new Set([kind('circulation')]), MIN_AREA)
     .map(({ rings }) => rings.map((ring) => ring.map(project)));
 
-  return { halls, snapped: snap(plan, frame, trace, rooms, venue, project, report) };
+  return {
+    halls,
+    verticals: found,
+    snapped: snap(plan, frame, trace, rooms, venue, project, report),
+  };
+}
+
+/**
+ * Where the drawing puts a staircase, escalator or lift.
+ *
+ * Everything else here traces an outline; this only wants a position, because
+ * that is all a route needs — the point at which one floor becomes another.
+ * So a component is kept if it is the right size to be one and it lands inside
+ * the building, and reported as its middle.
+ *
+ * The footprint test is doing the real work. Grey is also what the streets and
+ * the railway are drawn in, and on a campus sheet there is far more street than
+ * building; inside the walls the only greys are these.
+ */
+function verticals(plan, perPixel, project, venue) {
+  const { anchor, footprint } = venue;
+  const perLng = metresPerDegreeLng(anchor.nw.lat);
+  const ring = footprint.map(([lat, lng]) => [lng, lat]);
+  const inside = ([lat, lng]) => {
+    let odd = false;
+    for (let a = 0, b = ring.length - 1; a < ring.length; b = a, a += 1) {
+      const [ax, ay] = ring[a];
+      const [bx, by] = ring[b];
+      if (ay > lat !== by > lat && lng < ((bx - ax) * (lat - ay)) / (by - ay) + ax) odd = !odd;
+    }
+    return odd;
+  };
+
+  const found = [];
+  // Over the grey map rather than the classified one; `components` walks
+  // whichever it is handed.
+  for (const piece of components({ ...plan, map: plan.grey }, new Set([1]))) {
+    const area = piece.length * perPixel;
+    if (area < MIN_VERTICAL || area > MAX_VERTICAL) continue;
+    let x = 0;
+    let y = 0;
+    for (const at of piece) {
+      x += at % plan.width;
+      y += Math.floor(at / plan.width);
+    }
+    const middle = project([x / piece.length, y / piece.length]);
+    if (!inside(middle)) continue;
+    found.push({ at: middle, squareMetres: Number(area.toFixed(1)) });
+  }
+  // Nearest the middle of the building first, which is where the main ones are.
+  const centre = [anchor.nw.lat - anchor.heightMetres / 2 / METRES_PER_DEGREE_LAT,
+    anchor.nw.lng + anchor.widthMetres / 2 / perLng];
+  found.sort((a, b) => Math.hypot(a.at[0] - centre[0], a.at[1] - centre[1])
+    - Math.hypot(b.at[0] - centre[0], b.at[1] - centre[1]));
+  return found;
 }
 
 /**
@@ -559,21 +683,65 @@ function snap(plan, frame, trace, rooms, venue, project, report) {
   return out;
 }
 
+/**
+ * Every sheet to read, from both places they come from.
+ *
+ * A hotel sheet is one building, so it names one. A campus sheet from Gen Con's
+ * tile pyramid is every building at once — the fit solves for scale and offset
+ * against one building's own footprint, so the same sheet is simply read once
+ * per building it is asked for, each time finding a different part of it.
+ */
+function everySheet() {
+  const list = [];
+  const add = (dir, file, targets) => {
+    const id = file.replace(/\.png$/, '');
+    for (const target of targets) list.push({ id, path: join(dir, file), ...target });
+  };
+  for (const file of readdirSync(PLANS).filter((n) => n.endsWith('.png')).sort()) {
+    const sheet = SHEETS[file.replace(/\.png$/, '')];
+    if (sheet) add(PLANS, file, [sheet]);
+    else console.warn(`  ${file}: not in SHEETS, skipped`);
+  }
+  /*
+   * Campus sheets are read whenever they are there, and their absence is said
+   * out loud.
+   *
+   * They are not committed — they are Gen Con's drawings and eighteen megabytes
+   * of them — so a fresh clone has none, and a rebuild without them writes a
+   * `venue-plan.ts` with the convention centre's stairs missing. That file
+   * looks perfectly healthy; the only sign is a building that stops changing
+   * floors. Hence the warning rather than a silent skip.
+   */
+  let campus = [];
+  try {
+    campus = readdirSync(CAMPUS).filter((n) => n.endsWith('.png')).sort();
+  } catch {
+    campus = [];
+  }
+  if (!campus.length) {
+    console.warn('  no plans/campus — run `npm run plans:campus` first, or the');
+    console.warn("  convention centre's stairs will be missing from the output");
+  }
+  for (const file of campus) {
+    const targets = CAMPUS_SHEETS[file.replace(/\.png$/, '')];
+    if (targets) add(CAMPUS, file, targets);
+    else console.warn(`  campus/${file}: not in CAMPUS_SHEETS, skipped`);
+  }
+  return list;
+}
+
 async function main() {
-  const only = process.argv[2];
+  // The first thing that isn't a flag, so `--campus westin-2` reads the same
+  // as `westin-2 --campus`.
+  const only = process.argv.slice(2).find((arg) => !arg.startsWith('--'));
   const { venues, rooms, hasPlanShape } = await loadVenues();
-  const sheets = readdirSync(PLANS).filter((name) => name.endsWith('.png')).sort();
 
   const halls = new Map();
   const snapped = new Map();
-  for (const file of sheets) {
-    const id = file.replace(/\.png$/, '');
-    if (only && id !== only) continue;
-    const sheet = SHEETS[id];
-    if (!sheet) {
-      console.warn(`  ${id}: not in SHEETS, skipped`);
-      continue;
-    }
+  const lifts = new Map();
+  for (const sheet of everySheet()) {
+    const id = `${sheet.id}:${sheet.venueId}`;
+    if (only && sheet.id !== only && id !== only) continue;
     const venue = venues[sheet.venueId];
     if (!venue) {
       console.warn(`  ${id}: no venue ${sheet.venueId}, skipped`);
@@ -587,23 +755,72 @@ async function main() {
       && !room.fillsVenue
       && !hasPlanShape(room));
 
-    const built = convert(file, venue, sheet.level, floor, true);
+    const built = convert(sheet.path, venue, sheet.level, floor, true, sheet);
     if (!built) {
       console.warn(`  ${id}: nothing traced`);
       continue;
     }
     const holes = built.halls.reduce((n, rings) => n + rings.length - 1, 0);
-    console.log(`  ${id}: ${built.halls.length} hall shape(s)${holes ? `, ${holes} hole(s)` : ''}`);
-    if (built.halls.length) halls.set(`${sheet.venueId}/${sheet.level}`, built.halls);
-    for (const room of built.snapped) snapped.set(room.roomId, room.rings);
+    console.log(`  ${id}: ${built.halls.length} hall shape(s)${holes ? `, ${holes} hole(s)` : ''}`
+      + `, ${built.verticals.length} stair/lift`);
+    // A building with its own sheet keeps what that gave: it is a drawing of
+    // one building rather than a thirty-second of a campus.
+    const key = `${sheet.venueId}/${sheet.level}`;
+    if (built.halls.length && !halls.has(key)) halls.set(key, built.halls);
+    if (built.verticals.length && !lifts.has(key)) lifts.set(key, built.verticals);
+    for (const room of built.snapped) if (!snapped.has(room.roomId)) snapped.set(room.roomId, room.rings);
   }
 
   if (only) return;
-  writeFileSync(OUT, render(halls, snapped));
+  writeFileSync(OUT, render(halls, snapped, lifts));
   const size = Math.round(readFileSync(OUT).length / 1024);
   const shapes = [...halls.values()].reduce((n, list) => n + list.length, 0);
-  console.log(`${OUT}: ${shapes} halls over ${halls.size} floors, ${snapped.size} rooms snapped, ${size} KB`);
+  const marks = [...lifts.values()].reduce((n, list) => n + list.length, 0);
+  console.log(`${OUT}: ${shapes} halls over ${halls.size} floors, ${snapped.size} rooms snapped, `
+    + `${marks} stairs/lifts over ${lifts.size} floors, ${size} KB`);
 }
+
+/**
+ * Where a campus sheet sits in the world.
+ *
+ * These are not fitted, they are georeferenced, and the difference is the
+ * difference between guessing and knowing. `fit` places a plan by taking its
+ * coloured area to *be* the building and aligning that box with the venue's,
+ * which is right for a screenshot of one hotel and hopeless for a sheet of a
+ * mile of downtown — the convention centre came out at 32% overlap that way.
+ *
+ * A pyramid level is a single rigid drawing: one scale, one offset, south at
+ * the top, the same for every building on it. So three numbers place all of
+ * them at once, and they were found by starting from two landmarks read off
+ * the sheet by eye — Monument Circle and Lucas Oil's bowl — and then refining
+ * against all fourteen surveyed footprints together, which is a far better
+ * measurement than either landmark.
+ *
+ * The result covers 76% of the surveyed footprints, and the two biggest
+ * buildings, which are the ones with the geometry to be sure about, sit at
+ * 94%: the convention centre and Lucas Oil. Of the rest, the ones that score
+ * badly are the ones Gen Con does not colour as its own venues — Circle
+ * Centre, the Indiana Rep, the escape room.
+ *
+ * This is for the z5 sheet `plans:campus` writes. A different zoom is a
+ * different number of pixels for the same ground, so `scale` would need
+ * halving or doubling with it.
+ */
+const CAMPUS_GEO = { scale: 0.155266, lat0: 39.758405, lng0: -86.154774 };
+
+/**
+ * Which of Gen Con's campus levels holds which building's floor.
+ *
+ * Gen Con numbers the *event levels of the campus* rather than the floors of
+ * any one building, so its level 3 is the JW's 3rd, the Hyatt's 3rd, the
+ * Embassy's 5th and the Hilton's 9th at once. The convention centre is the
+ * simple case and the reason these are fetched: it is only on levels 1 and 2,
+ * and those are its own Level 1 and Level 2.
+ */
+const CAMPUS_SHEETS = {
+  'level-1': [{ venueId: 'icc', level: 'Level 1', geo: CAMPUS_GEO, verticalsOnly: true }],
+  'level-2': [{ venueId: 'icc', level: 'Level 2', geo: CAMPUS_GEO, verticalsOnly: true }],
+};
 
 /**
  * Which sheet is which. The file name says it, but a floor is named differently
@@ -659,7 +876,7 @@ async function loadVenues() {
   }
 }
 
-function render(halls, snapped) {
+function render(halls, snapped, lifts = new Map()) {
   const ring = ([lat, lng]) => `[${lat}, ${lng}]`;
   const lines = [];
   lines.push('/**');
@@ -700,6 +917,22 @@ function render(halls, snapped) {
   lines.push(' * ones the match was not sure about — chiefly the sections of a ballroom the');
   lines.push(' * plan draws as a single space — and they keep their rectangle.');
   lines.push(' */');
+  lines.push('/**');
+  lines.push(' * Where a floor becomes another one: stairs, escalators and lift banks.');
+  lines.push(' *');
+  lines.push(' * A position rather than an outline, because that is all a route needs — the');
+  lines.push(' * point at which one storey turns into the next. Read as the grey hatched');
+  lines.push(' * blocks the plans draw inside the walls, which is what an escalator is drawn');
+  lines.push(' * as; Gen Con letters the big ones UP TO 2ND FLOOR beside the very same shape.');
+  lines.push(' */');
+  lines.push('export const VENUE_VERTICAL: Record<string, readonly (readonly [number, number])[]> = {');
+  for (const [key, marks] of [...lifts].sort()) {
+    lines.push(`  '${key}': [`);
+    for (const mark of marks) lines.push(`    [${mark.at[0]}, ${mark.at[1]}],`);
+    lines.push('  ],');
+  }
+  lines.push('};');
+  lines.push('');
   lines.push('export const VENUE_ROOM_SHAPES: Record<string, readonly PlanRing[]> = {');
   for (const [id, rings] of [...snapped].sort()) {
     lines.push(`  '${id}': [`);
