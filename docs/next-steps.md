@@ -10,52 +10,55 @@ they are to build.
 
 ---
 
-## 1. Outdoors has no network at all — the largest gap by far
+## 1. Outdoors — done, and what it cost
 
 **Measured.** Over every pair of buildings, routing one room to another:
 
-| | Pairs, before doors | after |
-|---|---|---|
-| Routed entirely under cover | 12 | 12 |
-| Need an outdoor straight line | 152 | **170** |
-| Get no route at all | **18** | **0** |
-| Total | 182 | 182 |
+| | Before doors | With doors | With pavements |
+|---|---|---|---|
+| Routed entirely under cover | 12 | 12 | 12 |
+| Follows surveyed pavement | — | — | **168** |
+| Needs a long straight line | 152 | 170 | **2** |
+| Gets no route at all | **18** | 0 | 0 |
+| Total | 182 | 182 | 182 |
 
-So roughly 7% of building-to-building journeys get the thing the router was
-built to give. The rest are answered, but with a straight line between two
-doors, because the only outdoor connections in the repository are the eleven
-skywalks and the tunnel, and those join the convention centre to five hotels and
-nothing else.
+Two straight lines remain, and both are journeys to Lucas Oil: nothing draws the
+stadium's plazas as anything walkable, so its rooms are 270 m from the nearest
+mapped footway and the last leg has to be a guess. Everything else on the campus
+now walks either a floor somebody drew or a pavement somebody surveyed.
 
-**Done: the 18 with no route at all.** They were a defect rather than a data
-gap. Outdoor edges used to be created only *from* a node with no cell — a loose
-point outdoors — so two rooms that both sat on drawn floors in buildings no
-skywalk joined got no edge between them at all and `walkBetween` returned null.
-Every venue now has door nodes on the lowest floor whose circulation is drawn,
-one per connected piece of it, and any two indoor nodes can be joined by
-walk → door → outdoor → door → walk.
+**What was done.**
 
-Two things had to come with it. Doors compete with skywalks, and an
-uncorrected straight line wins nearly every time — Exhibit Hall B to the
-Marriott Ballroom came out as 389 m across the street against 500 m over the
-bridges — so the search runs twice, once over measured surfaces only and again
-with the straight lines switched on, and an outdoor leg is charged the 4/π
-detour a grid of blocks really costs. And one door per *floor* was not enough:
-the JW's ground floor is drawn as several disconnected runs, so a single door
-stranded everything outside the piece it landed in and made the hotel
-unreachable from all thirteen other buildings. `route.test.ts` holds both.
+1. *Door nodes.* Every venue has ways out on the lowest floor whose circulation
+   is drawn — one per connected piece of it, and several around a large
+   building. That fixed the 18 with no route. It also had to be several rather
+   than one: the convention centre is 400 m across, and with a single door every
+   route out of it left by the same corner and the walk to the street was long
+   enough to beat the skywalks on distance while being far less use.
+2. *The pavements.* `npm run fetch:pavements` pulls the ground-level footway
+   network from Overpass — 664 junctions, 831 runs, 32 km — and `route.ts`
+   walks it. The skywalks are excluded even though OpenStreetMap has them,
+   because `connections.ts` already holds them with the floor each lands on.
+3. *The doors join it.* Each door reaches the nearest footway in each quarter of
+   the compass, up to 90 m. That hop is the only straight line left in an
+   ordinary route.
 
-**What to do next:**
+**What it cost, and this is a real change in behaviour.** With outdoor routes
+made of surveyed pavement rather than bearings, the old rule — a measured route
+always beats a guessed one, so never go outside if a skywalk exists — stopped
+being justified. It is replaced by a stated preference: take the covered route
+when it is within a quarter as long, and the shortest otherwise
+(`WORTH_STAYING_IN` in `route.ts`). All 12 covered pairs survive that, but
+individual room pairs move: Exhibit Hall B to the Marriott Ballroom is now 217 m
+across the street rather than 500 m over a skywalk dogleg through the Westin.
 
-1. **Pull the pedestrian network from OpenStreetMap.** `footway`, `sidewalk`,
-   `crossing`, and `highway=pedestrian` over the campus bounding box, by the
-   same Overpass query that produced `footprints.ts`. That turns 170 straight
-   lines into real routes and is the single biggest improvement available.
-2. **Snap the doors to it.** A door node joins the pavement graph at its nearest
-   footway vertex, and the outdoor leg stops being straight.
+If that preference is wrong for August, it is one constant.
 
-Until (1), keep the leg dashed and keep the wording. A straight line called a
-straight line is honest; a straight line called a route is not.
+**What is left outdoors.** The dashed forecourt hop is 25–90 m at most
+buildings and it crosses ground nobody has drawn — sometimes a plaza, sometimes
+a street. Mapping the actual entrances, or tracing the forecourt paths, would
+remove the last guess from an outdoor route. It is a much smaller prize than
+the network was.
 
 ---
 
@@ -77,6 +80,11 @@ No route can cross these, and a room on one falls back to its centre rather
 than a doorway (see §3). The JW is the one that bites: the skywalk enters it on
 the 2nd floor, which has no surface, so **the JW cannot be routed into at all**
 despite being skywalk-connected to the convention centre.
+
+This is now the largest gap in directions, and it is the reason **seven of the
+fifteen skywalk-joined pairs of buildings have no covered route at all** — the
+bridges into the JW and the Hyatt land on floors nothing has drawn, so the
+router has to send you outside whatever the weather.
 
 **What to do.** Gen Con's campus sheets now place correctly (§4 of the README),
 and they cover every building on all five campus levels — not just the two the
@@ -114,10 +122,10 @@ floors *are* drawn — they are likely rooms whose outline sits further than
 ## 4. The routing engine is only tested over the real campus
 
 `route.ts` now has `route.test.ts`, which asserts the properties a route must
-have across every pair of buildings — no pair unanswered, a measured route never
-passed over for a straight line, a total that agrees with the legs under it.
-That is the coverage the door work needed and it catches the regressions that
-work could cause.
+have across every pair of buildings — no pair unanswered, pavement walked rather
+than guessed across, the cover preference obeyed in both directions, a total
+that agrees with the legs under it. That is the coverage the door and pavement
+work needed and it catches the regressions that work could cause.
 
 What it cannot do is localise a fault. It runs over real venue data, so a break
 in A\*, in the portal graph or in the grid shows up as "the JW is unreachable"
@@ -174,6 +182,12 @@ one `dayTimeList.php` under `scripts/lib/__fixtures__/`.
   silently invalidates the scale — halving or doubling it per level. A test that
   asserts the sheet's pixel dimensions before trusting the constant would catch
   that.
+- **`fetch-pavements.mjs` has no test, and its exclusions are the load-bearing
+  part.** If a future Overpass pull stopped filtering `bridge`/`covered`/`layer`,
+  the skywalks would enter the pavement network as ground-level footway and the
+  router would happily cross one without going upstairs — silently, and looking
+  more connected rather than less. A test over a saved Overpass fixture
+  asserting that `onTheGround` rejects a bridge would cost very little.
 - **`fetch-events.mjs` cannot be unit-tested** because it takes its lock and
   runs on import. Its resume logic is verified by running it. Extracting the
   decision — which cached records a full pull may keep — into an exported pure

@@ -699,9 +699,10 @@ export function MapView({
   /*
    * A route is drawn as the legs it is made of, because they are not the same
    * kind of claim. A walk along a floor is a line over surface the plans drew,
-   * so it is solid. An outdoor leg is a bearing — there are no pavements in the
-   * data — so it stays dashed, as the whole line used to be when the whole line
-   * was a guess.
+   * and a pavement leg is a line over a footway OpenStreetMap has surveyed, so
+   * both are solid. An outdoor leg is the unmapped ground between a door and
+   * the kerb — a straight line across a forecourt — so it stays dashed, as the
+   * whole line used to be when the whole line was a guess.
    */
   useEffect(() => {
     const map = mapRef.current;

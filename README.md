@@ -439,26 +439,35 @@ escalators to choose between rather than one guessed spot, the router picks the
 nearest: Exhibit Hall B to the Marriott Ballroom came down from 620 m and nine
 minutes to 500 m and seven.
 
-**Outdoors it will not claim a route at all.** There is no pavement network in
-this repository: OpenStreetMap has the streets, but as carriageways rather than
-as anything walkable, with no crossings or kerbs. So a leg between buildings
-that no skywalk joins is drawn dashed and called a straight line.
+**Outdoors it follows the pavements**, which are surveyed in OpenStreetMap the
+same way the building footprints are. `npm run fetch:pavements` pulls the
+ground-level footway network over the campus — sidewalks, crossings, plazas,
+steps — and writes `src/data/pavements.ts`: 664 junctions, 831 runs between
+them, 32 km of pavement. Of the 182 building-to-building pairs, 168 now walk
+real footway.
 
-It is a line between *doors*, though, rather than between rooms. Every building
-has door nodes on the lowest floor whose circulation is drawn — one per
+The skywalks are deliberately **not** taken from OpenStreetMap even though it
+has them, tagged as bridges. `connections.ts` already holds them with the floor
+each one lands on, and a second copy that knew nothing about storeys would let a
+route cross one without ever going upstairs.
+
+Getting from a building onto that network is the part nobody has mapped. Every
+venue has door nodes on the lowest floor whose circulation is drawn — one per
 connected piece of it, since the JW's ground floor is several disconnected runs
-and a single door would strand the rest — so any two rooms on the campus can be
-joined by walk → door → outdoor → door → walk. All 182 building-to-building
-pairs get an answer; before the doors, 18 got nothing at all and the panel
-quietly fell back to a bearing.
+and a single door would strand the rest, and several around a large building,
+since the convention centre is 400 m across. Each door reaches the nearest
+footway in each quarter of the compass, up to 90 m. **That hop is the only
+straight line left in a route**, it is drawn dashed, and the panel says what it
+is: the ground between a door and the kerb, which is a forecourt or a plaza and
+is not drawn anywhere.
 
-A straight line must not *compete* with a route somebody drew, because it goes
-through whatever stands between the two doors. So the search runs twice — over
-measured surfaces only, and again with the straight lines switched on if that
-found nothing — and an outdoor leg is charged 1.3× its length, near the 4/π a
-walk over a grid of blocks really costs. Without both, Exhibit Hall B to the
-Marriott Ballroom takes 389 m across Maryland St over 500 m on the skywalks that
-exist to keep you out of an Indianapolis August.
+**A route stays under cover unless the street saves real distance.** Gen Con is
+the first week of August in Indianapolis and downtown is joined by a mile of
+skywalk built for exactly that, so the shortest route is not simply taken: the
+covered one wins if it is within a quarter as long. The Sagamore Ballroom to the
+Marriott's is 407 m over the bridges against 391 m across Maryland St, and takes
+the bridges. Exhibit Hall B to the Marriott Ballroom is 217 m on the pavement
+against a 500 m skywalk dogleg through the Westin, and takes the street.
 
 Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
 is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
@@ -1027,6 +1036,7 @@ scripts/
   plan-to-geometry.mjs     Plans to map geometry (writes plan-geometry.ts)
   venue-plans.mjs          Reads hotel hallways by colour (writes venue-plan.ts)
   gencon-tiles.mjs         Fetches and stitches Gen Con's floor-plan tiles
+  fetch-pavements.mjs      Pulls the footway network (writes pavements.ts)
   lib/png.mjs              PNG decoding, down to 4-bit palette tiles
   fetch-events.mjs         Crawls the source and imports the real schedule
   lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
@@ -1038,13 +1048,18 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a walking route now (see above), and `docs/next-steps.md` has the
-measured gaps and what to do about them. The largest by far is outdoors: there
-is no pavement network at all, so a route between buildings no skywalk joins is
-a straight line — the streets are in OpenStreetMap, but as carriageways rather
-than as anything walkable, and turning them into a network means crossings and
-kerbs nobody has pulled yet. Of the 182 pairs of buildings, 170 need such a line
-and 12 are routed under cover the whole way.
+Directions are a walking route now, indoors and out (see above), and
+`docs/next-steps.md` has the measured gaps and what to do about them. Of the 182
+pairs of buildings, 168 follow surveyed pavement, 12 stay under cover the whole
+way, and 2 — both ends of a journey to Lucas Oil — still need a long straight
+line, because nothing draws the stadium's plazas as anything walkable.
+
+The largest gap left is the fifteen floors with no walkable surface drawn at
+all. The one that bites is the JW Marriott's 2nd, where the skywalk from the
+convention centre lands: the bridge is in the data and the floor it arrives on
+is not, so **the JW cannot be reached under cover** despite being
+skywalk-connected. Seven of the fifteen skywalk-joined pairs of buildings have
+no covered route for that reason.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

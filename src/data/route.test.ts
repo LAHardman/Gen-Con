@@ -43,25 +43,44 @@ describe('every building can be reached from every other', () => {
   }, 60_000);
 
   it('reaches a building with no floor drawn at all', () => {
-    // Lucas Oil has rooms and no circulation on any of its six floors, so the
-    // only way to it is the straight line — which must still be offered.
+    // Lucas Oil has rooms and no circulation on any of its six floors, and the
+    // nearest mapped footway is 270 m from them — nothing draws its plazas. So
+    // the last leg has to be a straight line, and it must still be offered.
     const walk = routeBetweenRooms('hall-b', 'lucas-oil-field')!;
     expect(walk).not.toBeNull();
     expect(walk.legs.some((leg) => leg.kind === 'outdoor')).toBe(true);
     expect(walk.indoors).toBe(false);
   });
+
+  it('walks the pavements rather than guessing a line across them', () => {
+    // What the OpenStreetMap footway network bought: of the 182 pairs, 170
+    // needed a straight line before it and 168 now follow surveyed pavement.
+    const walk = routeBetweenRooms('hall-b', 'jw-white-river-abcd')!;
+    expect(walk.legs.some((leg) => leg.kind === 'pavement')).toBe(true);
+    const paved = walk.legs.filter((leg) => leg.kind === 'pavement');
+    // And it is drawn, rather than being a two-point line under another name.
+    expect(Math.max(...paved.map((leg) => leg.points.length))).toBeGreaterThan(2);
+  });
 });
 
-describe('a measured route beats a guessed one', () => {
-  it('keeps to the skywalks even when crossing the street is shorter', () => {
-    // The whole point of the two-pass search. Door to door across Maryland St
-    // is about 390 m against 500 m over the skywalks, so one search would take
-    // the street every time — and that line goes through whatever stands
-    // between the two doors.
-    const walk = routeBetweenRooms('hall-b', 'marriott-ballroom')!;
+describe('what a route is worth walking to stay dry', () => {
+  it('stays under cover when the street would barely be shorter', () => {
+    // 407 m over the skywalks against 391 m across Maryland St — 4%, in an
+    // Indianapolis August, for which nobody would choose the street. This is
+    // the whole reason the shortest route is not simply taken.
+    const walk = routeBetweenRooms('sagamore-ballroom', 'marriott-indiana-ballroom')!;
     expect(walk.indoors).toBe(true);
     expect(walk.legs.some((leg) => leg.kind === 'skywalk')).toBe(true);
-    expect(walk.legs.some((leg) => leg.kind === 'outdoor')).toBe(false);
+  });
+
+  it('takes the street when the covered way is a long way round', () => {
+    // Exhibit Hall B to the Marriott Ballroom is 154 m apart and 500 m by
+    // skywalk, which doglegs up through the Westin and back down. 217 m on the
+    // pavement is the right answer and used to lose to that dogleg.
+    const walk = routeBetweenRooms('hall-b', 'marriott-ballroom')!;
+    expect(walk.indoors).toBe(false);
+    expect(walk.legs.some((leg) => leg.kind === 'pavement')).toBe(true);
+    expect(walk.metres).toBeLessThan(300);
   });
 
   it('stays on one floor when both ends are on it', () => {
@@ -81,10 +100,15 @@ describe('a measured route beats a guessed one', () => {
 });
 
 describe('what a leg says it is', () => {
-  it('never calls an outdoor leg anything but outside', () => {
+  it('never calls a straight line a pavement, or the other way round', () => {
+    // The two are drawn differently and mean different things: a pavement leg
+    // is a footway somebody surveyed, an outdoor leg is the unmapped ground
+    // between a door and the kerb. Reading one as the other is the whole
+    // failure this file exists to prevent.
     const walk = routeBetweenRooms('hall-b', 'lucas-oil-field')!;
-    for (const leg of walk.legs.filter((l) => l.kind === 'outdoor')) {
-      expect(leg.text).toMatch(/^Outside/);
+    for (const leg of walk.legs) {
+      if (leg.kind === 'outdoor') expect(leg.text).toMatch(/^(Outside|Out to the street)/);
+      if (leg.kind === 'pavement') expect(leg.text).toMatch(/pavement/);
     }
   });
 
