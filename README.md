@@ -942,6 +942,10 @@ Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
 a room on the map**. The source uses 16 distinct `Location` values and several
 hundred `Room` values, and every `Location` but two resolves to a building.
 
+Re-measured since against a full import rather than a sample — 27,467 events,
+every one of them — **nothing is unmatched at all**. The straggler below is
+still five blocks off the map; it simply wasn't in that year's catalogue.
+
 One straggler is left in the sample: **416 Wabash** (1 event), an address five
 blocks east of the campus with no building on the map. Nothing else — every
 other `Location` resolves to a building, and nothing inside a building the map
@@ -1018,13 +1022,13 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a walking route now (see above), and what is left is the two
-things it still guesses. Vertical circulation is inferred from where floors
-overlap rather than read off the drawings that show it — the note above says how
-to read it. And outdoors there is no pavement network at all, so a route between
-buildings no skywalk joins is a straight line: the streets are in OpenStreetMap,
-but as carriageways rather than as anything walkable, and turning them into a
-network means crossings and kerbs nobody has pulled yet.
+Directions are a walking route now (see above), and `docs/next-steps.md` has the
+measured gaps and what to do about them. The largest by far is outdoors: there
+is no pavement network at all, so a route between buildings no skywalk joins is
+a straight line — the streets are in OpenStreetMap, but as carriageways rather
+than as anything walkable, and turning them into a network means crossings and
+kerbs nobody has pulled yet. Of the 182 pairs of buildings, 152 need such a line
+and 18 get no route at all.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
