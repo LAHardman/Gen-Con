@@ -37,12 +37,16 @@ export function Legend({ showAmenities, onToggleAmenities }: Props) {
               <li key={category}>
                 <span
                   className="legend__swatch"
-                  style={{ background: style.fill, borderColor: style.stroke }}
+                  style={{ background: style.fill }}
                 />
                 {style.label}
               </li>
             );
           })}
+          <li className="legend__link">
+            <span className="legend__link-mark" aria-hidden="true" />
+            Skywalk or tunnel
+          </li>
           <li className="legend__amenities">
             <label>
               <input type="checkbox" checked={showAmenities} onChange={onToggleAmenities} />

@@ -94,7 +94,7 @@ export function RoomDialog({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="dialog__header">
-          <span className="dialog__tag" style={{ background: style.fill, borderColor: style.stroke }}>
+          <span className="dialog__tag" style={{ background: style.fill }}>
             {style.label}
           </span>
           <div className="dialog__header-actions">

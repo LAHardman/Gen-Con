@@ -84,6 +84,9 @@ want to see it on a real device.
 | `npm run test:watch` | Tests, re-running as you edit |
 | `npm run build` | Type-checks, then builds to `dist/` |
 | `npm run preview` | Serves the production build |
+| `npm run check:geometry` | Checks no room leaves its building or sits on another |
+| `npm run plans:venues` | Re-reads the hotel hallways out of `plans/venues/` |
+| `npm run plans:campus` | Fetches Gen Con's own floor-plan tiles into `plans/campus/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
@@ -106,35 +109,94 @@ document.
 then tests, before anything is built or deployed.
 
 What is covered today is the directions feature and the geometry under it —
-`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the new button
-in `RoomDialog`. **The rest of the codebase is still untested**, and the two
-riskiest parts are the untested ones: the HTML scraper in
-`scripts/lib/parse-events.mjs` and the room matcher in `src/data/events.ts`,
-both of which fail by quietly returning `null` rather than by throwing.
-`docs/code-review.md` §1.2–§1.5 says what to write for them, in the order worth
-writing it.
+`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the directions
+button in `RoomDialog` — plus the two generated data tables, `connections.ts`
+and `venue-plan.ts`. Those two are keyed by strings a human wrote (`icc/Level 2`)
+and a key naming a floor its building calls something else draws *nothing*,
+silently, which looks exactly like a sheet that was never read. So the tests
+assert the keys resolve, and they assert it against the tables rather than
+through the lookups that filter bad keys out — a check made through the lookup
+cannot fail.
+
+**The rest of the codebase is still untested**, and the two riskiest parts are
+among the untested ones: the HTML scraper in `scripts/lib/parse-events.mjs` and
+the room matcher in `src/data/events.ts`, both of which fail by quietly
+returning `null` rather than by throwing. `docs/code-review.md` §1.2–§1.5 says
+what to write for them, in the order worth writing it. The importer's
+resume-an-interrupted-pull logic is verified by running it, not by a test:
+`fetch-events.mjs` takes its lock and runs on import, so nothing in it can be
+called from a test without that happening.
 
 ## The map
 
 The basemap is real: live tiles of downtown Indianapolis, with real streets and
 buildings, rendered through [Leaflet](https://leafletjs.com/). Three key-free
-providers are wired up (CARTO dark, CARTO light, OpenStreetMap standard) and
-switchable from the header. Each carries the attribution its terms require —
-Leaflet renders it in the corner, and it must not be removed.
+tilesets are wired up (CARTO dark, light and Voyager) and switchable from the
+header. Each carries the attribution its terms require — Leaflet renders it in
+the corner, and it must not be removed.
+
+**The street names are drawn on top of the buildings, not under them.** Each
+tileset is taken in two halves — the map without its writing, and the writing on
+its own — and the second is drawn above everything the app puts on the map. It
+has to be: the rooms and floor plans are opaque enough to bury a street name,
+and once you have zoomed into a building the streets around it are exactly what
+you need to leave it by. Taking the split tileset rather than adding names over
+a map that already has them is also what keeps every name drawn once.
+
+They arrive at zoom 17, not before. Over the whole campus a full set of street
+names is a screenful of type telling you what you already know — that this is
+downtown Indianapolis — and it buries the buildings, which at that zoom are the
+only thing there is to pick.
+
+That is why the third option is CARTO's street rendering rather than
+OpenStreetMap's own raster, which it used to be: OSM's bakes its names into the
+tile, so there is no way to lift them clear of the buildings. Same data either
+way.
+
+**And the lines are drawn to be followed.** A dark tileset puts its streets a
+few percent off its own background, which vanishes under a map with this much
+drawn over it, so the dark basemap's contrast is lifted as a whole — the roads
+are somebody else's raster and can't be restyled one line at a time. The plan's
+own lines are heavier to match: a corridor's edge and a building's outline each
+read at the zoom you would use them at.
+
+**A room is a wash of colour, not a box.** The colour says what sort of room it
+is; the floor plan underneath says where the walls are. It used to be outlined
+in a bright version of the same hue, which welded a run of meeting rooms into
+one loud shape and buried the drawing it sat on. Now the fill is muted and the
+outline is the map's own background — so where two rooms of a sort meet you see
+the seam between them rather than one block with a line in it.
 
 | Gesture | Result |
 | --- | --- |
 | Drag / one-finger drag | Pan |
 | Scroll wheel or trackpad | Zoom |
 | Pinch | Zoom |
-| Double-click / double-tap a room | Open its details and schedule |
-| Single click / tap a room | Select it |
+| Click / tap a building | Open it, and go there |
+| Click / tap a room | Open its details and schedule |
+| Click / tap the map | Close the building again |
 | Type in the search box | Find a room or an event |
 | The arrow in an open room's title bar | Directions to that room |
 | Click anywhere while directions are asking | Use that room, or that point, as an end of the route |
 
-Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
-reserved for opening room details.
+**Buildings keep their insides to themselves until you open one.** Fourteen sets
+of rooms over one downtown is a mess nobody can read, and at the zoom you see
+the whole campus at, none of them are legible anyway — so the campus view is
+buildings, streets and skywalks, and clicking a building takes you into it and
+draws its rooms, its floor plan, its restrooms and its floor picker. Clicking
+the map puts it away.
+
+Leaflet's double-click-to-zoom is deliberately disabled, and a room opens on one
+click. There is nothing else a click on a room could mean, and making people
+find that out by double-clicking helped nobody.
+
+**Nothing should vanish while you drag.** Leaflet draws every vector into one
+SVG sized to the screen plus a margin, and redraws it only when a drag ends — so
+at the stock margin of a tenth of the screen, any real drag runs off the edge of
+what was drawn and the rooms disappear until you let go. The whole campus is a
+few hundred shapes, so the margin is six-tenths instead, over three times the
+area, which outruns a drag for what it costs. The tiles keep a wider ring of
+neighbours for the same reason.
 
 ### Search
 
@@ -154,28 +216,127 @@ Ranking is by how the match was made — a room whose name starts with what you
 typed, then an exact alias, then a word inside a name, then event titles — and
 ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
 
+### Getting between buildings
+
+Downtown Indianapolis is stitched together above ground, and in August that is
+not a curiosity — the skywalks are how most people get from a hotel to a game
+without going outside, and none of it shows on a map of the streets. So the map
+draws them, as a dashed line over everything else, with the tunnel running south
+from Union Station drawn the same way in a colder colour.
+
+Be clear about what these are: the **spans**. OpenStreetMap has each bridge and
+the tunnel as a way of its own, but not the corridors inside the buildings that
+join them up, so this is not a route you can trace end to end. It is where a
+covered crossing exists — which is the part you can't work out by looking at the
+street. `src/data/connections.ts` has the query that produced them and the OSM
+way id of each, so any of them can be checked.
+
+**They belong to a floor.** The network runs at the second level throughout, so
+a span drawn across a building you have open is either the way to the next hotel
+or a line over your head — and which one it is depends on the floor you are on.
+So an open building draws only the spans that reach it, and only while it is
+showing the floor they reach it on: the convention centre's five appear on Level
+2 and none on Level 1. With nothing open they all draw, because that view is the
+campus and where the covered crossings are is the most useful thing on it. The
+floors are named building by building in `connections.ts`, since every building
+names them differently — the convention centre's skywalk level is its Level 2,
+Union Station's is the mezzanine over the Grand Hall.
+
+Inside a building the map draws the **hallways** — the prefunction space and
+corridors, as open floor a shade lighter than the fabric either side. Those used
+to be styled as the gap between the rooms and were nearly invisible, which is
+backwards: on a map for finding your way to a game, the corridor is the route
+and the rooms are what it passes.
+
+The convention centre's come free, from the same PDFs its rooms do — one of the
+colours its legend keys is "Prefunction / Hallways". Nothing else on the campus
+has a PDF. What there is instead is Gen Con's own plan of each hotel as a
+picture, and those are drawn to a palette just as strict, so `venue-plans.mjs`
+reads them the same way from pixels: pale cream is what you walk on, tan is a
+room you can book, darker brown is back of house. Fourteen floors across eight
+hotels come out of it, plus the JW Marriott's ground floor.
+
+Reading them by colour rather than by eye is the point. A corridor is three or
+four metres wide and the room rectangles in `venues.ts` are good to about five,
+so anything traced by hand would look precise and be wrong at exactly the scale
+it is read at. Colour is not a judgement call, and neither is the fit: Gen Con
+draws with south at the top, so the whole transform is a half-turn, a uniform
+scale and an offset — three unknowns, fitted against the building's own surveyed
+footprint by sweeping and then refining on overlap. The script prints what it
+got, and it lands between 76% and 89% of the footprint on every sheet.
+
+```
+node scripts/venue-plans.mjs              # all of them, writing src/data/venue-plan.ts
+node scripts/venue-plans.mjs westin-2     # one, with its fit reported
+```
+
+Each hall is a polygon with holes: a hotel floor's circulation is one connected
+thing that runs around the rooms, so drawing only its outside would cover them
+over. Sampled afterwards, 90–100% of what is drawn falls inside the building it
+belongs to on thirteen of the fourteen floors — Union Station is the exception
+at 76%, because its plan draws the train shed and its OpenStreetMap footprint
+does not.
+
+**The same reading also tightens the rooms — where it can prove it should.** The
+plans colour the rooms as well as the halls, so a room's hand-placed rectangle
+can point at the shape drawn underneath it and take that instead. Fed in
+straight, that made the map worse rather than better: `check:geometry` went from
+clean to twenty findings, thirteen rooms poking out through a wall and seven
+pairs newly on top of each other. The plan and OpenStreetMap are two independent
+tracings of one building and they disagree at the edges by a metre or two, so a
+shape that reads better against the drawing can read worse against everything
+else the map draws.
+
+So a traced outline has to earn the swap. It is taken only when it is no worse
+than the rectangle it replaces on the two things that go visibly wrong — leaving
+the building, with no slack at all because the footprint is surveyed, and
+landing on the room next door, with a wall's thickness of it. **16 of 94 rooms**
+clear that bar, and the check is clean afterwards. The rest keep their
+rectangles and the script says why for each: mostly *spills further outside the
+building than its rectangle does*, sometimes *would sit on the room next door*.
+A ballroom the plan draws as one space with three authored sections in it is
+refused earlier and for a different reason — one outline shared three ways would
+be three rooms the map could no longer tell apart.
+
+**The sheets need not be tidy.** Some of them are phone screenshots of Gen Con's
+online map, statusbar and all, and the classifier does not care: the palette is
+the palette, and anything that isn't one of the five colours — street, park,
+browser chrome — never enters the fit. What a sheet does have to do is frame the
+whole building, because the fit is against the whole footprint; a screenshot of
+half a floor cannot be placed.
+
+**There is a better source than screenshots, and the fetcher for it is here.**
+`gencon.com/map` is a Leaflet map like this one, and it serves its floor plans
+as a tile pyramid — one set per campus level, 256-pixel squares, at
+`<cdn>/maps/v9/floor-<level>/<z>/<x>/<y>.png`. That is the drawing itself:
+whole, at one scale, every floor in one frame, rather than a screenshot cropped
+and scaled by whatever was holding the phone. `npm run plans:campus` fetches and
+stitches it, and `venue-plans.mjs` reads the result exactly as it reads a
+screenshot, because the fit solves for scale and offset either way.
+
+It probes for the zoom levels and tile ranges rather than assuming them, caches
+every tile, and asks for four at a time with a pause between — it is somebody
+else's CDN. Set `GENCON_TILES` to point it elsewhere.
+
+**Nothing is invented to fill a gap.** Floors with no sheet — several upper
+floors, and all of Lucas Oil — show their rooms and no corridors, which is what
+their source supports.
+
 ### Floors
 
 A flat map has one surface and a building has several, and the rooms on them
 land on top of each other: the convention centre's 201–212 sit directly over
-101–117, and the JW has three floors of meeting rooms in one stack. So the map
-draws **one floor of a building at a time**, and the picker on the right of the
-map changes which. It names the building whose floors it is offering — the one
-under the middle of the screen, or filling most of it — and follows you as you
-move between them. A building with one floor has nothing to switch and shows no
-picker. The floors you aren't on are left as ghosts: faint enough not to read as
-rooms, present enough to say there is more here than one storey.
+101–117, and the JW has three floors of meeting rooms in one stack. So an open
+building draws **one floor at a time**, and the picker on the right of the map
+changes which. It appears with the building and names it, because "2nd floor" on
+its own doesn't say whose. The floors you aren't on are left as ghosts: faint
+enough not to read as rooms, present enough to say there is more here than one
+storey.
 
-Each building holds its own floor, so reading the JW's 3rd doesn't move the
-Hyatt. Anything that takes you to a room takes you to its floor as well —
-clicking it, or picking it out of the search box.
-
-**A building opens on the floor the convention uses, not its lowest.** That is
-the one with most of its rooms on it. The obvious rule is the wrong one here:
-the Hyatt's ground floor is a single room, the Embassy's is a single room, and a
-building that opens on an empty storey looks like a building with no interior.
-The stadium is the exception the count gets wrong — its field is one room and
-the concourse ring above it is two — so `opensOn` in `venues.ts` says which.
+A building opens on its **ground floor** — where you would come in from the
+street, and where the picker's own list starts. Each building holds its own
+floor while it is open, and anything that takes you to a room takes you to that
+room's floor instead: clicking it, or picking it out of the search box.
 
 Note that a floor here is a floor of *that building*. Gen Con's own level
 switcher numbers campus event levels instead, so its "level 3" is at once the
@@ -196,6 +357,15 @@ places, and the difference matters:
 They follow the same floor rule as the rooms: only the floor a building is
 showing has its restrooms drawn, because a toilet on the wrong storey is not a
 useful direction.
+
+**A pair gets one mark, put between them.** A plan draws the men's and the
+women's as two rooms, because they are two rooms — but they are one place to go,
+off the same bit of corridor, signed together, and two marks a few metres apart
+answer a question nobody asked. The threshold comes from the drawings: measured
+across the convention centre, the distance from a restroom to its nearest
+neighbour falls in two lots, 23–29 m for a pair either side of one entrance and
+34 m and up for the next facility along the concourse. Thirty metres sits in the
+gap between them, and takes the campus from 43 marks to 35.
 
 **Water fountains are not marked, and that is not an oversight.** No plan shows
 them. The convention centre's legend has four categories and water is not one;
@@ -242,11 +412,13 @@ is wide because the ends are room centres, and the doorway of a hall the size of
 Exhibit Hall A is already tens of metres from its middle.
 
 A real walking route would need the pedestrian network — pavements, lobbies,
-and above all the skywalks. OpenStreetMap has the footbridges (they are among
-the 28 indoor-tagged elements across the campus) but nothing in this repository
-holds them yet, and inventing turn-by-turn directions from two points and no
-network would be a confident-sounding guess. A bearing and a range are what the
-data actually supports.
+and above all the skywalks. Half of that is now here: `connections.ts` holds
+every covered crossing on the campus, and the map draws them (see *Getting
+between buildings*). What it does not hold is the corridors inside the buildings
+that join one span to the next, so the spans are a set of disconnected bridges
+rather than a graph anything can be routed over. Until they connect, turn-by-turn
+directions from two points would be a confident-sounding guess. A bearing and a
+range are what the data actually supports.
 
 ### How venues are positioned
 
@@ -718,6 +890,8 @@ src/
     amenities.ts     Restrooms, from the plans that draw them
     search.ts        Ranking rooms and events against what you type
     navigation.ts    Route ends, distances and what a straight line can claim
+    connections.ts   Skywalks and the tunnel, and which floor each belongs to
+    venue-plan.ts    Hotel hallways and room outlines, read from plans (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
     useEventFeed.ts       Loads public/events.json
@@ -731,14 +905,19 @@ src/
     NavPanel.tsx     Directions: the two ends, how to choose them, the distance
     Legend.tsx       Category key and the amenities toggle
 plans/
-  *.pdf                    The venues' own floor plans
+  *.pdf                    The convention centre's own floor plans
   *.svg, *.labels.json     Converted drawing and printed labels
   georeference.json        One page-to-world frame per venue
+  venues/*.png             Gen Con's plans of the hotels, as pictures
+  campus/                  Gen Con's floor-plan tiles (fetched, not committed)
 scripts/
   pdf-to-svg.py            Plan PDF to paths
   plan-labels.py           Printed labels, with their positions
   fit-plan.mjs             Fits a venue's frame to its OSM footprint
   plan-to-geometry.mjs     Plans to map geometry (writes plan-geometry.ts)
+  venue-plans.mjs          Reads hotel hallways by colour (writes venue-plan.ts)
+  gencon-tiles.mjs         Fetches and stitches Gen Con's floor-plan tiles
+  lib/png.mjs              PNG decoding, down to 4-bit palette tiles
   fetch-events.mjs         Crawls the source and imports the real schedule
   lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
   make-sample-events.mjs   Fake schedule for offline development
@@ -749,14 +928,14 @@ scripts/
 A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
-Directions are a straight line between two points (see above). Making them a
-real walking route needs the pedestrian network the campus actually uses:
-pavements, the lobbies you cut through, and the skywalks that join the
-convention centre to the JW, the Marriott, the Hyatt, Union Station and the
-Westin. OpenStreetMap has those footbridges; an Overpass query like the one that
-produced `footprints.ts` could pull them, and a graph over them with the venue
-entrances would turn the bearing into a route — including the honest answer that
-the way there is up two floors and across a bridge.
+Directions are a straight line between two points (see above), and the piece
+that would make them a route is now half-built. The skywalk and tunnel spans are
+in `connections.ts` and the hotels' corridors are in `venue-plan.ts` — but the
+two have never been joined: nothing says which corridor a given bridge lands in,
+and no floor has the doors, stairs or lifts that would let a path leave one
+storey for another. Joining them, and giving each venue its entrances, would
+turn the bearing into a route — including the honest answer that the way there
+is up two floors and across a bridge.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
