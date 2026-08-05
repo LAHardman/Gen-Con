@@ -434,10 +434,21 @@ Gen Con's own drawings of the hotels *do* draw the thing itself — an escalator
 is a hatched strip in two greys, #616264 and #949599, and the Westin's 2nd-floor
 sheet even letters it DOWN TO 1ST FLOOR; a lift bank is a run of dull-yellow
 squares. Neither collides with the street grey on the same sheets. Reading them
-is a fourth and fifth class in `venue-plans.mjs`'s palette and is the right way
-to finish this; the convention centre would still need Gen Con's tile pyramid,
-and `gencon-tiles.mjs` currently answers 403 from CloudFront itself, so that
-source has moved since it was written.
+is a fourth and fifth class in `venue-plans.mjs`'s palette, and is the right way
+to finish this.
+
+The convention centre needs Gen Con's tile pyramid rather than a hotel sheet,
+and that is live: `npm run plans:campus` fetches it from
+`…/maps/v9/floor-<level>/{z}/{x}/{y}.png`. **Two things about that pyramid look
+like the source being gone when it isn't.** It is not a Web Mercator pyramid —
+it is shallow and starts around z2, in the `CRS.Simple` style Gen Con's own
+Leaflet map uses — so a URL built from slippy-map coordinates asks for an object
+that never existed. And an absent object on that bucket answers **403, not
+404**, so a wrong guess is indistinguishable from a refusal. `v7` and `v8`
+answer as well; `v10` does not, so `v9` is current. Note also that
+`gencon.com/map` itself is no longer a floor-plan viewer — it serves Gen Con's
+"Looking Glass" exhibitor browser, whose tiles at `/lg/tiles/v1/` are a galaxy
+backdrop rather than a plan of anything.
 
 ### How venues are positioned
 

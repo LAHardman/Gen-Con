@@ -176,10 +176,20 @@ export const verticalPoint = (link: Vertical) => toPoint(link.at);
  * So the reader is a fourth and fifth class in that script's PALETTE, clustered
  * the way its halls already are, and its output drops in here as
  * `certainty: 'plan'` links, replacing the inference for the nine buildings it
- * covers. The convention centre would still have none: its plans are the
- * architect's rather than Gen Con's, and they draw no stairs at all. Gen Con's
- * tile pyramid covers it and `gencon-tiles.mjs` fetches that — but the path it
- * knows, `/maps/v9/`, now answers 403 from CloudFront itself rather than from
- * any proxy, so that source has moved and the script needs pointing at wherever
- * it went.
+ * covers.
+ *
+ * The convention centre has none of its own: its plans are the architect's
+ * rather than Gen Con's, and they draw no stairs at all. But Gen Con's tile
+ * pyramid covers the whole campus including it, and it is live —
+ *
+ *     https://d2lkgynick4c0n.cloudfront.net/maps/v9/floor-<level>/{z}/{x}/{y}.png
+ *
+ * — which `gencon-tiles.mjs` already fetches. Two things about it are worth
+ * writing down, because both look like the source being gone when it isn't.
+ * It is not a Web Mercator pyramid: it is shallow and starts around z2, in the
+ * `CRS.Simple` style Gen Con's own Leaflet map uses, so a request built from
+ * slippy-map coordinates (z16 and a five-figure x) asks for an object that was
+ * never there. And an absent object on that bucket answers **403, not 404**, so
+ * a wrong guess looks exactly like a refusal. `v7` and `v8` answer too; `v10`
+ * does not, so `v9` is current.
  */
