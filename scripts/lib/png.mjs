@@ -2,12 +2,14 @@
  * Just enough PNG to read a floor plan back out of a screenshot.
  *
  * The venue plans are 8-bit non-interlaced PNGs, and the pipeline that reads
- * them needs raw pixels and nothing else — no scaling, no colour management, no
- * writing. A decoder for that is a hundred lines against Node's own zlib, which
- * is a better trade than a dependency for a script that runs by hand.
+ * them needs raw pixels and nothing else — no scaling, no colour management.
+ * A decoder for that is a hundred lines against Node's own zlib, which is a
+ * better trade than a dependency for a script that runs by hand; the encoder
+ * at the bottom is another fifty, and exists so tiles can be stitched back
+ * into one sheet.
  */
 
-import { inflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 /** Reverses one scanline's filter, in place, given the line above it. */
 function unfilter(type, line, previous, stride) {
@@ -110,4 +112,52 @@ export function decodePng(buffer) {
   }
 
   return { width, height, pixels };
+}
+
+/**
+ * The other direction, for stitching tiles back into one sheet.
+ *
+ * No filtering and no interlacing: the images this writes are read straight
+ * back by the decoder above, and a floor plan of flat colour fields compresses
+ * well enough without any of it.
+ */
+export function encodePng(width, height, pixels) {
+  const raw = Buffer.alloc(height * (width * 4 + 1));
+  for (let y = 0; y < height; y += 1) {
+    raw[y * (width * 4 + 1)] = 0; // filter: none
+    Buffer.from(pixels.buffer, pixels.byteOffset + y * width * 4, width * 4)
+      .copy(raw, y * (width * 4 + 1) + 1);
+  }
+
+  const table = [];
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  const crc = (buffer) => {
+    let c = 0xffffffff;
+    for (const byte of buffer) c = table[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (kind, body) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(body.length);
+    const named = Buffer.concat([Buffer.from(kind, 'ascii'), body]);
+    const check = Buffer.alloc(4);
+    check.writeUInt32BE(crc(named));
+    return Buffer.concat([length, named, check]);
+  };
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bit depth
+  header[9] = 6; // RGBA
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }

@@ -83,6 +83,7 @@ want to see it on a real device.
 | `npm run preview` | Serves the production build |
 | `npm run check:geometry` | Checks no room leaves its building or sits on another |
 | `npm run plans:venues` | Re-reads the hotel hallways out of `plans/venues/` |
+| `npm run plans:campus` | Fetches Gen Con's own floor-plan tiles into `plans/campus/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
@@ -268,6 +269,19 @@ the palette, and anything that isn't one of the five colours — street, park,
 browser chrome — never enters the fit. What a sheet does have to do is frame the
 whole building, because the fit is against the whole footprint; a screenshot of
 half a floor cannot be placed.
+
+**There is a better source than screenshots, and the fetcher for it is here.**
+`gencon.com/map` is a Leaflet map like this one, and it serves its floor plans
+as a tile pyramid — one set per campus level, 256-pixel squares, at
+`<cdn>/maps/v9/floor-<level>/<z>/<x>/<y>.png`. That is the drawing itself:
+whole, at one scale, every floor in one frame, rather than a screenshot cropped
+and scaled by whatever was holding the phone. `npm run plans:campus` fetches and
+stitches it, and `venue-plans.mjs` reads the result exactly as it reads a
+screenshot, because the fit solves for scale and offset either way.
+
+It probes for the zoom levels and tile ranges rather than assuming them, caches
+every tile, and asks for four at a time with a pause between — it is somebody
+else's CDN. Set `GENCON_TILES` to point it elsewhere.
 
 **Nothing is invented to fill a gap.** Floors with no sheet — several upper
 floors, and all of Lucas Oil — show their rooms and no corridors, which is what
