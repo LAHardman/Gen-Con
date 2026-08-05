@@ -44,8 +44,13 @@ const OUT = join(ROOT, 'plans/campus');
 const HOST = process.env.GENCON_TILES ?? 'https://d2lkgynick4c0n.cloudfront.net/maps/v9';
 const TILE = 256;
 
-/** The campus levels Gen Con's own switcher offers, bottom to top. */
-const FLOORS = ['B', '1', '2', '3', '4'];
+/**
+ * The campus levels Gen Con's own switcher offers, bottom to top.
+ *
+ * The basement is written more than one way by different people; each name
+ * here is tried in turn and the first that has tiles wins.
+ */
+const FLOORS = [['B', 'b', '0'], ['1'], ['2'], ['3'], ['4']];
 
 /** At once, and how long to wait between rounds. Their CDN, their rules. */
 const AT_ONCE = 4;
@@ -144,7 +149,15 @@ async function stitch(floor, area) {
     round.forEach(([x, y], i) => {
       done += 1;
       if (!bodies[i]) return;
-      const tile = decodePng(bodies[i]);
+      let tile;
+      try {
+        tile = decodePng(bodies[i]);
+      } catch (error) {
+        // One unreadable square is a hole in the sheet, not a reason to throw
+        // away the other few hundred.
+        console.warn(`    ${z}/${x}/${y}: ${error.message}`);
+        return;
+      }
       const left = (x - x0) * TILE;
       const top = (y - y0) * TILE;
       for (let row = 0; row < Math.min(TILE, tile.height); row += 1) {
@@ -164,22 +177,24 @@ async function stitch(floor, area) {
 
 async function main() {
   const asked = process.argv.includes('--floors')
-    ? process.argv[process.argv.indexOf('--floors') + 1].split(',')
+    ? process.argv[process.argv.indexOf('--floors') + 1].split(',').map((name) => [name])
     : FLOORS;
 
-  for (const floor of asked) {
-    let area;
-    try {
-      area = await survey(floor);
-    } catch (error) {
-      console.warn(`  level ${floor}: ${error.message}`);
+  for (const names of asked) {
+    let found = null;
+    for (const name of names) {
+      try {
+        const area = await survey(name);
+        if (area) { found = { name, area }; break; }
+      } catch (error) {
+        console.warn(`  level ${name}: ${error.message}`);
+      }
+    }
+    if (!found) {
+      console.warn(`  level ${names[0]}: no tiles`);
       continue;
     }
-    if (!area) {
-      console.warn(`  level ${floor}: no tiles`);
-      continue;
-    }
-    await stitch(floor, area);
+    await stitch(found.name, found.area);
   }
 }
 

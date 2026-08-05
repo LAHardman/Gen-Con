@@ -60,7 +60,10 @@ export function decodePng(buffer) {
       height = body.readUInt32BE(4);
       depth = body[8];
       colourType = body[9];
-      if (depth !== 8) throw new Error(`unsupported bit depth ${depth}`);
+      if (![1, 2, 4, 8].includes(depth)) throw new Error(`unsupported bit depth ${depth}`);
+      if (depth !== 8 && colourType !== 0 && colourType !== 3) {
+        throw new Error(`unsupported ${depth}-bit colour type ${colourType}`);
+      }
       if (body[12] !== 0) throw new Error('interlaced PNGs are not supported');
     } else if (kind === 'PLTE') {
       palette = body;
@@ -77,9 +80,27 @@ export function decodePng(buffer) {
   if (!channels) throw new Error(`unsupported colour type ${colourType}`);
 
   const raw = inflateSync(Buffer.concat(data));
-  const stride = channels;
-  const rowBytes = width * channels;
+  // Filtering works on bytes, so below one sample per byte the stride is one
+  // byte, not one sample. Rows are padded out to a whole byte either way.
+  const stride = Math.max(1, (channels * depth) / 8);
+  const rowBytes = Math.ceil((width * channels * depth) / 8);
   const pixels = new Uint8Array(width * height * 4);
+
+  /**
+   * One sample, whatever it is packed as.
+   *
+   * Under eight bits a byte holds several, most significant first — which is
+   * how a map tile of flat colour fields is usually written, and what Gen Con
+   * serves: sixteen colours, four bits each. Greyscale is stretched to the full
+   * range so 1-bit black and white reads as 0 and 255 rather than 0 and 1;
+   * a palette index is an index and is left alone.
+   */
+  const sample = (line, at) => {
+    if (depth === 8) return line[at];
+    const perByte = 8 / depth;
+    const value = (line[Math.floor(at / perByte)] >> (8 - depth * ((at % perByte) + 1))) & ((1 << depth) - 1);
+    return colourType === 0 ? Math.round((value * 255) / ((1 << depth) - 1)) : value;
+  };
 
   let previous = null;
   for (let y = 0; y < height; y += 1) {
@@ -92,15 +113,16 @@ export function decodePng(buffer) {
       const from = x * channels;
       const to = (y * width + x) * 4;
       if (colourType === 3) {
-        const index = line[from];
+        const index = sample(line, from);
         pixels[to] = palette[index * 3];
         pixels[to + 1] = palette[index * 3 + 1];
         pixels[to + 2] = palette[index * 3 + 2];
         pixels[to + 3] = alpha && index < alpha.length ? alpha[index] : 255;
       } else if (colourType === 0 || colourType === 4) {
-        pixels[to] = line[from];
-        pixels[to + 1] = line[from];
-        pixels[to + 2] = line[from];
+        const grey = sample(line, from);
+        pixels[to] = grey;
+        pixels[to + 1] = grey;
+        pixels[to + 2] = grey;
         pixels[to + 3] = colourType === 4 ? line[from + 1] : 255;
       } else {
         pixels[to] = line[from];
