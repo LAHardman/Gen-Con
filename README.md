@@ -218,7 +218,7 @@ has a PDF. What there is instead is Gen Con's own plan of each hotel as a
 picture, and those are drawn to a palette just as strict, so `venue-plans.mjs`
 reads them the same way from pixels: pale cream is what you walk on, tan is a
 room you can book, darker brown is back of house. Fourteen floors across eight
-hotels come out of it.
+hotels come out of it, plus the JW Marriott's ground floor.
 
 Reading them by colour rather than by eye is the point. A corridor is three or
 four metres wide and the room rectangles in `venues.ts` are good to about five,
@@ -262,10 +262,16 @@ A ballroom the plan draws as one space with three authored sections in it is
 refused earlier and for a different reason — one outline shared three ways would
 be three rooms the map could no longer tell apart.
 
-**Two buildings this can't read, and neither is faked.** The JW Marriott's sheet
-for its 1st floor is the hotel's own drawing rather than Gen Con's and uses none
-of these colours; Lucas Oil's plans letter nothing and shade everything alike.
-Those floors show rooms and no corridors, which is what their source supports.
+**The sheets need not be tidy.** Some of them are phone screenshots of Gen Con's
+online map, statusbar and all, and the classifier does not care: the palette is
+the palette, and anything that isn't one of the five colours — street, park,
+browser chrome — never enters the fit. What a sheet does have to do is frame the
+whole building, because the fit is against the whole footprint; a screenshot of
+half a floor cannot be placed.
+
+**Nothing is invented to fill a gap.** Floors with no sheet — several upper
+floors, and all of Lucas Oil — show their rooms and no corridors, which is what
+their source supports.
 
 ### Floors
 

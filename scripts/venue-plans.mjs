@@ -24,11 +24,16 @@
  *
  * Writes src/data/venue-plan.ts.
  *
- * WHAT IS NOT HERE. The JW Marriott's own sheet for its 1st floor is the
- * hotel's drawing rather than Gen Con's and uses none of these colours; Lucas
- * Oil's plans letter nothing and shade everything alike. Neither yields to this
- * and neither is faked — those floors show rooms and no corridors, which is
- * what the source supports.
+ * WHAT IS NOT HERE is whatever there is no sheet for — several upper floors,
+ * and the stadium. Nothing is invented to fill a gap: a floor with no sheet
+ * shows its rooms and no corridors, which is what its source supports.
+ *
+ * The sheets themselves need not be tidy. Several are phone screenshots of
+ * Gen Con's own online map, statusbar and all, and the classifier does not
+ * care: the palette is the palette, and everything that isn't one of these
+ * five colours — street, park, browser chrome — never enters the fit. What a
+ * sheet does have to do is frame the whole building, because the fit is against
+ * the whole footprint. A screenshot of half a floor cannot be placed.
  */
 
 import { build } from 'esbuild';
@@ -609,6 +614,7 @@ const SHEETS = {
   'crowne-plaza-mezzanine': { venueId: 'crowne-plaza', level: 'Mezzanine' },
   'embassy-suites-5': { venueId: 'embassy-suites', level: '5th floor' },
   'hilton-2': { venueId: 'hilton', level: '2nd floor' },
+  'jw-marriott-1': { venueId: 'jw-marriott', level: '1st floor' },
   'hilton-9': { venueId: 'hilton', level: '9th floor' },
   'hyatt-2': { venueId: 'hyatt', level: '2nd floor' },
   'hyatt-3': { venueId: 'hyatt', level: '3rd floor' },
