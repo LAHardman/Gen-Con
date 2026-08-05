@@ -1,27 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildEventSearchIndex, search, type SearchHit } from '../data/search';
+import { search, type EventSearchIndex, type SearchHit } from '../data/search';
 import { VENUES_BY_ID, type Room } from '../data/venues';
-import { formatTimeRange, type EventIndex } from '../data/events';
+import { formatTimeRange } from '../data/events';
 
 interface Props {
-  index: EventIndex | null;
+  /**
+   * Prepared once per feed by the app, and shared with the directions panel:
+   * searching 27,000 titles per keystroke is fine, lowercasing them per
+   * keystroke is not, and doing it twice over is worse still.
+   */
+  events: EventSearchIndex;
   /** Take the map to this room and open it. */
   onPick: (room: Room) => void;
 }
 
 const RESULT_LIMIT = 8;
 
-export function SearchBar({ index, onPick }: Props) {
+export function SearchBar({ events, onPick }: Props) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Prepared once per feed: searching 27,000 titles per keystroke is fine,
-  // lowercasing them per keystroke is not.
-  const eventIndex = useMemo(() => buildEventSearchIndex(index), [index]);
-  const hits = useMemo(() => search(query, eventIndex, RESULT_LIMIT), [query, eventIndex]);
+  const hits = useMemo(() => search(query, events, RESULT_LIMIT), [query, events]);
 
   useEffect(() => setActive(0), [query]);
 

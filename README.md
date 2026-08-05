@@ -79,6 +79,9 @@ want to see it on a real device.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Dev server, bound to all interfaces so you can open it on a phone |
+| `npm run check` | Types and tests — the same gate CI runs |
+| `npm run test` | Tests once |
+| `npm run test:watch` | Tests, re-running as you edit |
 | `npm run build` | Type-checks, then builds to `dist/` |
 | `npm run preview` | Serves the production build |
 | `npm run fetch:events` | Imports the real schedule from the event database |
@@ -90,6 +93,26 @@ want to see it on a real device.
 `dist/` is fully self-contained and uses relative paths, so it also works
 dropped on any static host, or bundled into a native shell with Capacitor if it
 ever needs app-store distribution.
+
+### Tests
+
+Vitest, reading the same `vite.config.ts` the app is built with, so there is one
+build configuration rather than two that can drift. Tests sit next to the code
+they cover as `*.test.ts` / `*.test.tsx`, and jsdom is the environment
+throughout — the pure modules don't care, and the components and hooks need a
+document.
+
+`npm run check` is what CI runs on every push and every pull request: types,
+then tests, before anything is built or deployed.
+
+What is covered today is the directions feature and the geometry under it —
+`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the new button
+in `RoomDialog`. **The rest of the codebase is still untested**, and the two
+riskiest parts are the untested ones: the HTML scraper in
+`scripts/lib/parse-events.mjs` and the room matcher in `src/data/events.ts`,
+both of which fail by quietly returning `null` rather than by throwing.
+`docs/code-review.md` §1.2–§1.5 says what to write for them, in the order worth
+writing it.
 
 ## The map
 
@@ -107,6 +130,8 @@ Leaflet renders it in the corner, and it must not be removed.
 | Double-click / double-tap a room | Open its details and schedule |
 | Single click / tap a room | Select it |
 | Type in the search box | Find a room or an event |
+| The arrow in an open room's title bar | Directions to that room |
+| Click anywhere while directions are asking | Use that room, or that point, as an end of the route |
 
 Leaflet's double-click-to-zoom is deliberately disabled, because double-click is
 reserved for opening room details.
@@ -178,6 +203,50 @@ its drawings carry no `fountain` or `water` label anywhere; Gen Con's own map
 draws no such icon. Rather than scatter plausible-looking dots, the map marks
 none — `AmenityKind` already allows for water, so the day a source turns up the
 entries drop straight into `src/data/amenities.ts`.
+
+### Directions
+
+Open a room and there is an arrow in the dialog's title bar. It closes the
+dialog, keeps that room as the destination, and asks the only question left:
+where are you starting from? Three answers are offered, and all three end up in
+the same place:
+
+- **Your own location**, watched rather than sampled, so the line follows you
+  across the campus instead of staying where you first stood. Nothing asks the
+  browser for a position until you press this — a venue map has no business
+  prompting for your whereabouts on load. Where the answer doesn't come, the
+  panel says why: refused, unavailable, timed out indoors, or withheld because
+  the page isn't on HTTPS, which is exactly what happens when you open the dev
+  server's LAN address on a phone.
+- **A room you search for**, over the same index the header's search uses, so
+  an event title finds the room it runs in and starts you there.
+- **A point on the map**, tapped: a room to start from that room, anywhere else
+  to drop a plain coordinate.
+
+Either end can be changed afterwards, and ⇅ swaps them, which is what makes
+this navigation *between* two places rather than only to one.
+
+**What is drawn is a straight line, and everything about it says so.** It is
+dashed rather than solid, the distance is labelled "in a straight line", and the
+panel spells out that the line goes through walls, ignores the streets, and
+takes no account of the skywalks that are usually the fastest way between these
+buildings. The walking estimate is that straight-line distance at
+`walkingMinutes`' unhurried 70 m/min, and past 3 km it is dropped entirely,
+because a walking time from the next state is a joke rather than an estimate.
+
+Two ends in the same building on different floors get a note saying so, since a
+flat map cannot draw a staircase — and the map holds the *destination's* floor
+in that case, because that is the one you are walking to. Ends within 25 m of
+each other say "You are already there" instead of drawing a line; that radius
+is wide because the ends are room centres, and the doorway of a hall the size of
+Exhibit Hall A is already tens of metres from its middle.
+
+A real walking route would need the pedestrian network — pavements, lobbies,
+and above all the skywalks. OpenStreetMap has the footbridges (they are among
+the 28 indoor-tagged elements across the campus) but nothing in this repository
+holds them yet, and inventing turn-by-turn directions from two points and no
+network would be a confident-sounding guess. A bearing and a range are what the
+data actually supports.
 
 ### How venues are positioned
 
@@ -648,15 +717,18 @@ src/
     events.ts        Event types, venue/room matching, schedule helpers
     amenities.ts     Restrooms, from the plans that draw them
     search.ts        Ranking rooms and events against what you type
+    navigation.ts    Route ends, distances and what a straight line can claim
     basemaps.ts      Tile providers and their attribution
   hooks/
     useEventFeed.ts       Loads public/events.json
     useLocationCheck.ts   Re-reads the source to confirm a room's events
+    useDeviceLocation.ts  Watches the device's position, only while asked
   utils/geo.ts       Local-grid ↔ latitude/longitude projection
   components/
-    MapView.tsx      Leaflet map, venue/room layers, labels, amenities
+    MapView.tsx      Leaflet map, venue/room layers, labels, amenities, routes
     RoomDialog.tsx   Room details and its schedule
     SearchBar.tsx    Search box and its results
+    NavPanel.tsx     Directions: the two ends, how to choose them, the distance
     Legend.tsx       Category key and the amenities toggle
 plans/
   *.pdf                    The venues' own floor plans
@@ -674,9 +746,17 @@ scripts/
 
 ## Not built yet
 
-A personal schedule of the events you've got tickets for; walking times
-between venues (`walkingMinutes` in `src/utils/geo.ts` is there
-for it); and offline caching of tiles so the map works without signal.
+A personal schedule of the events you've got tickets for, and offline caching
+of tiles so the map works without signal.
+
+Directions are a straight line between two points (see above). Making them a
+real walking route needs the pedestrian network the campus actually uses:
+pavements, the lobbies you cut through, and the skywalks that join the
+convention centre to the JW, the Marriott, the Hyatt, Union Station and the
+Westin. OpenStreetMap has those footbridges; an Overpass query like the one that
+produced `footprints.ts` could pull them, and a graph over them with the venue
+entrances would turn the bearing into a route — including the honest answer that
+the way there is up two floors and across a bridge.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them

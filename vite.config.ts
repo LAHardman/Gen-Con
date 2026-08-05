@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -32,5 +33,21 @@ export default defineConfig({
         rewrite: (path) => path.replace(new RegExp(`^${EVENT_DB_PROXY}`), ''),
       },
     },
+  },
+  /*
+   * Tests run under Vitest, which reads this file — so they get the same
+   * plugins, resolution and aliases the app is built with, and there is one
+   * build configuration rather than two that can drift apart.
+   *
+   * jsdom throughout rather than per-file environments: the pure modules don't
+   * care which environment they are in, and the components and hooks all need a
+   * document. Tests live next to the code they cover.
+   */
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{ts,tsx}'],
+    // A stubbed geolocation or timer in one file must not leak into the next.
+    restoreMocks: true,
+    unstubGlobals: true,
   },
 });

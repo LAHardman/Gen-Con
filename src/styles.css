@@ -954,3 +954,313 @@ body {
   height: 20px;
   flex: 0 0 auto;
 }
+
+/* -------------------------------------------------------------- directions */
+
+/* The map is choosing a place for a route, so every cursor over it says so —
+   Leaflet sets its own on the container and on each interactive shape, and both
+   need overriding for the whole map to read as one target. */
+.map--picking .leaflet-container,
+.map--picking .leaflet-grab,
+.map--picking .leaflet-interactive {
+  cursor: crosshair;
+}
+
+/* A bearing between two points, and dashed to say as much: a solid line here
+   would look like a path somebody surveyed. */
+.map__route {
+  stroke: var(--accent);
+  stroke-opacity: 0.95;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.map__route-end {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid #fff5ee;
+  background: var(--accent);
+  color: #fff5ee;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.map__route-end--start {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+/* Where the device says it is: the blue dot everything else uses for it, over
+   the radius the browser itself admits it might be wrong by. */
+.map__device {
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  background: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.map__device-halo {
+  stroke: #3b82f6;
+  stroke-opacity: 0.5;
+  stroke-width: 1;
+  fill: #3b82f6;
+  fill-opacity: 0.12;
+}
+
+/*
+ * Top left, which is the legend's corner — so the legend stands down while
+ * directions are open. The bottom of the map is not available: Leaflet keeps
+ * its scale bar, its attribution and its zoom buttons along that edge, and a
+ * panel there covers all three.
+ */
+.nav {
+  position: absolute;
+  left: calc(12px + env(safe-area-inset-left));
+  top: 12px;
+  /* Above Leaflet's panes and controls, below the room dialog. */
+  z-index: 600;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(26, 29, 40, 0.97);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* The legend's corner, and the "fit all venues" button's, are the panel's while
+   it is open. Both are still a tap away once the directions are closed. */
+.app__main--navigating .legend {
+  display: none;
+}
+
+.nav__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nav__title {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.nav__close {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.nav__ends {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.nav__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.nav__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.nav__row--editing {
+  border-color: var(--accent);
+}
+
+.nav__end {
+  flex: 0 0 auto;
+  width: 34px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.nav__place {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.nav__place-name,
+.nav__place-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav__place-name {
+  font-size: 13.5px;
+}
+
+.nav__place-detail {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.nav__swap {
+  flex: 0 0 auto;
+  width: 34px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.nav__swap:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nav__chooser {
+  margin-top: 10px;
+}
+
+.nav__ways {
+  display: flex;
+  gap: 6px;
+}
+
+.nav__way {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.nav__way--armed {
+  border-color: var(--accent);
+  background: rgba(233, 76, 61, 0.18);
+  font-weight: 600;
+}
+
+.nav__search {
+  margin-top: 8px;
+}
+
+/* Inside the panel the result list is part of the flow rather than a dropdown
+   hanging over the map, but it is the same list and looks like it. */
+.search__results--inline {
+  position: static;
+  margin-top: 6px;
+  box-shadow: none;
+  max-height: 220px;
+}
+
+.nav__hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.nav__summary {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.nav__distance {
+  margin: 0;
+  font-size: 14px;
+}
+
+.nav__leg {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.nav__note {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.nav__note--device {
+  margin-top: 8px;
+  color: var(--accent);
+}
+
+/* The dialog's header actions: directions, then close. */
+.dialog__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff5ee;
+  cursor: pointer;
+}
+
+.dialog__icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  /* The arrow's mass sits right of centre; nudge it back into the circle. */
+  margin-right: 1px;
+}
+
+@media (max-width: 640px) {
+  .nav {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto;
+    max-height: calc(100% - 16px);
+  }
+
+  /* A full-width panel reaches the middle of the map, where this sits. */
+  .app__main--navigating .map__fit {
+    display: none;
+  }
+}

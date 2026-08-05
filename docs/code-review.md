@@ -17,6 +17,13 @@ silent.
 
 ### 1.1 There is no test framework at all
 
+> **Addressed.** Vitest is wired up as described below — `npm test`,
+> `npm run test:watch`, `npm run check` — reading the app's own `vite.config.ts`
+> so there is one build configuration. Vitest is pinned to the major that shares
+> the app's Vite 5; the next major brings its own Vite 8, which would mean tests
+> and builds running through two different bundlers. What is *tested* so far is
+> only the directions feature and the geometry under it (§1.2–§1.5 remain).
+
 ```
 $ grep -rn "vitest\|jest" package.json   # nothing
 ```
@@ -131,6 +138,15 @@ known answers (100 m north of a known point; a rect covering its whole
 container round-trips to the anchor's corners). Two or three assertions each.
 
 ### 1.6 CI runs no checks
+
+> **Addressed.** `.github/workflows/deploy.yml` gained a `check` job running
+> `npm run check` on every push and pull request, with `build` now depending on
+> it. Two things this review did not mention had to change with it: the workflow
+> concurrency group, which would otherwise have queued every pull request's
+> checks behind the `pages` deploy group, and `build`'s `if:` guard — its
+> `github.event_name != 'push'` clause is satisfied by a `pull_request` event,
+> so adding that trigger would have deployed pull requests. `npm run lint` is
+> not in the job, because §2.7's linter does not exist yet.
 
 `.github/workflows/deploy.yml` is a deploy pipeline only. `npm run build` does
 run `tsc --noEmit`, so type errors block a deploy — but nothing else does, and

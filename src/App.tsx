@@ -4,10 +4,20 @@ import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
+import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
+import { useDeviceLocation } from './hooks/useDeviceLocation';
 import { isHappeningAt } from './data/events';
+import { buildEventSearchIndex } from './data/search';
+import {
+  placeRoom,
+  roomPlace,
+  routeBetween,
+  type NavEnd,
+  type NavPlace,
+} from './data/navigation';
 
 const SOURCE_URL = 'https://gencon.eventdb.us/';
 const BASEMAP_KEY = 'genCon.basemap';
@@ -24,7 +34,28 @@ export default function App() {
   const [levels, setLevels] = useState<Record<string, string>>({});
   const [venueInView, setVenueInView] = useState<string | null>(null);
 
+  // Directions. `nav` is null until somebody asks for them; `editing` is the
+  // end the panel is choosing a place for, and `pickOnMap` says that end is
+  // waiting on a click rather than on the panel's own search.
+  const [nav, setNav] = useState<{ from: NavPlace | null; to: NavPlace | null } | null>(null);
+  const [editing, setEditing] = useState<NavEnd | null>(null);
+  const [pickOnMap, setPickOnMap] = useState(false);
+
   const { status, feed, index } = useEventFeed();
+
+  // Built once per feed and shared: the header's search and the directions
+  // panel search the same 27,000 titles, and lowercasing them twice per feed
+  // is twice as much work as it needs to be.
+  const eventSearchIndex = useMemo(() => buildEventSearchIndex(index), [index]);
+
+  // Nothing asks the browser where you are until a route says "my location".
+  const usingDevice = nav?.from?.kind === 'device' || nav?.to?.kind === 'device';
+  const device = useDeviceLocation(!!usingDevice);
+
+  const route = useMemo(
+    () => (nav?.from && nav.to ? routeBetween(nav.from, nav.to, device.fix) : null),
+    [nav?.from, nav?.to, device.fix],
+  );
 
   useEffect(() => {
     try {
@@ -112,7 +143,59 @@ export default function App() {
     [showRoomsFloor],
   );
 
+  // Directions open with the room you were reading as the destination and
+  // nothing to start from, which is the question left to answer.
+  const handleNavigateToRoom = useCallback(
+    (room: Room) => {
+      setNav({ from: null, to: roomPlace(room) });
+      setEditing('from');
+      setPickOnMap(false);
+      setOpenRoom(null);
+      setSelectedRoomId(room.id);
+      showRoomsFloor(room);
+    },
+    [showRoomsFloor],
+  );
+
+  const handleSetNavPlace = useCallback(
+    (end: NavEnd, place: NavPlace) => {
+      const base = nav ?? { from: null, to: null };
+      const next = end === 'from' ? { ...base, from: place } : { ...base, to: place };
+      setNav(next);
+      setEditing(null);
+      setPickOnMap(false);
+
+      // A room on a floor the map isn't drawing isn't there to look at, so
+      // choosing one goes to its floor. Where both ends are in the same
+      // building, though, showing one floor necessarily hides the other — and
+      // between the two, the floor you are going to is the one to draw.
+      const origin = placeRoom(next.from);
+      const destination = placeRoom(next.to);
+      const show =
+        origin && destination && origin.venueId === destination.venueId
+          ? destination
+          : placeRoom(place);
+      if (show) showRoomsFloor(show);
+    },
+    [nav, showRoomsFloor],
+  );
+
+  // A click on the map answers whichever end the panel has open.
+  const handlePickPlace = useCallback(
+    (place: NavPlace) => {
+      if (editing) handleSetNavPlace(editing, place);
+    },
+    [editing, handleSetNavPlace],
+  );
+
+  const handleCloseNav = useCallback(() => {
+    setNav(null);
+    setEditing(null);
+    setPickOnMap(false);
+  }, []);
+
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+  const picking = !!editing && pickOnMap;
 
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
 
@@ -137,7 +220,7 @@ export default function App() {
           </div>
         </div>
 
-        <SearchBar index={index} onPick={handlePickSearchResult} />
+        <SearchBar events={eventSearchIndex} onPick={handlePickSearchResult} />
 
         <div className="app__tools">
           <div className="app__basemaps" role="group" aria-label="Basemap style">
@@ -166,7 +249,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="app__main">
+      <main className={`app__main${nav ? ' app__main--navigating' : ''}`}>
         <MapView
           selectedRoomId={selectedRoomId}
           onSelectRoom={handleSelectRoom}
@@ -177,6 +260,10 @@ export default function App() {
           showAmenities={showAmenities}
           levels={levels}
           onVenueInView={setVenueInView}
+          picking={picking}
+          onPickPlace={handlePickPlace}
+          route={route}
+          deviceFix={device.fix}
         />
         <Legend showAmenities={showAmenities} onToggleAmenities={() => setShowAmenities((on) => !on)} />
         <FloorPicker
@@ -184,6 +271,23 @@ export default function App() {
           level={(venueInView && (levels[venueInView] ?? defaultLevel(venueInView))) ?? null}
           onPick={handlePickFloor}
         />
+        {nav && (
+          <NavPanel
+            from={nav.from}
+            to={nav.to}
+            editing={editing}
+            pickingOnMap={picking}
+            covered={!!openRoom}
+            device={device}
+            route={route}
+            events={eventSearchIndex}
+            onEdit={setEditing}
+            onSet={handleSetNavPlace}
+            onPickOnMap={setPickOnMap}
+            onSwap={() => setNav((current) => (current ? { from: current.to, to: current.from } : current))}
+            onClose={handleCloseNav}
+          />
+        )}
       </main>
 
       {openRoom && (
@@ -195,6 +299,7 @@ export default function App() {
           nowMs={nowMs}
           onClose={() => setOpenRoom(null)}
           onZoomToRoom={handleZoomToRoom}
+          onNavigateToRoom={handleNavigateToRoom}
         />
       )}
     </div>

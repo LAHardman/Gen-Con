@@ -18,6 +18,7 @@ import {
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
+import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
 
 interface Props {
   selectedRoomId: string | null;
@@ -32,6 +33,16 @@ interface Props {
   levels: Record<string, string>;
   /** The building the map is looking at, so the floor picker knows whose floors to offer. */
   onVenueInView: (venueId: string | null) => void;
+  /**
+   * The next click picks a place for a route rather than selecting a room. A
+   * room click means that room; anywhere else means that point.
+   */
+  picking: boolean;
+  onPickPlace: (place: NavPlace) => void;
+  /** The route to draw, once both of its ends are known. */
+  route: RouteSummary | null;
+  /** Where the device says it is, drawn whenever a route is asking for it. */
+  deviceFix: DeviceFix | null;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -126,6 +137,10 @@ export function MapView({
   showAmenities,
   levels,
   onVenueInView,
+  picking,
+  onPickPlace,
+  route,
+  deviceFix,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -134,8 +149,10 @@ export function MapView({
   const roomLayersRef = useRef(new Map<string, L.Path>());
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
-  const handlers = useRef({ onSelectRoom, onOpenRoom });
-  handlers.current = { onSelectRoom, onOpenRoom };
+  // `picking` rides along for the same reason: the room click handlers are
+  // bound once, and have to read whether a route is asking for a place *now*.
+  const handlers = useRef({ onSelectRoom, onOpenRoom, onPickPlace, picking });
+  handlers.current = { onSelectRoom, onOpenRoom, onPickPlace, picking };
 
   const allBounds = useMemo(() => {
     const bounds = L.latLngBounds([]);
@@ -171,8 +188,27 @@ export function MapView({
       detailPane.style.pointerEvents = 'none';
     }
 
+    // A route is the thing you are following, so nothing on the map may cover
+    // it — above the room labels in the tooltip pane (650), below the popups
+    // (700). Nothing in it is clickable.
+    map.createPane('route');
+    const routePane = map.getPane('route');
+    if (routePane) {
+      routePane.style.zIndex = '675';
+      routePane.style.pointerEvents = 'none';
+    }
+
     map.fitBounds(allBounds, { padding: [40, 40] });
-    map.on('click', () => handlers.current.onSelectRoom(null));
+    map.on('click', (event) => {
+      if (handlers.current.picking) {
+        handlers.current.onPickPlace({
+          kind: 'point',
+          position: { lat: event.latlng.lat, lng: event.latlng.lng },
+        });
+        return;
+      }
+      handlers.current.onSelectRoom(null);
+    });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.control.scale({ position: 'bottomleft', imperial: true, metric: true }).addTo(map);
@@ -358,10 +394,17 @@ export function MapView({
 
       shapeLayer.on('click', (event) => {
         L.DomEvent.stopPropagation(event);
+        // While a route is asking for a place, a room is that place: picking
+        // one shouldn't also change what the map has selected underneath.
+        if (handlers.current.picking) {
+          handlers.current.onPickPlace({ kind: 'room', roomId: room.id });
+          return;
+        }
         handlers.current.onSelectRoom(room.id);
       });
       shapeLayer.on('dblclick', (event) => {
         L.DomEvent.stopPropagation(event);
+        if (handlers.current.picking) return;
         handlers.current.onSelectRoom(room.id);
         handlers.current.onOpenRoom(room);
       });
@@ -446,8 +489,102 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusToken]);
 
+  /* ---------------------------------------------------------- your position */
+  /*
+   * Drawn whenever a route is asking for it, whether or not it is an end of
+   * one: seeing where the device thinks you are is how you tell whether to
+   * trust the line. The halo is the accuracy the browser reports, which indoors
+   * is often tens of metres, and drawing it stops a confident-looking dot from
+   * claiming a precision it hasn't got.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !deviceFix) return;
+
+    const at = L.latLng(deviceFix.position.lat, deviceFix.position.lng);
+    const halo = L.circle(at, {
+      radius: deviceFix.accuracy,
+      className: 'map__device-halo',
+      pane: 'route',
+      interactive: false,
+    }).addTo(map);
+    const dot = L.marker(at, {
+      icon: L.divIcon({ className: 'map__device', html: '<span></span>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+      pane: 'route',
+      interactive: false,
+      keyboard: false,
+    }).addTo(map);
+
+    return () => {
+      halo.remove();
+      dot.remove();
+    };
+  }, [deviceFix]);
+
+  /* ---------------------------------------------------------------- routes */
+  /*
+   * A dashed line and two marks. Dashed on purpose: a solid line along a road
+   * is a route somebody surveyed, and this is a bearing between two points.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !route) return;
+
+    const from = L.latLng(route.fromAt.lat, route.fromAt.lng);
+    const to = L.latLng(route.toAt.lat, route.toAt.lng);
+    const layers: L.Layer[] = [];
+
+    layers.push(
+      L.polyline([from, to], {
+        className: 'map__route',
+        dashArray: '3 10',
+        weight: 4,
+        pane: 'route',
+        interactive: false,
+      }).addTo(map),
+    );
+
+    const endpoint = (at: L.LatLng, kind: 'start' | 'end', label: string) =>
+      L.marker(at, {
+        icon: L.divIcon({
+          className: `map__route-end map__route-end--${kind}`,
+          html: `<span>${label}</span>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        }),
+        pane: 'route',
+        interactive: false,
+        keyboard: false,
+      }).addTo(map);
+
+    // Where you are standing is already the device dot; a second mark on top of
+    // it would just be two marks in one place.
+    if (route.from.kind !== 'device') layers.push(endpoint(from, 'start', 'A'));
+    if (route.to.kind !== 'device') layers.push(endpoint(to, 'end', 'B'));
+
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [route]);
+
+  /*
+   * Frame a route when it is first drawn, and when either end changes — but not
+   * when a device fix merely moves, or the map would haul itself back into
+   * position every few seconds while you were trying to read it.
+   */
+  const routeKey = route ? `${placeKey(route.from)}|${placeKey(route.to)}` : null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !route) return;
+    map.flyToBounds(L.latLngBounds([route.fromAt.lat, route.fromAt.lng], [route.toAt.lat, route.toAt.lng]), {
+      padding: [70, 70],
+      maxZoom: 19,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeKey]);
+
   return (
-    <div className="map">
+    <div className={`map${picking ? ' map--picking' : ''}`}>
       <div
         ref={containerRef}
         className="map__canvas"

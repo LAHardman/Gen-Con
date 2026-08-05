@@ -13,12 +13,15 @@
 # Event detail pages are cached between runs, so only the first run pays the
 # full cost of fetching them.
 
-name: Deploy to GitHub Pages
+name: Check and deploy
 
 on:
-  # Any branch may be pushed; the build below only proceeds for the default
-  # one, whatever it happens to be called in this repository.
+  # Any branch may be pushed. Everything is checked; only the default branch,
+  # whatever it happens to be called in this repository, is then deployed.
   push:
+  # Checks on pull requests, which is where they are worth most — and which
+  # otherwise get no CI at all, since the deploy below skips them.
+  pull_request:
   # Refresh the schedule without pushing anything.
   workflow_dispatch:
     inputs:
@@ -35,17 +38,42 @@ permissions:
   pages: write
   id-token: write
 
-# Never let two deploys race; let a newer push win, but don't cancel a deploy
-# that is already publishing.
+# Never let two deploys race, and don't cancel one that is already publishing.
+#
+# Deploying runs share one group so two of them can never race. Check-only runs
+# — pull requests, and pushes to any other branch — take a group per ref
+# instead, so a pull request's checks neither queue behind a deploy nor hold
+# one up.
 concurrency:
-  group: pages
+  group: >-
+    ${{ github.ref_name == github.event.repository.default_branch && 'pages'
+    || format('checks-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
+  # Types and tests, on every push and every pull request. The deploy below
+  # waits on this, so nothing reaches the published site without passing it.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
   build:
+    needs: check
+    # Deploy on a dispatch, on the weekly schedule, and on a push to the default
+    # branch. Never on a pull request: it is checked above, not published.
     if: >-
-      github.event_name != 'push' ||
-      github.ref_name == github.event.repository.default_branch
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'push' ||
+       github.ref_name == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
