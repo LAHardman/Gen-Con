@@ -736,7 +736,7 @@ export const ROOMS: Room[] = [
     shortName: 'Field',
     category: 'gaming',
     venueId: 'lucas-oil',
-    level: 'Field level',
+    level: 'Event level',
     rect: { x: 33, y: 30, width: 34, height: 41 },
     aliases: ['Field'],
     description:
@@ -749,7 +749,7 @@ export const ROOMS: Room[] = [
     shortName: 'Exhibit 1–2',
     category: 'exhibit',
     venueId: 'lucas-oil',
-    level: 'Level 1',
+    level: 'Event level',
     rect: { x: 34, y: 75, width: 30, height: 13 },
     aliases: ['Exhibit Hall 1', 'Exhibit Hall 2', 'Exhibit Hall 1--2'],
     description:
@@ -786,7 +786,7 @@ export const ROOMS: Room[] = [
     shortName: 'East Club',
     category: 'amenity',
     venueId: 'lucas-oil',
-    level: 'Club level',
+    level: 'Concourse level',
     rect: { x: 63, y: 24, width: 17, height: 11 },
     aliases: ['East Club Lounge', 'East Club', 'Club Lounge'],
     description:
@@ -799,7 +799,7 @@ export const ROOMS: Room[] = [
     shortName: 'West Club',
     category: 'amenity',
     venueId: 'lucas-oil',
-    level: 'Club level',
+    level: 'Concourse level',
     rect: { x: 20, y: 24, width: 17, height: 11 },
     aliases: ['West Club Lounge', 'West Club'],
     description:
@@ -812,7 +812,7 @@ export const ROOMS: Room[] = [
     shortName: '1–12',
     category: 'meeting',
     venueId: 'lucas-oil',
-    level: 'Meeting level',
+    level: 'Event level',
     rect: { x: 66, y: 62, width: 16, height: 12 },
     aliases: ['Meeting Room', 'Meeting Rooms'],
     description:
@@ -825,7 +825,7 @@ export const ROOMS: Room[] = [
     shortName: 'Suites',
     category: 'amenity',
     venueId: 'lucas-oil',
-    level: 'Suite level',
+    level: 'Lower Suite level',
     rect: { x: 18, y: 62, width: 16, height: 12 },
     aliases: ['Lower Suites', 'Suites'],
     description:
@@ -2303,7 +2303,8 @@ export const VENUE_LEVELS: Record<string, string[]> = (() => {
   }
   for (const list of Object.values(levels)) {
     // Only where every floor numbers itself. The stadium's are named after what
-    // is on them — field, concourse, club — and are already written in order.
+    // is on them — event, concourse, lower suite — and are already written in
+    // the order its rooms are, which is bottom to top.
     if (list.every((level) => storey(level) !== null)) {
       list.sort((a, b) => storey(a)! - storey(b)!);
     }

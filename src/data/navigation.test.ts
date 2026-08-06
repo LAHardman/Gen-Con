@@ -51,10 +51,12 @@ describe('placePosition', () => {
   });
 
   it('falls back to the centre where no corridor was drawn to be near', () => {
-    // Lucas Oil has rooms and no plan of its circulation, so there is nothing
-    // for a door to be nearest to.
-    const field = { kind: 'room' as const, roomId: 'lucas-oil-field' };
-    expect(placePosition(field, null)).toEqual(centre('lucas-oil-field'));
+    // The Indiana Rep is one room on one floor and Gen Con does not colour it
+    // as its own venue, so no sheet draws its circulation and there is nothing
+    // for a door to be nearest to. (Lucas Oil used to be the example here; its
+    // floors come off the campus sheets now.)
+    const stage = { kind: 'room' as const, roomId: 'indiana-rep-stage' };
+    expect(placePosition(stage, null)).toEqual(centre('indiana-rep-stage'));
   });
 
   it('reads the device live rather than from the place itself', () => {

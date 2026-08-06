@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ROOMS, ROOMS_BY_ID, VENUES, VENUE_LEVELS, venueOutline } from './venues';
-import { doorsOf, floorOf } from './walkable';
+import { doorsOf, floorArea, floorOf } from './walkable';
 import { walkBetween } from './route';
 import { placeAnchor, roomPlace } from './navigation';
 
@@ -43,10 +43,12 @@ describe('every building can be reached from every other', () => {
   }, 60_000);
 
   it('reaches a building with no floor drawn at all', () => {
-    // Lucas Oil has rooms and no circulation on any of its six floors, and the
-    // nearest mapped footway is 270 m from them — nothing draws its plazas. So
-    // the last leg has to be a straight line, and it must still be offered.
-    const walk = routeBetweenRooms('hall-b', 'lucas-oil-field')!;
+    // The Indiana Rep is one room on one floor, and Gen Con does not colour it
+    // as its own venue on the campus sheets, so nothing draws its circulation.
+    // Its room has no square to stand on and the route has to reach it as a
+    // loose point — which must still be offered, and said to be a straight
+    // line. (Lucas Oil was the example here until its floors were read.)
+    const walk = routeBetweenRooms('hall-b', 'indiana-rep-stage')!;
     expect(walk).not.toBeNull();
     expect(walk.legs.some((leg) => leg.kind === 'outdoor')).toBe(true);
     expect(walk.indoors).toBe(false);
@@ -60,6 +62,46 @@ describe('every building can be reached from every other', () => {
     const paved = walk.legs.filter((leg) => leg.kind === 'pavement');
     // And it is drawn, rather than being a two-point line under another name.
     expect(Math.max(...paved.map((leg) => leg.points.length))).toBeGreaterThan(2);
+  });
+});
+
+describe('you can get around inside a building', () => {
+  it('joins every room of a building to every other room of it', () => {
+    // The nastiest failure this repository has had, because it arrives as an
+    // *improvement*. A room on a floor nobody drew is a loose point: it has no
+    // square to stand on, so it goes out to the street and routes badly but
+    // routes. Draw that floor and it gains a square — and if no staircase
+    // reaches that square, it is stranded with nothing to fall back to.
+    //
+    // Reading the JW's 2nd and 3rd floors did exactly that to 114 pairs of its
+    // own rooms. Two things had to be true to fix it, and both are silent on
+    // their own: a building's floors come from one placement rather than two
+    // that disagree, and the inference still runs where the drawings leave a
+    // piece of floor unserved.
+    //
+    // Every room against one of its building rather than every pair: the graph
+    // is undirected, so if each room reaches the same room then each reaches
+    // all the others. That is 146 searches rather than 2,202.
+    const missing: string[] = [];
+    for (const venue of VENUES) {
+      const rooms = ROOMS.filter((room) => room.venueId === venue.id);
+      const [first] = rooms;
+      if (!first) continue;
+      for (const room of rooms) {
+        if (room === first) continue;
+        if (!routeBetweenRooms(room.id, first.id)) missing.push(`${room.id} -> ${first.id}`);
+      }
+    }
+    expect(missing).toEqual([]);
+  }, 60_000);
+
+  it('changes floor under cover rather than going round by the street', () => {
+    // Two floors of one building joined by a staircase somebody drew. If the
+    // link is lost the route does not disappear — it goes out of the door and
+    // back in, which reads as a route and is a floor change in disguise.
+    const walk = routeBetweenRooms('jw-white-river-abcd', 'jw-griffin-hall')!;
+    expect(walk.indoors).toBe(true);
+    expect(walk.legs.some((leg) => leg.kind === 'stairs')).toBe(true);
   });
 });
 
@@ -105,7 +147,7 @@ describe('what a leg says it is', () => {
     // is a footway somebody surveyed, an outdoor leg is the unmapped ground
     // between a door and the kerb. Reading one as the other is the whole
     // failure this file exists to prevent.
-    const walk = routeBetweenRooms('hall-b', 'lucas-oil-field')!;
+    const walk = routeBetweenRooms('hall-b', 'indiana-rep-stage')!;
     for (const leg of walk.legs) {
       if (leg.kind === 'outdoor') expect(leg.text).toMatch(/^(Outside|Out to the street)/);
       if (leg.kind === 'pavement') expect(leg.text).toMatch(/pavement/);
@@ -115,7 +157,7 @@ describe('what a leg says it is', () => {
   it('sums its legs to the distance it reports', () => {
     // The panel prints both, and a total that disagreed with the steps under it
     // would be the sort of wrong that nobody notices for months.
-    for (const [a, b] of [['hall-b', 'marriott-ballroom'], ['hall-b', 'lucas-oil-field']]) {
+    for (const [a, b] of [['hall-b', 'marriott-ballroom'], ['hall-b', 'lucas-oil-lower-suites']]) {
       const walk = routeBetweenRooms(a, b)!;
       const summed = walk.legs.reduce((total, leg) => total + leg.metres, 0);
       expect(Math.abs(summed - walk.metres), `${a} -> ${b}`).toBeLessThan(0.5);
@@ -125,6 +167,62 @@ describe('what a leg says it is', () => {
   it('gives every leg at least two points to draw', () => {
     const walk = routeBetweenRooms('hall-b', 'marriott-ballroom')!;
     for (const leg of walk.legs) expect(leg.points.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('the surface a route is searched over', () => {
+  it('leaves no scrap of floor too small to stand on', () => {
+    // A single stray open cell is the worst kind of surface: it is floor to
+    // everything downstream, and being isolated it is the *nearest* floor to
+    // whatever sits beside it, so anything snapping to the storey snaps to it
+    // and is then stranded on an island one square across. Lucas Oil's event
+    // level came out as 513 cells and one stray, the drawn escalator up to the
+    // concourse snapped to the stray, and the whole stadium above that floor
+    // became unreachable — from inside it as well as from the campus.
+    for (const venue of VENUES) {
+      for (const level of VENUE_LEVELS[venue.id] ?? []) {
+        const floor = floorOf(venue.id, level);
+        if (floor.empty) continue;
+        const seen = new Uint8Array(floor.open.length);
+        for (let start = 0; start < floor.open.length; start += 1) {
+          if (!floor.open[start] || seen[start]) continue;
+          const queue = [start];
+          let size = 0;
+          seen[start] = 1;
+          while (queue.length) {
+            const i = queue.pop()!;
+            size += 1;
+            const cx = i % floor.width;
+            const cy = Math.floor(i / floor.width);
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const nx = cx + dx;
+              const ny = cy + dy;
+              if (nx < 0 || ny < 0 || nx >= floor.width || ny >= floor.height) continue;
+              const next = ny * floor.width + nx;
+              if (!floor.open[next] || seen[next]) continue;
+              seen[next] = 1;
+              queue.push(next);
+            }
+          }
+          expect(size, `${venue.id}/${level}`).toBeGreaterThanOrEqual(8);
+        }
+      }
+    }
+  }, 30_000);
+
+  it('draws a surface for every floor a plan was read for', () => {
+    // Three floors have none, and all three are venues Gen Con does not colour
+    // as its own on the campus sheets. Everything it does colour is drawn.
+    const bare = VENUES.flatMap((venue) =>
+      (VENUE_LEVELS[venue.id] ?? [])
+        .filter((level) => !floorArea(venue.id, level).cells)
+        .map((level) => `${venue.id}/${level}`),
+    );
+    expect(bare).toEqual([
+      'indiana-rep/Auditorium',
+      'escape-room/200 S. Meridian St',
+      'circle-centre/Levels 1–4',
+    ]);
   });
 });
 

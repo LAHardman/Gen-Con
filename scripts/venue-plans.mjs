@@ -907,8 +907,25 @@ const CAMPUS_GEO = { scale: 0.155266, lat0: 39.758405, lng0: -86.154774 };
  * and those are its own Level 1 and Level 2.
  */
 const CAMPUS_SHEETS = {
+  // Halls 1 and 2, Meeting Rooms 1 to 12 and the field, all on one storey —
+  // which is why the stadium has three levels here and not six. Lettered
+  // ENTRANCE TO STADIUM ON STREET LEVEL and UP TO STREET LEVEL, so it is below
+  // the concourse.
+  'level-0': [{ venueId: 'lucas-oil', level: 'Event level', geo: CAMPUS_GEO }],
   'level-1': [
     { venueId: 'icc', level: 'Level 1', geo: CAMPUS_GEO, verticalsOnly: true },
+    // The North Plaza and the concourse ring, with the club lounges off it.
+    // DOWN TO EVENT SPACES and UP TO TERRACE LEVEL put it between the two.
+    { venueId: 'lucas-oil', level: 'Concourse level', geo: CAMPUS_GEO },
+    // The JW's 1st floor comes from here rather than from its screenshot in
+    // `plans/venues/`, even though that is four times finer, because its 2nd
+    // and 3rd have no screenshot and can only come from these tiles. A fitted
+    // sheet and a georeferenced one are two different placements of the same
+    // building: the two readings of the JW's main escalator landed 14 m apart,
+    // the floors overlapped by 32 m² in total, and no stair could be found
+    // between them at all — so the whole White River Ballroom had no way
+    // upstairs. Floors that agree with each other beat a floor drawn finely.
+    { venueId: 'jw-marriott', level: '1st floor', geo: CAMPUS_GEO },
     // The Hyatt's atrium lobby, with three escalators lettered UP TO 2ND FLOOR.
     { venueId: 'hyatt', level: '1st floor', geo: CAMPUS_GEO },
     // The Hilton's lobby, running east from Market Street.
@@ -925,6 +942,9 @@ const CAMPUS_SHEETS = {
     // Lettered STREET LEVEL ENTRANCE (2ND FLOOR), which is why the Embassy's
     // way out is upstairs: its lobby, registration and lifts are all here.
     { venueId: 'embassy-suites', level: '2nd floor', geo: CAMPUS_GEO },
+    // The ring of LS-numbered suites. The lift on levels 0 and 1 letters it
+    // LOWER SUITE LEVEL.
+    { venueId: 'lucas-oil', level: 'Lower Suite level', geo: CAMPUS_GEO },
   ],
   // The JW's Grand Ballroom, rooms 300 to 314, and DOWN TO 2ND FLOOR.
   'level-3': [{ venueId: 'jw-marriott', level: '3rd floor', geo: CAMPUS_GEO }],
@@ -933,13 +953,16 @@ const CAMPUS_SHEETS = {
 /**
  * Which sheet is which. The file name says it, but a floor is named differently
  * by every building and the map has to agree with `venues.ts` exactly.
+ *
+ * A file that is not here is skipped with a warning. `jw-marriott-1.png` is the
+ * one deliberate omission: that floor comes from the campus tiles instead, so
+ * that all three of the JW's floors share one placement — see `CAMPUS_SHEETS`.
  */
 const SHEETS = {
   'crowne-plaza-1': { venueId: 'crowne-plaza', level: '1st floor' },
   'crowne-plaza-mezzanine': { venueId: 'crowne-plaza', level: 'Mezzanine' },
   'embassy-suites-5': { venueId: 'embassy-suites', level: '5th floor' },
   'hilton-2': { venueId: 'hilton', level: '2nd floor' },
-  'jw-marriott-1': { venueId: 'jw-marriott', level: '1st floor' },
   'hilton-9': { venueId: 'hilton', level: '9th floor' },
   'hyatt-2': { venueId: 'hyatt', level: '2nd floor' },
   'hyatt-3': { venueId: 'hyatt', level: '3rd floor' },

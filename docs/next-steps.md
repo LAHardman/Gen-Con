@@ -61,20 +61,22 @@ the network was.
 
 ---
 
-## 2. Nine floors have no walkable surface — was fifteen
+## 2. Three floors have no walkable surface — was fifteen
 
 **Measured.** Floors whose circulation nothing has drawn, after reading the
 campus sheets:
 
 ```
-Lucas Oil Stadium                          all six floors
 Indiana Rep, Escape Room, Circle Centre    their only floor
 ```
 
-Six were filled from Gen Con's own campus tiles, which cover every building on
-all five campus levels rather than only the two the convention centre uses:
-the JW's 2nd and 3rd, the Hyatt's, the Hilton's and Le Méridien's 1st, and the
-Embassy's 2nd. Registering them is a line each in `CAMPUS_SHEETS`.
+All three are venues Gen Con does not colour as its own on the campus sheets,
+so there is nothing to read. Everything it does colour is now drawn.
+
+Nine floors were filled from Gen Con's own campus tiles, which cover every
+building on all five campus levels rather than only the two the convention
+centre uses: the JW's 1st, 2nd and 3rd, the Hyatt's, the Hilton's and Le
+Méridien's 1st, the Embassy's 2nd, and all three of the stadium's (§2b).
 
 **One thing had to be fixed first, and it is the reason this was not one line.**
 `trace` walks the whole classified image, which is right for a screenshot of one
@@ -87,10 +89,10 @@ before anything is traced from it, and the pixels are cut rather than the
 finished shapes — a corridor running from one building into the next is one
 component either way, and only a cut divides it.
 
-**What it bought.** Empty floors 15 → 9, rooms with no doorway 29 → 19 (§3),
-floor changes the plans draw 19 → 30, and building pairs needing a long straight
-line 2 → **0**. Every pair on the campus now walks a drawn floor, a skywalk or a
-surveyed pavement.
+**What it bought.** Empty floors 15 → 3, rooms with no doorway 29 → 14 (§3),
+floor changes 19 → 50, and building pairs needing a long straight line 2 → **0**.
+Every pair on the campus now walks a drawn floor, a skywalk or a surveyed
+pavement, and every room of a building reaches every other room of it.
 
 **What it did not buy, and this is worth recording.** The premise of this
 section used to be that the JW's 2nd floor "is one line of `CAMPUS_SHEETS` and
@@ -112,45 +114,93 @@ in another source or drawing them.
 
 ---
 
-## 2b. Lucas Oil is drawn after all
+## 2b. Lucas Oil — done, and it had six levels where the building has three
 
-Gen Con's campus level 1 draws the stadium in full — the concourse ring, the
-East and West Club Lounges, the North Plaza, the lifts, and escalators lettered
-UP TO TERRACE LEVEL, DOWN TO EVENT SPACES and TO FIELD & LOWER SUITE LEVEL.
-That is far better than the schematic rectangles its rooms are today, and it
-would settle the last 8 rooms with no doorway.
+Gen Con's campus sheets draw the stadium in full. Which of its storeys each
+sheet shows is not written on the sheet, but it can be read off the letterings,
+because each one names its neighbours:
 
-It is not registered because **which of its six storeys that sheet is cannot be
-read off the sheet.** `venues.ts` names them Field, Level 1, Concourse, Club,
-Meeting and Suite; the drawing shows what is plainly the main concourse, but
-labels the club lounges on it, and Gen Con numbers campus levels rather than
-building storeys. Guessing puts a floor's circulation on the wrong storey, which
-is silent — the map draws a healthy-looking floor and routes cross it at the
-wrong height.
+| Sheet | What it draws | Pinned by |
+|---|---|---|
+| level 0 | Halls 1–2, Meeting Rooms 1–12, the field | UP TO STREET LEVEL → 1 |
+| level 1 | North Plaza, the concourse ring, the club lounges | DOWN TO EVENT SPACES → 0; UP TO TERRACE LEVEL → 4 |
+| level 2 | the LS-numbered suites | the lift on 0 and 1 letters it LOWER SUITE LEVEL |
+| level 3 | Club Lounge (upper level) | DOWN TO CLUB LOWER LEVEL → 1 |
+| level 4 | Terrace / Upper Suite, Bud Light Zone | DOWN TO NORTH PLAZA → 1 |
 
-**What to do:** work out the mapping from the five sheets together (a storey
-that letters UP TO X and DOWN TO Y pins itself against its neighbours), then
-register all six. This is the largest single piece of interior still missing.
+**`venues.ts` had six levels for a building with three of them.** Halls 1–2,
+Meeting Rooms 1–12 and the field are all one storey — Gen Con's level 0 — and
+were authored as "Level 1", "Meeting level" and "Field level". Registering the
+sheets against those names would have given three names to one floor and made
+the router charge a staircase to walk between them. So the seven rooms were
+re-homed onto the three storeys the sheets show: Event level, Concourse level,
+Lower Suite level.
+
+Levels 3 and 4 are drawn and are **not** registered, because no room in
+`venues.ts` sits on either and a floor with no rooms cannot be keyed.
 
 ---
 
-## 3. Nineteen rooms have no doorway — was twenty-nine
+## 2c. What reading those floors broke, and how
 
-**Measured.** `roomEntrance` finds nothing for 19 of 146 rooms, which then use
+Worth its own section, because it is the nastiest failure mode this repository
+has: **drawing a floor can remove routes that existed before.** A room on a
+floor nobody drew is a loose point — it has no square to stand on, so it goes
+out to the street and routes badly but routes. Draw that floor and it gains a
+square, and if no staircase reaches that square it is stranded with nothing to
+fall back to.
+
+Reading the JW's 2nd and 3rd floors did that to 114 pairs of its own rooms, and
+reading Lucas Oil's did it to the whole stadium above the event level. Three
+separate causes, each silent:
+
+1. **A stray cell.** Lucas Oil's event level came out as 513 cells and one
+   isolated speck of trace noise. An isolated cell is the *nearest* open cell
+   to whatever sits beside it, so the drawn escalator up to the concourse
+   snapped to it and the whole stadium above became unreachable. `walkable.ts`
+   now sweeps any connected run under 8 cells at floor construction, which is
+   where the rule `doorsOf` already used belongs.
+2. **One link per overlap.** The inference put a single link at the centre of
+   the largest piece of the overlap between two floors. Lucas Oil's lower suite
+   ring is drawn as thirteen runs that do not touch, so twelve of them had no
+   way off. Each piece big enough to be a room now gets its own.
+3. **Two placements of one building.** The JW's 1st floor was *fitted* from a
+   screenshot and its 2nd and 3rd *georeferenced* off the campus tiles. The two
+   readings of its main escalator landed 14 m apart and the floors overlapped by
+   32 m² in all, so no stair could be found between them and the White River
+   Ballroom had no way upstairs. Its 1st floor now comes from the campus tiles
+   too: floors that agree with each other beat a floor drawn four times finer.
+
+And one thing the drawings could not do alone: a drawn shaft used to suppress
+the inference entirely between two floors. That is right about precedence and
+wrong about coverage — the JW's 1st floor is two runs and only one has a stair
+beside it. The inference now still runs for any piece no drawn shaft serves.
+
+`route.test.ts` holds the lot, by asserting that every room of a building
+reaches every other room of it. All four are mutation-tested; the weaker
+version of that test — one room per floor — caught only two of them.
+
+---
+
+## 3. Fourteen rooms have no doorway — was twenty-nine
+
+**Measured.** `roomEntrance` finds nothing for 14 of 146 rooms, which then use
 their centre — the inaccuracy the doorway work existed to remove:
 
 ```
-Lucas Oil 8 · Crowne Plaza 5 · Convention Center 2 · JW Marriott 1
+Crowne Plaza 5 · Convention Center 2 · Lucas Oil 2 · JW Marriott 2
 Indiana Rep 1 · Escape Room 1 · Circle Centre 1
 ```
 
-The ten that went were rooms on the floors §2 filled, exactly as expected: the
-two are one piece of work and should be measured together. Lucas Oil's eight go
-when §2b is done.
+Half of them went with the floors §2 and §2b filled, as expected: the two are
+one piece of work and should be measured together.
 
-The Crowne Plaza's five and the convention centre's two are worth a look on
-their own, since those floors *are* drawn — they are likely rooms whose outline
-sits further than `roomEntrance`'s 12 m search from any circulation.
+What is left is no longer a floor problem — every one of these rooms is on a
+floor that *is* drawn, except the three single-room venues. They are rooms
+whose outline sits further than `roomEntrance`'s 12 m search from any
+circulation, which for the stadium and the Crowne Plaza is mostly because their
+room rectangles are schematic rather than traced. Widening the search would
+find a doorway on the wrong wall; the fix is better rectangles.
 
 ---
 

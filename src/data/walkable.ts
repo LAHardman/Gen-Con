@@ -166,9 +166,58 @@ export function floorOf(venueId: string, level: string): Floor {
     }
   }
 
+  sweepScraps(open, width, height);
+
   const floor: Floor = { venueId, level, origin, width, height, open, empty: false };
   FLOORS.set(key, floor);
   return floor;
+}
+
+/**
+ * Below this a connected run of open cells is trace noise, not floor. Cells,
+ * so at 1.5 m a side this is about 18 m² — smaller than a lift car and lobby.
+ */
+const SCRAP = 8;
+
+/**
+ * Rub out the specks the tracing leaves behind.
+ *
+ * A plan read off a raster produces the odd stray cell: an anti-aliased corner,
+ * a pixel of corridor colour inside a wall. They look like floor to everything
+ * downstream, and being *isolated* floor they are worse than useless — they are
+ * the nearest open cell to whatever is beside them, so anything snapping to the
+ * surface snaps to them and is then stranded on an island of one square.
+ *
+ * That is not hypothetical. Lucas Oil's event level came out as 513 cells and
+ * one stray, and the escalator up to the concourse — a real one, read off the
+ * plan — snapped to the stray. The whole stadium above the event level became
+ * unreachable, from inside it as well as from the rest of the campus, and
+ * nothing about the floor looked wrong.
+ */
+function sweepScraps(open: Uint8Array, width: number, height: number) {
+  const seen = new Uint8Array(open.length);
+  for (let start = 0; start < open.length; start += 1) {
+    if (!open[start] || seen[start]) continue;
+    const queue = [start];
+    const cells: number[] = [];
+    seen[start] = 1;
+    while (queue.length) {
+      const i = queue.pop()!;
+      cells.push(i);
+      const cx = i % width;
+      const cy = Math.floor(i / width);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const next = ny * width + nx;
+        if (!open[next] || seen[next]) continue;
+        seen[next] = 1;
+        queue.push(next);
+      }
+    }
+    if (cells.length < SCRAP) for (const i of cells) open[i] = 0;
+  }
 }
 
 export const cellCentre = (floor: Floor, cx: number, cy: number): Point => ({

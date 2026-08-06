@@ -28,7 +28,7 @@
 
 import { VENUE_LEVELS } from './venues';
 import { VENUE_VERTICAL } from './venue-plan';
-import { between, cellCentre, cellOf, floorOf, toLatLng, toPoint, type Floor } from './walkable';
+import { between, cellCentre, cellOf, floorOf, nearestOpen, toLatLng, toPoint, type Floor } from './walkable';
 import type { LatLng } from '../utils/geo';
 
 export interface Vertical {
@@ -74,10 +74,21 @@ function coincident(lower: Floor, upper: Floor) {
   return both;
 }
 
-/** The biggest connected piece of that overlap, and where its middle is. */
-function largestPiece(upper: Floor, both: Uint8Array) {
+/**
+ * Every connected piece of that overlap, largest first.
+ *
+ * One piece is not enough, and for the same reason a building needs more than
+ * one door. Lucas Oil's lower suite ring is drawn as thirteen runs that do not
+ * touch — the stair and lift cores between the suites break it — so a single
+ * link put the only way up into one of them and left the other twelve
+ * unreachable from anywhere, the stadium included. Every piece of floor a
+ * person can stand on has to be reachable somehow, and a piece cut off from the
+ * rest of its own storey can only be reached from another storey; so each one
+ * that is big enough to be a room rather than a rounding error gets its own.
+ */
+function piecesOf(upper: Floor, both: Uint8Array) {
   const seen = new Uint8Array(both.length);
-  let best: { cells: number[]; size: number } | null = null;
+  const pieces: number[][] = [];
 
   for (let start = 0; start < both.length; start += 1) {
     if (!both[start] || seen[start]) continue;
@@ -104,9 +115,9 @@ function largestPiece(upper: Floor, both: Uint8Array) {
         queue.push(next);
       }
     }
-    if (!best || cells.length > best.size) best = { cells, size: cells.length };
+    pieces.push(cells);
   }
-  return best;
+  return pieces.sort((a, b) => b.length - a.length);
 }
 
 /**
@@ -149,40 +160,57 @@ function drawnBetween(venueId: string, lowerLevel: string, upperLevel: string): 
   return links;
 }
 
-function linkBetween(venueId: string, lowerLevel: string, upperLevel: string): Vertical | null {
+function linkBetween(
+  venueId: string,
+  lowerLevel: string,
+  upperLevel: string,
+  drawn: readonly Vertical[] = [],
+): Vertical[] {
   const lower = floorOf(venueId, lowerLevel);
   const upper = floorOf(venueId, upperLevel);
-  if (lower.empty || upper.empty) return null;
+  if (lower.empty || upper.empty) return [];
+
+  // Which cells of the upper floor a drawn shaft already reaches, so a piece
+  // that has one is not given a guess as well.
+  const served = new Set<number>();
+  for (const link of drawn) {
+    const found = nearestOpen(upper, toPoint(link.at), SAME_SHAFT);
+    if (found) served.add(found.cy * upper.width + found.cx);
+  }
 
   const both = coincident(lower, upper);
-  const piece = largestPiece(upper, both);
-  if (!piece) return null;
-  // CELL is 1.5 m, so a cell is 2.25 m².
-  if (piece.size * 2.25 < MIN_OVERLAP) return null;
+  const links: Vertical[] = [];
+  for (const cells of piecesOf(upper, both)) {
+    if (cells.some((i) => served.has(i))) continue;
+    // CELL is 1.5 m, so a cell is 2.25 m². Sorted largest first, so once one
+    // piece is too small the rest are too.
+    if (cells.length * 2.25 < MIN_OVERLAP) break;
 
-  let x = 0;
-  let y = 0;
-  for (const i of piece.cells) {
-    const centre = cellCentre(upper, i % upper.width, Math.floor(i / upper.width));
-    x += centre.x;
-    y += centre.y;
-  }
-  const middle = { x: x / piece.cells.length, y: y / piece.cells.length };
-
-  // The mean of a bent corridor can fall outside it, so take the cell of the
-  // piece nearest that mean rather than the mean itself.
-  let at = middle;
-  let nearest = Infinity;
-  for (const i of piece.cells) {
-    const centre = cellCentre(upper, i % upper.width, Math.floor(i / upper.width));
-    const away = between(centre, middle);
-    if (away < nearest) {
-      nearest = away;
-      at = centre;
+    let x = 0;
+    let y = 0;
+    for (const i of cells) {
+      const centre = cellCentre(upper, i % upper.width, Math.floor(i / upper.width));
+      x += centre.x;
+      y += centre.y;
     }
-  }
+    const middle = { x: x / cells.length, y: y / cells.length };
 
-  return { venueId, from: lowerLevel, to: upperLevel, at: toLatLng(at), certainty: 'region' };
+    // The mean of a bent corridor can fall outside it, so take the cell of the
+    // piece nearest that mean rather than the mean itself.
+    let at = middle;
+    let nearest = Infinity;
+    for (const i of cells) {
+      const centre = cellCentre(upper, i % upper.width, Math.floor(i / upper.width));
+      const away = between(centre, middle);
+      if (away < nearest) {
+        nearest = away;
+        at = centre;
+      }
+    }
+
+    links.push({ venueId, from: lowerLevel, to: upperLevel, at: toLatLng(at), certainty: 'region' });
+  }
+  return links;
 }
 
 const CACHE = new Map<string, Vertical[]>();
@@ -197,14 +225,23 @@ export function verticalsOf(venueId: string): Vertical[] {
   // Only between floors that are adjacent in the building's own ordering: a
   // link from the 2nd to the 9th would be a lift shaft this cannot see.
   for (let i = 0; i + 1 < levels.length; i += 1) {
-    // What the drawings show, and only failing that what the floors imply.
+    /*
+     * What the drawings show, and then what the floors imply *wherever the
+     * drawings leave a piece of floor with no way off it*.
+     *
+     * The inference used to be skipped outright whenever a single shaft was
+     * drawn between two floors. That is right about precedence and wrong about
+     * coverage: the JW's 1st floor is drawn as two runs that do not touch, and
+     * only one of them has a stair beside it, so every room on the other — the
+     * whole White River Ballroom, fifty pairs of rooms — had no way upstairs at
+     * all. That is worse than having no plan of the floor, because a room on a
+     * floor nobody drew at least falls back to the street.
+     *
+     * A piece that already has a drawn shaft in it is left alone, so this adds
+     * guesses only where there is otherwise nothing.
+     */
     const drawn = drawnBetween(venueId, levels[i], levels[i + 1]);
-    if (drawn.length) {
-      links.push(...drawn);
-      continue;
-    }
-    const link = linkBetween(venueId, levels[i], levels[i + 1]);
-    if (link) links.push(link);
+    links.push(...drawn, ...linkBetween(venueId, levels[i], levels[i + 1], drawn));
   }
   CACHE.set(venueId, links);
   return links;

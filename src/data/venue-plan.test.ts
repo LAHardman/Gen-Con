@@ -36,6 +36,12 @@ describe('VENUE_HALLS', () => {
       'jw-marriott/3rd floor',
       'le-meridien/1st floor',
       'le-meridien/2nd floor',
+      // The stadium has three storeys here, not the six it used to claim:
+      // Gen Con's level 0 draws the halls, the meeting rooms and the field
+      // together, because they are one floor.
+      'lucas-oil/Concourse level',
+      'lucas-oil/Event level',
+      'lucas-oil/Lower Suite level',
       'marriott-downtown/1st floor',
       'marriott-downtown/2nd floor',
       'omni/1st floor',

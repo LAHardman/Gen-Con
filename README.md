@@ -318,18 +318,24 @@ It probes for the zoom levels and tile ranges rather than assuming them, caches
 every tile, and asks for four at a time with a pause between — it is somebody
 else's CDN. Set `GENCON_TILES` to point it elsewhere.
 
-Six floors come from it that no screenshot covers: the JW's 2nd and 3rd, the
-Hyatt's, the Hilton's and Le Méridien's 1st, and the Embassy's 2nd — which is
-its street entrance, lettered so on the sheet. **A campus sheet is clipped to
+Nine floors come from it: the JW's three, the Hyatt's, the Hilton's and Le
+Méridien's 1st, the Embassy's 2nd — which is its street entrance, lettered so on
+the sheet — and all three of Lucas Oil's. The JW's 1st floor is taken from here
+rather than from its own screenshot even though that is four times finer,
+because a fitted sheet and a georeferenced one are two different placements of
+the same building: with its 1st fitted and its 2nd georeferenced, the two
+readings of its main escalator landed 14 m apart, the floors overlapped by 32 m²
+in all, and no staircase could be found between them at all. **A campus sheet is clipped to
 the venue's surveyed footprint before anything is traced from it**, because it
 draws a mile of downtown rather than one building: unclipped, the JW's 2nd floor
 came out as every cream corridor from Georgia Street to the stadium, nine times
 the hotel. The pixels are cut rather than the finished shapes, since a corridor
 running from one building into the next is one component either way.
 
-**Nothing is invented to fill a gap.** Floors with no sheet — some upper floors,
-the three venues Gen Con does not colour as its own, and all of Lucas Oil — show
-their rooms and no corridors, which is what their source supports.
+**Nothing is invented to fill a gap.** Three floors have no sheet, and all three
+belong to venues Gen Con does not colour as its own — the Indiana Rep, the
+escape room, Circle Centre. They show their rooms and no corridors, which is
+what their source supports.
 
 ### Floors
 
@@ -566,7 +572,7 @@ at in every room pop-up:
 | --- | --- | --- |
 | **Measured** | Convention centre | Halls and meeting rooms are the outlines from the official floor plans, read into real coordinates and drawn as map geometry (below) |
 | **Planned** | JW Marriott, Marriott Downtown, Westin, Crowne Plaza / Union Station, Omni Severin, Hyatt Regency, Hilton, Embassy Suites, Le Méridien | Which rooms exist, which floor each is on and how they sit relative to one another all come off a published plan of that building; the outlines are rectangles inside the real footprint rather than measured shapes |
-| **Schematic** | Lucas Oil | Rooms are in the right building and the right general part of it, and nothing finer than that is claimed |
+| **Schematic** | Lucas Oil | Rooms are in the right building and the right general part of it, and nothing finer than that is claimed. Its *floors* are measured — Gen Con's campus sheets draw all three, so routes cross the stadium properly — but no sheet labels a bookable space on them, so the rooms stay rectangles |
 
 **One building is not outlined from a survey at all.** Every venue above sits
 on its real OpenStreetMap footprint except **Le Méridien**, which OpenStreetMap
@@ -606,12 +612,24 @@ where a plan reached past it — the plans and OpenStreetMap disagree by a few
 metres at some edges, and the footprint wins, because it is the line the map
 actually draws.
 
-**Lucas Oil is the one building a plan can't help.** Gen Con draws all three of
-its levels, and not one space on any of them is labelled: the bowl, the
-concourse ring and the lower-level halls are drawn as unnamed blocks. So the
-stadium keeps the interior it had, which comes from its seating diagram — the
-names and the side of the bowl each space is on are right, the positions are
-not.
+**Lucas Oil's rooms are the one interior a plan can't help.** Its floors are a
+different matter and are read like everybody else's: Gen Con's campus sheets
+draw the whole stadium, and its concourse, event level and lower suite ring come
+from them. What those sheets do not do is let a drawn space be matched to a
+bookable one — the halls are lettered HALL 1 and HALL 2 where the schedule says
+Exhibit Halls 1–2, the meeting rooms are numbered individually where it books
+them as a block of twelve, and the suites are LS8A upward. So the stadium keeps
+the room rectangles it had, from its seating diagram: the names and the side of
+the bowl each space is on are right, the positions are not.
+
+**Its levels were also wrong, and the sheets said so.** `venues.ts` gave the
+stadium six floors — Field, Level 1, Concourse, Club, Meeting, Suite — where the
+building has three that Gen Con draws with rooms on them. Halls 1–2, Meeting
+Rooms 1–12 and the field are all one storey, which is why they are all on the
+Event level now. Which sheet is which storey is not written on any sheet; it is
+read off the letterings, each of which names a neighbour ("UP TO STREET LEVEL",
+"DOWN TO EVENT SPACES", "DOWN TO CLUB LOWER LEVEL"), and the five pin each
+other. `docs/next-steps.md` §2b has the table.
 
 **A building is outlined by the same source as its interior.** The convention
 centre used to be outlined by its OpenStreetMap footprint while its rooms came
@@ -1059,21 +1077,22 @@ of tiles so the map works without signal.
 
 Directions are a walking route now, indoors and out (see above), and
 `docs/next-steps.md` has the measured gaps and what to do about them. All 182
-pairs of buildings get a route: 170 follow surveyed pavement and 12 stay under
-cover the whole way.
+pairs of buildings get a route — 170 follow surveyed pavement, 12 stay under
+cover the whole way — and every room of a building can reach every other room of
+it. Only three floors on the campus have no walkable surface drawn, and all
+three belong to venues Gen Con does not colour as its own.
 
-The largest gap left is **Lucas Oil**, whose six floors have no walkable surface
-and whose rooms are the only schematic ones on the map. Gen Con's campus sheets
-do draw the stadium — concourse, club lounges, escalators and all — but which of
-its six storeys each sheet shows cannot be read off the sheet, and guessing
-would put a floor's circulation at the wrong height, silently.
-
-The other gap is not ours to fix from here. **Four of the twelve skywalk spans
-join nothing**: OpenStreetMap has the JW's bridge landing on the Government
+The largest gap left is not ours to fix from here. **Four of the twelve skywalk
+spans join nothing**: OpenStreetMap has the JW's bridge landing on the Government
 Center car park 69 m short of the convention centre, with no elevated way
 continuing, and the same is true at the Hyatt and the Marriott. So seven of the
 fifteen skywalk-joined pairs of buildings have no covered route — not because a
 floor is missing, but because the span itself is not in the source.
+
+After that it is the room rectangles. Lucas Oil's and the Crowne Plaza's are
+schematic, which is why most of the fourteen rooms still without a doorway are
+theirs: the floor beside them is drawn now, but their outline sits too far from
+it to say which wall the door is in.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
@@ -1083,7 +1102,10 @@ vector plan — one with paths and a colour-keyed legend, not a screenshot —
 before their interiors could be measured the way the convention centre's now
 are; the arrangement is right in all of them, but the coordinates are still
 authored rather than read. Lucas Oil needs something else again: a plan that
-names its spaces, which none of the three published for it does.
+names its spaces the way the schedule books them, which none of the five
+published for it does — they letter HALL 1 where the schedule says Exhibit
+Halls 1–2, and number the meeting rooms one by one where it books all twelve
+together.
 
 The convention centre needs no more floors: levels 1 and 2 are the two sheets
 in `plans/` and they are the whole of it. Gen Con's own map offers B, 1, 2, 3
