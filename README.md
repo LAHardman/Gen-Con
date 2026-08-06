@@ -108,15 +108,24 @@ document.
 `npm run check` is what CI runs on every push and every pull request: types,
 then tests, before anything is built or deployed.
 
-What is covered today is the directions feature and the geometry under it —
-`navigation.ts`, `geo.ts`, `useDeviceLocation.ts`, `NavPanel` and the directions
-button in `RoomDialog` — plus the two generated data tables, `connections.ts`
-and `venue-plan.ts`. Those two are keyed by strings a human wrote (`icc/Level 2`)
-and a key naming a floor its building calls something else draws *nothing*,
-silently, which looks exactly like a sheet that was never read. So the tests
-assert the keys resolve, and they assert it against the tables rather than
-through the lookups that filter bad keys out — a check made through the lookup
-cannot fail.
+What is covered today is the directions feature and everything under it —
+`navigation.ts`, `route.ts`, `walkable.ts`, `vertical.ts`, `geo.ts`,
+`useDeviceLocation.ts`, `NavPanel` and the directions button in `RoomDialog` —
+plus the three generated data tables, `connections.ts`, `venue-plan.ts` and
+`pavements.ts`. Those are keyed by strings a human wrote (`icc/Level 2`), and a
+key naming a floor its building calls something else draws *nothing*, silently,
+which looks exactly like a sheet that was never read. So the tests assert the
+keys resolve, and they assert it against the tables rather than through the
+lookups that filter bad keys out — a check made through the lookup cannot fail.
+
+**The router is tested twice over, and the two are not interchangeable.**
+`route.test.ts` runs over the real campus and asserts the properties a route
+must have; it is what catches regressions, and it localises nothing — a break
+in A\* reads as "the JW is unreachable". `walkable.toy.test.ts` and
+`vertical.toy.test.ts` run over floors drawn in the test file, small enough to
+count the answers by hand: a corridor bent into a U, two squares meeting at one
+corner, a speck of trace noise, a staircase read twice from two storeys. Every
+assertion in both is mutation-tested.
 
 **The rest of the codebase is still untested**, and the two riskiest parts are
 among the untested ones: the HTML scraper in `scripts/lib/parse-events.mjs` and

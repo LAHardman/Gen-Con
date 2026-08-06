@@ -204,34 +204,46 @@ find a doorway on the wrong wall; the fix is better rectangles.
 
 ---
 
-## 4. The routing engine is only tested over the real campus
+## 4. The routing engine — done
 
-`route.ts` now has `route.test.ts`, which asserts the properties a route must
-have across every pair of buildings — no pair unanswered, pavement walked rather
-than guessed across, the cover preference obeyed in both directions, a total
-that agrees with the legs under it. That is the coverage the door and pavement
-work needed and it catches the regressions that work could cause.
+`route.ts` has `route.test.ts` over the real campus, and `walkable.ts` and
+`vertical.ts` now each have a file of their own over floors made up for the
+purpose: `walkable.toy.test.ts` and `vertical.toy.test.ts`.
 
-What it cannot do is localise a fault. It runs over real venue data, so a break
-in A\*, in the portal graph or in the grid shows up as "the JW is unreachable"
-rather than as "a diagonal cut a blocked corner". `walkable.ts` and
-`vertical.ts` still have no tests of their own.
+The two kinds do different jobs and both are needed. The campus tests assert
+what a route must be and are what actually catch regressions — every pair of
+buildings answered, every room of a building reaching every other room of it,
+the cover preference obeyed in both directions. What they cannot do is say
+where a fault is: a break in A\* shows up there as "the JW is unreachable".
 
-**What to write, cheapest first:**
+The toy floors are drawn in the test file — a corridor bent into a U, two
+squares meeting at one corner, a straight run, a speck of noise — and are
+small enough to count the answers by hand. They are supplied by mocking
+`venue-plan`, because `surfaceOf` reads `VENUE_HALLS[venueId/level]` and has no
+other input, so that is the seam the real data comes through.
 
-- `walkable.ts` — a hand-made floor (a corridor with a wall in it), then: A\*
-  goes round the wall rather than through it; a diagonal never cuts a blocked
-  corner; `smooth` leaves a straight corridor as two points; `nearestOpen`
-  returns null past its radius; `roomEntrance` picks the wall the corridor is on.
-- `route.ts` — a two-floor toy campus, then: the portal graph prefers the nearer
-  of two staircases; a leg's `certainty` reaches its text; `merge` folds
-  consecutive same-floor legs. That last one is worth doing precisely because
-  nothing on the real campus exercises it — no route there merges anything, so
-  `merge` is live code with no coverage at all.
-- `vertical.ts` — a drawn pair within `SAME_SHAFT` becomes one link; beyond it,
-  two; a floor with drawn marks never falls back to the inference.
+**Every assertion in both files is mutation-tested.** Between them they catch:
+a diagonal cutting a blocked corner; string-pulling removed; line of sight
+ignoring what it crosses; `nearestOpen` ignoring its radius; `roomEntrance`
+judging a wall by its corners alone; `doorsOf` back to one door per piece; two
+marks 35 m apart read as one shaft; a shaft reported at one reading rather than
+between them; one inferred link per pair of floors rather than per piece; no
+minimum overlap; a drawn shaft suppressing the inference outright; a guess
+added beside every drawn shaft; floors joined that are not adjacent.
 
-None of these need real venue data, which is what makes them cheap.
+One note on the frame: a `vi.mock` factory is hoisted above the imports, so it
+cannot call `toLatLng` and repeats the origin and the two scales instead. Both
+files open with a test that the repeated frame agrees with `walkable.ts`'s —
+without it a drift would move every shape in the file and leave every test
+passing against a different building.
+
+**`merge` turned out to be the busiest thing in `route.ts`.** It was recorded
+here as live code with no coverage, and at the time no route on the campus
+folded a single leg. The pavements changed that: a footway junction every few
+metres means the Marriott run comes out of the search as a dozen legs that all
+say "Along the pavement", and `merge` now folds about seven times per route.
+`route.test.ts` asserts no two consecutive legs are the same thing, which is
+the property the panel depends on.
 
 ---
 

@@ -164,6 +164,27 @@ describe('what a leg says it is', () => {
     }
   });
 
+  it('says each thing once rather than once per hop', () => {
+    // A route down a pavement crosses a footway junction every few metres, and
+    // each of those is its own edge in the graph: the Marriott run comes out of
+    // the search as a dozen separate legs that all say "Along the pavement".
+    // `merge` folds a run into one leg, and it folds about seven times per
+    // route across the campus. Without it the panel is a list of junctions.
+    for (const [a, b] of [
+      ['hall-b', 'jw-white-river-abcd'],
+      ['hall-b', 'lucas-oil-lower-suites'],
+      ['sagamore-ballroom', 'marriott-indiana-ballroom'],
+    ]) {
+      const walk = routeBetweenRooms(a, b)!;
+      for (let i = 1; i < walk.legs.length; i += 1) {
+        const last = walk.legs[i - 1];
+        const leg = walk.legs[i];
+        const same = last.kind === leg.kind && last.venueId === leg.venueId && last.level === leg.level;
+        expect(same, `${a} -> ${b}, legs ${i - 1} and ${i} both ${leg.kind}`).toBe(false);
+      }
+    }
+  });
+
   it('gives every leg at least two points to draw', () => {
     const walk = routeBetweenRooms('hall-b', 'marriott-ballroom')!;
     for (const leg of walk.legs) expect(leg.points.length).toBeGreaterThanOrEqual(2);
