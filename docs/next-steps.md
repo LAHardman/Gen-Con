@@ -14,18 +14,17 @@ they are to build.
 
 **Measured.** Over every pair of buildings, routing one room to another:
 
-| | Before doors | With doors | With pavements |
-|---|---|---|---|
-| Routed entirely under cover | 12 | 12 | 12 |
-| Follows surveyed pavement | — | — | **168** |
-| Needs a long straight line | 152 | 170 | **2** |
-| Gets no route at all | **18** | 0 | 0 |
-| Total | 182 | 182 | 182 |
+| | Before doors | With doors | With pavements | With §2's floors |
+|---|---|---|---|---|
+| Routed entirely under cover | 12 | 12 | 12 | 12 |
+| Follows surveyed pavement | — | — | 168 | **170** |
+| Needs a long straight line | 152 | 170 | 2 | **0** |
+| Gets no route at all | **18** | 0 | 0 | 0 |
+| Total | 182 | 182 | 182 | 182 |
 
-Two straight lines remain, and both are journeys to Lucas Oil: nothing draws the
-stadium's plazas as anything walkable, so its rooms are 270 m from the nearest
-mapped footway and the last leg has to be a guess. Everything else on the campus
-now walks either a floor somebody drew or a pavement somebody surveyed.
+Every pair on the campus now walks either a floor somebody drew, a skywalk, or a
+pavement somebody surveyed. The last two straight lines were journeys to Lucas
+Oil, and they went when the Embassy Suites got a ground floor to leave by.
 
 **What was done.**
 
@@ -62,60 +61,96 @@ the network was.
 
 ---
 
-## 2. Fifteen floors have no walkable surface
+## 2. Nine floors have no walkable surface — was fifteen
 
-**Measured.** Floors whose circulation nothing has drawn:
+**Measured.** Floors whose circulation nothing has drawn, after reading the
+campus sheets:
 
 ```
-Lucas Oil Stadium   all six floors
-JW Marriott         2nd, 3rd
-Hyatt Regency       1st
-Hilton              1st
-Embassy Suites      2nd
-Le Méridien         1st
-Indiana Rep, Escape Room, Circle Centre   their only floor
+Lucas Oil Stadium                          all six floors
+Indiana Rep, Escape Room, Circle Centre    their only floor
 ```
 
-No route can cross these, and a room on one falls back to its centre rather
-than a doorway (see §3). The JW is the one that bites: the skywalk enters it on
-the 2nd floor, which has no surface, so **the JW cannot be routed into at all**
-despite being skywalk-connected to the convention centre.
+Six were filled from Gen Con's own campus tiles, which cover every building on
+all five campus levels rather than only the two the convention centre uses:
+the JW's 2nd and 3rd, the Hyatt's, the Hilton's and Le Méridien's 1st, and the
+Embassy's 2nd. Registering them is a line each in `CAMPUS_SHEETS`.
 
-This is now the largest gap in directions, and it is the reason **seven of the
-fifteen skywalk-joined pairs of buildings have no covered route at all** — the
-bridges into the JW and the Hyatt land on floors nothing has drawn, so the
-router has to send you outside whatever the weather.
+**One thing had to be fixed first, and it is the reason this was not one line.**
+`trace` walks the whole classified image, which is right for a screenshot of one
+hotel — the sheet *is* the hotel — and wrong for a sheet of a mile of downtown.
+The JW's 2nd floor came out as every cream corridor between Georgia Street and
+the stadium: eighteen shapes spanning 1138 by 858 metres, 22,419 m² of "hotel"
+against a building of 2,400, and 752 m² of Rooms 201–205 landing outside the
+JW. A georeferenced sheet is now clipped to the venue's surveyed footprint
+before anything is traced from it, and the pixels are cut rather than the
+finished shapes — a corridor running from one building into the next is one
+component either way, and only a cut divides it.
 
-**What to do.** Gen Con's campus sheets now place correctly (§4 of the README),
-and they cover every building on all five campus levels — not just the two the
-convention centre uses. Registering the remaining `venueId/level` pairs in
-`CAMPUS_SHEETS` would give most of these floors their circulation for free.
-Lucas Oil is the exception: no published plan names its spaces, which is why its
-rooms are schematic in the first place.
+**What it bought.** Empty floors 15 → 9, rooms with no doorway 29 → 19 (§3),
+floor changes the plans draw 19 → 30, and building pairs needing a long straight
+line 2 → **0**. Every pair on the campus now walks a drawn floor, a skywalk or a
+surveyed pavement.
 
-Do the JW's 2nd floor first. It is one line of `CAMPUS_SHEETS` and it connects a
-whole hotel to the network.
+**What it did not buy, and this is worth recording.** The premise of this
+section used to be that the JW's 2nd floor "is one line of `CAMPUS_SHEETS` and
+it connects a whole hotel to the network". That is wrong, and the floor was
+necessary but not sufficient: **the JW's skywalk does not reach any Gen Con
+venue.** In OpenStreetMap its only bridge (way 340480902) runs east from the
+hotel and lands on the Indiana Government Center Parking Facility, 69 m short of
+the convention centre's outline, and no elevated way continues from there. The
+same is true of the Hyatt's (way 340480901) and of the pair at the Marriott
+(340480897, 340480908). Four of the twelve spans in `connections.ts` therefore
+touch exactly one registered building and join nothing.
+
+That is a hole in the source, not a filter: every `bridge` footway in the campus
+bounding box was checked, and the ten not already in `connections.ts` are all
+out in the margin — Blackford Street, the IUPUI footbridges, the ones north of
+Michigan Street. So seven of the fifteen skywalk-joined pairs of buildings still
+have no covered route, and closing that means either finding the missing spans
+in another source or drawing them.
 
 ---
 
-## 3. Twenty-nine rooms have no doorway
+## 2b. Lucas Oil is drawn after all
 
-**Measured.** `roomEntrance` finds nothing for 29 of 146 rooms, which then use
+Gen Con's campus level 1 draws the stadium in full — the concourse ring, the
+East and West Club Lounges, the North Plaza, the lifts, and escalators lettered
+UP TO TERRACE LEVEL, DOWN TO EVENT SPACES and TO FIELD & LOWER SUITE LEVEL.
+That is far better than the schematic rectangles its rooms are today, and it
+would settle the last 8 rooms with no doorway.
+
+It is not registered because **which of its six storeys that sheet is cannot be
+read off the sheet.** `venues.ts` names them Field, Level 1, Concourse, Club,
+Meeting and Suite; the drawing shows what is plainly the main concourse, but
+labels the club lounges on it, and Gen Con numbers campus levels rather than
+building storeys. Guessing puts a floor's circulation on the wrong storey, which
+is silent — the map draws a healthy-looking floor and routes cross it at the
+wrong height.
+
+**What to do:** work out the mapping from the five sheets together (a storey
+that letters UP TO X and DOWN TO Y pins itself against its neighbours), then
+register all six. This is the largest single piece of interior still missing.
+
+---
+
+## 3. Nineteen rooms have no doorway — was twenty-nine
+
+**Measured.** `roomEntrance` finds nothing for 19 of 146 rooms, which then use
 their centre — the inaccuracy the doorway work existed to remove:
 
 ```
-Lucas Oil 8 · JW Marriott 7 · Crowne Plaza 5 · Convention Center 2
-Hyatt 1 · Hilton 1 · Embassy 1 · Le Méridien 1 · Indiana Rep 1
-Escape Room 1 · Circle Centre 1
+Lucas Oil 8 · Crowne Plaza 5 · Convention Center 2 · JW Marriott 1
+Indiana Rep 1 · Escape Room 1 · Circle Centre 1
 ```
 
-Every one of these is a room on a floor from §2. **Fixing §2 fixes this**; there
-is no separate work, and the two should be measured together after each sheet is
-added.
+The ten that went were rooms on the floors §2 filled, exactly as expected: the
+two are one piece of work and should be measured together. Lucas Oil's eight go
+when §2b is done.
 
-The convention centre's two are worth a look on their own, though, since its
-floors *are* drawn — they are likely rooms whose outline sits further than
-`roomEntrance`'s 12 m search from any circulation.
+The Crowne Plaza's five and the convention centre's two are worth a look on
+their own, since those floors *are* drawn — they are likely rooms whose outline
+sits further than `roomEntrance`'s 12 m search from any circulation.
 
 ---
 

@@ -437,6 +437,29 @@ function convert(path, venue, level, rooms, report, sheet = {}) {
     : fit(plan, venue, report, null);
   if (!frame) return null;
   if (sheet.geo && report) console.log(`      georeferenced: ${frame.scale} m/px`);
+  /*
+   * A campus sheet is a mile of downtown, so everything below has to be told
+   * which building it is looking at.
+   *
+   * `trace` walks the whole classified image, and on a sheet of one hotel that
+   * is right — the sheet *is* the hotel. On a campus sheet it hands back every
+   * cream corridor from Georgia Street to the stadium: the JW's 2nd floor came
+   * out as eighteen shapes spanning 1138 by 858 metres and 22,419 m² of
+   * "hotel", which is nine times the building. The rooms went the same way,
+   * with 752 m² of Rooms 201–205 landing outside the JW.
+   *
+   * So the classified map is cut to the venue's surveyed outline first, before
+   * anything is traced from it. Cutting the pixels rather than filtering the
+   * finished shapes is what matters: a corridor that runs from one building
+   * into the next is one component either way, and only a cut divides it.
+   *
+   * `plan.grey` is deliberately left whole. `verticals` reads that, and its
+   * size test — a stair is small, a street is not — depends on the streets
+   * staying the size they are. Clipping them to the footprint would leave
+   * fragments the right size to be mistaken for an escalator.
+   */
+  if (sheet.geo) clipToVenue(plan, frame, venue, perLng, report);
+
   const project = ([px, py]) => {
     const east = frame.east0 - frame.scale * px;
     const south = frame.south0 - frame.scale * py;
@@ -500,11 +523,67 @@ function convert(path, venue, level, rooms, report, sheet = {}) {
  * the railway are drawn in, and on a campus sheet there is far more street than
  * building; inside the walls the only greys are these.
  */
-function verticals(plan, perPixel, project, venue) {
-  const { anchor, footprint } = venue;
-  const perLng = metresPerDegreeLng(anchor.nw.lat);
+/**
+ * Blank every classified pixel outside the venue's own footprint.
+ *
+ * Only the bounding box is walked point-in-polygon; everything beyond it is
+ * cleared wholesale, which on an 8192-square sheet is the difference between
+ * a hundred thousand tests and sixty-seven million.
+ */
+function clipToVenue(plan, frame, venue, perLng, report) {
+  const inside = within(venue.footprint);
+  const toPixel = ([lat, lng]) => [
+    (frame.east0 - (lng - venue.anchor.nw.lng) * perLng) / frame.scale,
+    (frame.south0 - (venue.anchor.nw.lat - lat) * METRES_PER_DEGREE_LAT) / frame.scale,
+  ];
+
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const corner of venue.footprint) {
+    const [px, py] = toPixel(corner);
+    x0 = Math.min(x0, px);
+    x1 = Math.max(x1, px);
+    y0 = Math.min(y0, py);
+    y1 = Math.max(y1, py);
+  }
+  x0 = Math.max(0, Math.floor(x0));
+  y0 = Math.max(0, Math.floor(y0));
+  x1 = Math.min(plan.width - 1, Math.ceil(x1));
+  y1 = Math.min(plan.height - 1, Math.ceil(y1));
+
+  let kept = 0;
+  for (let y = 0; y < plan.height; y += 1) {
+    const row = y * plan.width;
+    if (y < y0 || y > y1) {
+      plan.map.fill(0, row, row + plan.width);
+      continue;
+    }
+    plan.map.fill(0, row, row + x0);
+    plan.map.fill(0, row + x1 + 1, row + plan.width);
+    for (let x = x0; x <= x1; x += 1) {
+      if (!plan.map[row + x]) continue;
+      // The pixel's centre, since a pixel is a square and its corner can fall
+      // the other side of a wall from the rest of it.
+      if (inside(unproject(frame, venue, perLng, x + 0.5, y + 0.5))) kept += 1;
+      else plan.map[row + x] = 0;
+    }
+  }
+  if (report) console.log(`      clipped to ${venue.id}: ${kept} pixels inside its footprint`);
+}
+
+function unproject(frame, venue, perLng, px, py) {
+  return [
+    venue.anchor.nw.lat - (frame.south0 - frame.scale * py) / METRES_PER_DEGREE_LAT,
+    venue.anchor.nw.lng + (frame.east0 - frame.scale * px) / perLng,
+  ];
+}
+
+/** Is this [lat, lng] within the building's surveyed outline? Even-odd. */
+function within(footprint) {
   const ring = footprint.map(([lat, lng]) => [lng, lat]);
-  const inside = ([lat, lng]) => {
+  return ([lat, lng]) => {
     let odd = false;
     for (let a = 0, b = ring.length - 1; a < ring.length; b = a, a += 1) {
       const [ax, ay] = ring[a];
@@ -513,6 +592,12 @@ function verticals(plan, perPixel, project, venue) {
     }
     return odd;
   };
+}
+
+function verticals(plan, perPixel, project, venue) {
+  const { anchor, footprint } = venue;
+  const perLng = metresPerDegreeLng(anchor.nw.lat);
+  const inside = within(footprint);
 
   const found = [];
   // Over the grey map rather than the classified one; `components` walks
@@ -708,9 +793,12 @@ function everySheet() {
    *
    * They are not committed — they are Gen Con's drawings and eighteen megabytes
    * of them — so a fresh clone has none, and a rebuild without them writes a
-   * `venue-plan.ts` with the convention centre's stairs missing. That file
-   * looks perfectly healthy; the only sign is a building that stops changing
-   * floors. Hence the warning rather than a silent skip.
+   * `venue-plan.ts` missing the convention centre's stairs and six whole
+   * floors: the JW's 2nd and 3rd, the Hyatt's, Hilton's and Le Meridien's 1st,
+   * and the Embassy's 2nd. That file looks perfectly healthy; the only signs
+   * are a building that stops changing floors and hotels that cannot be routed
+   * into. Hence the warning rather than a silent skip, and the named list in
+   * `venue-plan.test.ts` rather than a count.
    */
   let campus = [];
   try {
@@ -720,7 +808,8 @@ function everySheet() {
   }
   if (!campus.length) {
     console.warn('  no plans/campus — run `npm run plans:campus` first, or the');
-    console.warn("  convention centre's stairs will be missing from the output");
+    console.warn("  convention centre's stairs and six whole floors of hotels");
+    console.warn('  will be missing from the output');
   }
   for (const file of campus) {
     const targets = CAMPUS_SHEETS[file.replace(/\.png$/, '')];
@@ -818,8 +907,27 @@ const CAMPUS_GEO = { scale: 0.155266, lat0: 39.758405, lng0: -86.154774 };
  * and those are its own Level 1 and Level 2.
  */
 const CAMPUS_SHEETS = {
-  'level-1': [{ venueId: 'icc', level: 'Level 1', geo: CAMPUS_GEO, verticalsOnly: true }],
-  'level-2': [{ venueId: 'icc', level: 'Level 2', geo: CAMPUS_GEO, verticalsOnly: true }],
+  'level-1': [
+    { venueId: 'icc', level: 'Level 1', geo: CAMPUS_GEO, verticalsOnly: true },
+    // The Hyatt's atrium lobby, with three escalators lettered UP TO 2ND FLOOR.
+    { venueId: 'hyatt', level: '1st floor', geo: CAMPUS_GEO },
+    // The Hilton's lobby, running east from Market Street.
+    { venueId: 'hilton', level: '1st floor', geo: CAMPUS_GEO },
+    { venueId: 'le-meridien', level: '1st floor', geo: CAMPUS_GEO },
+  ],
+  'level-2': [
+    { venueId: 'icc', level: 'Level 2', geo: CAMPUS_GEO, verticalsOnly: true },
+    // Griffin Hall, rooms 201 to 209, the corridor down the west side and the
+    // stair lettered DOWN TO 1ST FLOOR. The hotel screenshot in
+    // `plans/venues/` covers only the JW's 1st, so this is the only source
+    // there is for its 2nd.
+    { venueId: 'jw-marriott', level: '2nd floor', geo: CAMPUS_GEO },
+    // Lettered STREET LEVEL ENTRANCE (2ND FLOOR), which is why the Embassy's
+    // way out is upstairs: its lobby, registration and lifts are all here.
+    { venueId: 'embassy-suites', level: '2nd floor', geo: CAMPUS_GEO },
+  ],
+  // The JW's Grand Ballroom, rooms 300 to 314, and DOWN TO 2ND FLOOR.
+  'level-3': [{ venueId: 'jw-marriott', level: '3rd floor', geo: CAMPUS_GEO }],
 };
 
 /**

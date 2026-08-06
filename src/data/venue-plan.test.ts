@@ -1,11 +1,12 @@
 /**
- * The hallways and room outlines read out of the hotels' own plans.
+ * The hallways and room outlines read out of Gen Con's plans.
  *
- * `venue-plans.mjs` writes this file from fifteen sheets of pixels, and both
- * halves of it are keyed by strings — a floor by `venueId/level`, a room by its
- * id. A key that names nothing draws nothing, silently: the floor keeps the
- * blank interior it had before, which is exactly what an unread sheet looks
- * like. So the keys are what these check.
+ * `venue-plans.mjs` writes this file from two kinds of pixels — fifteen
+ * screenshots of single hotels, and Gen Con's campus tiles, which are one
+ * drawing of a mile of downtown — and both halves of it are keyed by strings:
+ * a floor by `venueId/level`, a room by its id. A key that names nothing draws
+ * nothing, silently: the floor keeps the blank interior it had before, which is
+ * exactly what an unread sheet looks like. So the keys are what these check.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -13,16 +14,62 @@ import { VENUE_HALLS, VENUE_ROOM_SHAPES, VENUE_VERTICAL } from './venue-plan';
 import { ROOMS_BY_ID, VENUES_BY_ID, VENUE_LEVELS, venueBounds } from './venues';
 
 describe('VENUE_HALLS', () => {
-  it('covers the fifteen floors the plans were read for', () => {
-    expect(Object.keys(VENUE_HALLS)).toHaveLength(15);
+  it('covers every floor a sheet was read for, by name', () => {
+    // Named rather than counted, because the failure being guarded against is
+    // one sheet quietly dropping out — `plans/campus/` is not committed, so a
+    // rebuild without it loses six of these and the file still looks healthy.
+    // A count would also pass if one floor were swapped for another.
+    expect(Object.keys(VENUE_HALLS).sort()).toEqual([
+      'crowne-plaza/1st floor',
+      'crowne-plaza/Mezzanine',
+      // From the campus sheets: the Embassy's street entrance is its 2nd.
+      'embassy-suites/2nd floor',
+      'embassy-suites/5th floor',
+      'hilton/1st floor',
+      'hilton/2nd floor',
+      'hilton/9th floor',
+      'hyatt/1st floor',
+      'hyatt/2nd floor',
+      'hyatt/3rd floor',
+      'jw-marriott/1st floor',
+      'jw-marriott/2nd floor',
+      'jw-marriott/3rd floor',
+      'le-meridien/1st floor',
+      'le-meridien/2nd floor',
+      'marriott-downtown/1st floor',
+      'marriott-downtown/2nd floor',
+      'omni/1st floor',
+      'omni/2nd floor',
+      'westin/1st floor',
+      'westin/2nd floor',
+    ]);
   });
 
-  it('keys every floor to a building and a floor that building has', () => {
-    for (const key of Object.keys(VENUE_HALLS)) {
-      const at = key.indexOf('/');
-      const [venueId, level] = [key.slice(0, at), key.slice(at + 1)];
-      expect(VENUES_BY_ID[venueId], key).toBeDefined();
-      expect(VENUE_LEVELS[venueId] ?? [], key).toContain(level);
+  it('keeps every floor inside the building it belongs to', () => {
+    // The campus sheets are a mile of downtown, so a floor read off one is
+    // clipped to its venue's footprint before anything is traced. Without that
+    // clip the JW's 2nd floor came out as every cream corridor between Georgia
+    // Street and the stadium — eighteen shapes spanning 1138 by 858 metres,
+    // nine times the hotel, and 22,419 m² of "walkable" surface.
+    //
+    // Ten metres of slack, in metres rather than degrees so it means something:
+    // the sheets of single hotels are *fitted* rather than georeferenced, and a
+    // fit is a few metres out at the edges by its nature. That is far below
+    // what this is looking for.
+    const SLACK = 10;
+    for (const [key, halls] of Object.entries(VENUE_HALLS)) {
+      const [nw, se] = venueBounds(VENUES_BY_ID[key.slice(0, key.indexOf('/'))]);
+      const perLng = 111_320 * Math.cos((nw.lat * Math.PI) / 180);
+      for (const hall of halls) {
+        for (const ring of hall) {
+          for (const [lat, lng] of ring) {
+            expect((lat - nw.lat) * 111_320, `${key} north of it`).toBeLessThan(SLACK);
+            expect((se.lat - lat) * 111_320, `${key} south of it`).toBeLessThan(SLACK);
+            expect((nw.lng - lng) * perLng, `${key} west of it`).toBeLessThan(SLACK);
+            expect((lng - se.lng) * perLng, `${key} east of it`).toBeLessThan(SLACK);
+          }
+        }
+      }
     }
   });
 

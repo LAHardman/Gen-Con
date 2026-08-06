@@ -318,9 +318,18 @@ It probes for the zoom levels and tile ranges rather than assuming them, caches
 every tile, and asks for four at a time with a pause between — it is somebody
 else's CDN. Set `GENCON_TILES` to point it elsewhere.
 
-**Nothing is invented to fill a gap.** Floors with no sheet — several upper
-floors, and all of Lucas Oil — show their rooms and no corridors, which is what
-their source supports.
+Six floors come from it that no screenshot covers: the JW's 2nd and 3rd, the
+Hyatt's, the Hilton's and Le Méridien's 1st, and the Embassy's 2nd — which is
+its street entrance, lettered so on the sheet. **A campus sheet is clipped to
+the venue's surveyed footprint before anything is traced from it**, because it
+draws a mile of downtown rather than one building: unclipped, the JW's 2nd floor
+came out as every cream corridor from Georgia Street to the stadium, nine times
+the hotel. The pixels are cut rather than the finished shapes, since a corridor
+running from one building into the next is one component either way.
+
+**Nothing is invented to fill a gap.** Floors with no sheet — some upper floors,
+the three venues Gen Con does not colour as its own, and all of Lucas Oil — show
+their rooms and no corridors, which is what their source supports.
 
 ### Floors
 
@@ -1049,17 +1058,22 @@ A personal schedule of the events you've got tickets for, and offline caching
 of tiles so the map works without signal.
 
 Directions are a walking route now, indoors and out (see above), and
-`docs/next-steps.md` has the measured gaps and what to do about them. Of the 182
-pairs of buildings, 168 follow surveyed pavement, 12 stay under cover the whole
-way, and 2 — both ends of a journey to Lucas Oil — still need a long straight
-line, because nothing draws the stadium's plazas as anything walkable.
+`docs/next-steps.md` has the measured gaps and what to do about them. All 182
+pairs of buildings get a route: 170 follow surveyed pavement and 12 stay under
+cover the whole way.
 
-The largest gap left is the fifteen floors with no walkable surface drawn at
-all. The one that bites is the JW Marriott's 2nd, where the skywalk from the
-convention centre lands: the bridge is in the data and the floor it arrives on
-is not, so **the JW cannot be reached under cover** despite being
-skywalk-connected. Seven of the fifteen skywalk-joined pairs of buildings have
-no covered route for that reason.
+The largest gap left is **Lucas Oil**, whose six floors have no walkable surface
+and whose rooms are the only schematic ones on the map. Gen Con's campus sheets
+do draw the stadium — concourse, club lounges, escalators and all — but which of
+its six storeys each sheet shows cannot be read off the sheet, and guessing
+would put a floor's circulation at the wrong height, silently.
+
+The other gap is not ours to fix from here. **Four of the twelve skywalk spans
+join nothing**: OpenStreetMap has the JW's bridge landing on the Government
+Center car park 69 m short of the convention centre, with no elevated way
+continuing, and the same is true at the Hyatt and the Marriott. So seven of the
+fifteen skywalk-joined pairs of buildings have no covered route — not because a
+floor is missing, but because the span itself is not in the source.
 
 Room-level detail could go further still. The exhibit halls are one shape each,
 though the source names the colour-coded and publisher sections inside them
