@@ -17,6 +17,7 @@
     "plans:campus": "node scripts/gencon-tiles.mjs",
     "fetch:events": "node scripts/fetch-events.mjs",
     "fetch:pavements": "node scripts/fetch-pavements.mjs",
+    "fetch:exhibitors": "node scripts/fetch-exhibitors.mjs",
     "events:sample": "node scripts/make-sample-events.mjs"
   },
   "dependencies": {

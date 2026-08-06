@@ -298,8 +298,7 @@ every one of them is a place the map has not got rather than a matcher failure:
 
 That is a better result than the round number was, and it is checkable. The
 first group is the only one worth acting on and the action is not in the
-matcher: naming which exhibit hall a booth is in would need the booth numbers,
-which the source does not publish.
+matcher — see §7.
 
 **Mutation-tested, both files.** Between them they catch: the Location label
 renamed at the source; insisting on a `<table>` again (the 2,661 roleplaying
@@ -374,3 +373,61 @@ stairs and nine whole floors. The script warns, and `venue-plan.test.ts` names
 every floor it expects rather than counting them, so the gap fails the build
 rather than shipping. Committing the sheets is the alternative and costs
 eighteen megabytes of somebody else's drawings.
+
+---
+
+## 7. Booths — the stand list is here, the halls are not
+
+Gen Con publishes who is at which booth, unauthenticated and paginated:
+
+```
+https://www.gencon.com/api/v1/exhibitor_profiles?page=N&per_page=100
+```
+
+`scripts/fetch-exhibitors.mjs` reads it into `src/data/exhibitors.ts` — **846
+locations, 780 exhibitors, 794 of them numbered**, one row per *place* rather
+than per exhibitor, since a publisher with four booths, a demo hall and a
+meeting room is six places somebody might be looking for.
+
+**What it bought.** 47 of those locations name a room the map draws, and they
+name it in the same words the schedule does, so the same matcher reads both:
+Halls A–E, the Level 1 and Level 2 meeting-room blocks, the Sagamore Ballroom
+and Lucas Oil's West Club Lounge. Typing "Asmodee" now finds Hall E and Room
+233. Exhibitor names rank *below* a room's own names, so "hall b" still finds
+Exhibit Hall B rather than the thirteen publishers standing in it.
+
+**What it did not buy, and this was the point of the exercise.** The other 573
+are `Exhibit Hall : Booth 1637`, and there are eleven exhibit halls. The plan
+was to solve the `lg`/`lt` coordinates each location carries into latitude and
+longitude and read the hall off the geometry. That is not possible, and it is
+worth writing down why rather than leaving it as a to-do:
+
+`gencon.com/map` is `L.CRS.Simple` over a tile pyramid at `/lg/tiles/v1/`, and
+**those tiles are a star field**. The plan is vector overlay, laid out area by
+area, each area revealed at its own zoom, with the areas sitting beside one
+another rather than where the buildings are. Three measurements say so:
+
+```
+lt band        exhibit-hall booths -7.6..34.8, ICC rooms and halls -42..-5.6
+               adjacent strips, not one building
+aspect         booth cloud 78.2 x 42.4 units = 1.84, surveyed halls = 1.49
+best fit       laid on the halls each of the eight ways a rectangle can be,
+               the best puts 72% of booths inside a hall. A plan of the same
+               rooms would put 100%.
+```
+
+The coordinates *are* internally faithful — the booths of one aisle share an
+`lg` to within a unit and the aisles step by 2.65 — so what is missing is only
+the link to the ground, which is the whole of what a route needs.
+
+Two control points exist and are not enough: the schedule itself writes
+`Exhibit Hall J : Booth #174` and `Exhibit Hall G` / `Booth #2667`. Two points
+fit four parameters with nothing left to check them against, and the fit they
+give covers only the south-east third of the halls — so it is wrong, and two
+more control points would not prove the next one right either.
+
+**What would close it** is a source that states the hall: Gen Con's own printed
+exhibit-hall map with the letters over the booth grid, or an aisle-to-hall
+range published anywhere. Until one turns up, a booth number resolves to an
+exhibitor and not to a place, and the 41 events at booths #1229 and #1853 stay
+in the unmatched report where they belong.

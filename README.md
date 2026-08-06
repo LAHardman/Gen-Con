@@ -88,6 +88,7 @@ want to see it on a real device.
 | `npm run plans:venues` | Re-reads the hotel hallways out of `plans/venues/` |
 | `npm run plans:campus` | Fetches Gen Con's own floor-plan tiles into `plans/campus/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
+| `npm run fetch:exhibitors` | Re-reads the stand list — who is at which booth |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
@@ -234,6 +235,41 @@ so rather than twelve identical rows.
 Ranking is by how the match was made — a room whose name starts with what you
 typed, then an exact alias, then a word inside a name, then event titles — and
 ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
+
+### Who is at which booth
+
+`npm run fetch:exhibitors` reads Gen Con's own exhibitor browser —
+`https://www.gencon.com/api/v1/exhibitor_profiles`, public and paginated — into
+`src/data/exhibitors.ts`: **846 locations, 780 exhibitors, 794 of them
+numbered**. One row per *place* rather than per exhibitor, because a publisher
+with four booths, a demo hall and a meeting room is six places somebody might
+be looking for.
+
+`area` and `spot` are Gen Con's own words, split on the spaced colon it writes
+them with — `Exhibit Hall` / `Booth 1637`, `ICC : Hall B` / `Archon Studio`,
+`Block Party` / `Food Truck 3`. Not on any colon: at least one exhibitor has an
+unspaced one in its name, and splitting on that files Wizards of the Coast
+under "the Gathering".
+
+**Search knows the names.** 47 of those locations name a room the map draws,
+and they name it in the same words the schedule does, so the same matcher reads
+both — Halls A–E, the two meeting-room blocks, the Sagamore Ballroom and Lucas
+Oil's West Club Lounge. Typing "Asmodee" finds Hall E and Room 233. Exhibitor
+names rank *below* a room's own names, so "hall b" still finds Exhibit Hall B
+rather than the thirteen publishers standing in it.
+
+**The other 573 are `Exhibit Hall : Booth N`, and there are eleven exhibit
+halls.** Each location also carries `lg` and `lt` coordinates on Gen Con's map,
+and the obvious move is to solve those into latitude and longitude and read the
+hall off the geometry. It cannot be done: `gencon.com/map` is `L.CRS.Simple`
+over a tile pyramid whose tiles are **a star field**, with the plan as vector
+overlay laid out area by area, each area at its own zoom, the areas beside one
+another rather than where the buildings are. The booth cloud is aspect 1.84
+against 1.49 for the halls it would have to be, and laid on those halls each of
+the eight ways a rectangle can be, the best fit puts 72% of booths inside a
+hall where a real plan would put all of them. So a booth number resolves to an
+exhibitor and not to a place, and the app says nothing about which hall rather
+than guessing one.
 
 ### Getting between buildings
 
@@ -1045,10 +1081,10 @@ matching failures, and they divide cleanly:
 | Seven venues that are not on the map | 40 | Janus Lofts, Taxman CityWay, St. Elmo Steak House, 416 Wabash, Victory Field, White River State Park, The Oceanaire Seafood Room |
 | Foyers and concourse spots with no room authored | 11 | `North Plaza`, `Georgia Street Entrance`, `3rd Floor Foyer`, `Eerie` |
 
-Only the first is worth acting on, and the action is not in the matcher:
-naming which hall a booth is in needs the booth numbers, which the source does
-not publish. `src/data/events.test.ts` holds every one of the 22 `Location`
-strings and the room shapes that go with them.
+Only the first is worth acting on, and the action is not in the matcher —
+see [Who is at which booth](#who-is-at-which-booth), which has the booth
+numbers and still cannot say which hall. `src/data/events.test.ts` holds every
+one of the 22 `Location` strings and the room shapes that go with them.
 
 The most interesting of the unmatched is **416 Wabash** (1 event), an address
 five blocks east of the campus.

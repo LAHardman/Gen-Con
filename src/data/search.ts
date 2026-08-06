@@ -16,7 +16,8 @@
  */
 
 import { ROOMS, VENUES_BY_ID, type Room } from './venues';
-import type { ConEvent, EventIndex } from './events';
+import { roomIdForEvent, type ConEvent, type EventIndex } from './events';
+import { EXHIBITORS, type Exhibitor } from './exhibitors';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -36,6 +37,10 @@ const SCORE = {
   aliasExact: 1,
   roomNameWord: 2,
   roomNameAnywhere: 3,
+  // A room found because somebody is standing in it. Below the room's own
+  // names — "hall b" must still find Exhibit Hall B rather than a stand in it —
+  // and above the building's, since a publisher is the more specific thing.
+  exhibitorName: 3.5,
   venueStart: 4,
   eventTitleStart: 5,
   eventTitleAnywhere: 6,
@@ -54,12 +59,43 @@ function startsWord(haystack: string, needle: string) {
   }
 }
 
+/**
+ * The room an exhibitor's own words name, where they name one.
+ *
+ * Gen Con writes an exhibitor's place the same way it writes an event's — a
+ * building, a space inside it, a spot inside that — so the same matcher reads
+ * both, and reading them the same way is what keeps "Hall B" meaning the same
+ * thing in a schedule and in a stand list.
+ *
+ * 47 of the 846 locations resolve, and the 573 that do not are all in the
+ * exhibit hall. That is not a matcher failure: the label is `Exhibit Hall :
+ * Booth 1637` and there are eleven exhibit halls, so nothing in it says which.
+ * See `scripts/fetch-exhibitors.mjs` for why the coordinates cannot say either.
+ */
+export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
+  const [building, ...within] = exhibitor.area.split(' : ');
+  return roomIdForEvent({
+    locationText: building,
+    roomText: within.join(' '),
+    tableText: exhibitor.spot,
+  } as unknown as ConEvent);
+}
+
 interface RoomKeys {
   room: Room;
   name: string;
   aliases: string[];
   venue: string;
+  /** Who is standing in it, for the days a room is somebody's booth. */
+  exhibitors: string[];
 }
+
+/** Every exhibitor name, against the room their own label names. */
+const EXHIBITORS_BY_ROOM = EXHIBITORS.reduce((map, exhibitor) => {
+  const roomId = roomIdForExhibitor(exhibitor);
+  if (roomId) map.set(roomId, [...(map.get(roomId) ?? []), normalise(exhibitor.name)]);
+  return map;
+}, new Map<string, string[]>());
 
 /** Built once: every string that should find a given room. */
 const ROOM_KEYS: RoomKeys[] = ROOMS.map((room) => ({
@@ -67,6 +103,7 @@ const ROOM_KEYS: RoomKeys[] = ROOMS.map((room) => ({
   name: normalise(room.name),
   aliases: [room.shortName, ...(room.aliases ?? [])].filter(Boolean).map((a) => normalise(a!)),
   venue: normalise(VENUES_BY_ID[room.venueId]?.name ?? ''),
+  exhibitors: EXHIBITORS_BY_ROOM.get(room.id) ?? [],
 }));
 
 function scoreRoom(keys: RoomKeys, query: string): number | null {
@@ -76,6 +113,9 @@ function scoreRoom(keys: RoomKeys, query: string): number | null {
   if (startsWord(keys.name, query)) return SCORE.roomNameWord;
   if (keys.aliases.some((alias) => startsWord(alias, query))) return SCORE.roomNameWord;
   if (keys.name.includes(query)) return SCORE.roomNameAnywhere;
+  if (keys.exhibitors.some((who) => who.startsWith(query) || startsWord(who, query))) {
+    return SCORE.exhibitorName;
+  }
   if (keys.venue.startsWith(query) || startsWord(keys.venue, query)) return SCORE.venueStart;
   return null;
 }
