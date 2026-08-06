@@ -297,27 +297,63 @@ every room; a venue with rooms falling back to its first one.
 
 ## 6. Smaller sharp edges
 
-- **Three buildings still infer their stairs** — Crowne Plaza, Hilton, Omni.
-  Their sheets show no hatched block the reader recognises. Look at whether
-  those hotels' vertical circulation is drawn some other way before widening the
-  grey rule, which currently risks catching printed rules and shadows.
-- **`plans/campus/` is gitignored**, so a rebuild without `npm run plans:campus`
-  writes a `venue-plan.ts` whose convention centre has no stairs and which
-  otherwise looks healthy. The script warns and a test catches it, but the trap
-  is real. Committing the sheets is the alternative and costs eighteen megabytes
-  of somebody else's drawings.
-- **`CAMPUS_GEO` is pinned to the z5 sheet.** Changing the fetcher's zoom cap
-  silently invalidates the scale — halving or doubling it per level. A test that
-  asserts the sheet's pixel dimensions before trusting the constant would catch
-  that.
-- **`fetch-pavements.mjs` has no test, and its exclusions are the load-bearing
-  part.** If a future Overpass pull stopped filtering `bridge`/`covered`/`layer`,
-  the skywalks would enter the pavement network as ground-level footway and the
-  router would happily cross one without going upstairs — silently, and looking
-  more connected rather than less. A test over a saved Overpass fixture
-  asserting that `onTheGround` rejects a bridge would cost very little.
-- **`fetch-events.mjs` cannot be unit-tested** because it takes its lock and
-  runs on import. Its resume logic is verified by running it. Extracting the
-  decision — which cached records a full pull may keep — into an exported pure
-  function would make the part that matters testable without unpicking the
-  script.
+**Done: `CAMPUS_GEO` is no longer trusted blind.** Its three numbers were
+measured against the z5 sheet, which is 8192 pixels square. Fetch the pyramid
+at another zoom and they are all still numbers — every building on the sheet
+moves together and each lands somewhere plausible and wrong, which is the worst
+kind of wrong. `venue-plans.mjs` now checks the sheet's size before using the
+constant and stops the run with what to do about it.
+
+**Done: the importer's three decisions are testable.** `fetch-events.mjs` takes
+a lock and starts fetching on import, so the only way to check them was to run
+it against the live site. They are now pure functions in
+`scripts/lib/import-plan.mjs`, with `import-plan.test.mjs` over them, and each
+fails silently in a different direction:
+
+```
+keep too much    a full pull refreshes nothing and reports success
+keep too little  an interrupted full pull starts over every time and can
+                 never finish, however often it is run
+finish early     the watermark moves past change sets covering events this
+                 run never read, and the feed keeps what it last said for ever
+```
+
+One thing changed while extracting them: `pullComplete()` with nothing to go on
+used to answer "yes, finished". It now answers "no". The cost of that default
+being wrong is one extra run; the cost of the other was events skipped for good.
+
+**Measured, and the answer is no: five buildings still infer their stairs, and
+the campus sheets cannot fix it.** The question this section asked was whether
+their vertical circulation is drawn some other way before anybody widens the
+grey rule. It is — partly — and it is still not enough. Registering the campus
+tiles for stairs only, which is what the convention centre does, finds marks
+their own screenshots miss:
+
+| | 1st / lower floor | upper floors |
+|---|---|---|
+| Crowne Plaza | **0 marks** | Mezzanine: 3 |
+| Hilton | **0 marks** | 2nd: 3, 9th: 1 |
+| Omni | 1st: 1 | 2nd: 1 |
+| Le Méridien | 0 | 0 |
+| Embassy Suites | 0 | 0 |
+
+A link needs a mark on *both* floors of an adjacent pair, and none of these has
+one. The Crowne Plaza's and the Hilton's ground floors show nothing the reader
+recognises; the Omni has one on each and they are **33 m apart**, which is not
+one shaft seen twice. The Hilton's 2nd and 9th are 19 m apart, one metre over
+`SAME_SHAFT` — and moving the threshold to catch that would be fitting the
+constant to the case rather than to the fit it exists for.
+
+So the entries were written, measured, and taken out again: they produced marks
+and no links, which is data that changes nothing. **The remaining work is on the
+reader, not the sheet** — the ground-floor sheets are where there is nothing to
+pair with, and until one of those yields a mark, these five keep the inference.
+That is not a bad answer for a route to give: it says which stretch of corridor
+the stairs are off rather than naming one, which is what the plans support.
+
+**Still open: `plans/campus/` is gitignored**, so a rebuild without
+`npm run plans:campus` writes a `venue-plan.ts` missing the convention centre's
+stairs and nine whole floors. The script warns, and `venue-plan.test.ts` names
+every floor it expects rather than counting them, so the gap fails the build
+rather than shipping. Committing the sheets is the alternative and costs
+eighteen megabytes of somebody else's drawings.

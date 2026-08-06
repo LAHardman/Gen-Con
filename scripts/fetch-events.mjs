@@ -57,6 +57,7 @@ import {
   readFieldTable,
   readGameCodes,
 } from './lib/parse-events.mjs';
+import { keepFromCache, pullComplete, resumeFrom } from './lib/import-plan.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = resolve(ROOT, 'public/events.json');
@@ -454,29 +455,22 @@ async function crawlDetails(
   const cached = await readDetailCache();
   const held = cached.size;
 
-  if (refresh) {
-    // A full pull exists to catch the edits change sets never mention, so it
-    // has to ignore what it already holds rather than trust any of it — but
-    // only what it held when this pull started. Anything fetched since is a
-    // page this same pull has already refreshed, and dropping those is what
-    // stopped an interrupted full pull from ever finishing.
-    let kept = 0;
-    for (const [code, record] of cached) {
-      if (refreshedSince && record.pulledAt >= refreshedSince) kept += 1;
-      else cached.delete(code);
-    }
-    if (held - kept) console.log(`  ignoring ${held - kept} cached records; this is a full pull`);
-    if (kept) console.log(`  ${kept} of them were pulled by this same full pull, so they stand`);
-  } else {
-    let dropped = 0;
-    for (const code of drop) if (cached.delete(code)) dropped += 1;
-    // Re-pull rather than trust: the source has published a change touching these.
-    let stale = 0;
-    for (const code of invalidate) if (cached.delete(code)) stale += 1;
+  // What may be kept is `import-plan.mjs`'s decision, which is where it can be
+  // tested; applying it is this function's.
+  const keeping = keepFromCache(cached, { refresh, since: refreshedSince, invalidate, drop });
+  for (const code of [...cached.keys()]) if (!keeping.keep.has(code)) cached.delete(code);
 
+  if (refresh) {
+    if (held - keeping.kept) {
+      console.log(`  ignoring ${held - keeping.kept} cached records; this is a full pull`);
+    }
+    if (keeping.kept) {
+      console.log(`  ${keeping.kept} of them were pulled by this same full pull, so they stand`);
+    }
+  } else {
     if (held) console.log(`  ${held} already cached in ${DETAIL_CACHE}`);
-    if (stale) console.log(`  ${stale} superseded by a change set, so re-pulling`);
-    if (dropped) console.log(`  ${dropped} deleted upstream, dropped from the cache`);
+    if (keeping.stale) console.log(`  ${keeping.stale} superseded by a change set, so re-pulling`);
+    if (keeping.dropped) console.log(`  ${keeping.dropped} deleted upstream, dropped from the cache`);
   }
 
   let pending = codes.filter((code) => !cached.has(code)).slice(0, DETAIL_LIMIT);
@@ -694,9 +688,14 @@ async function run() {
   // finished, and its own records say when it began.
   let startedAt = null;
   if (fullRefresh) {
-    const resuming = (await readFullPull()) ?? (state ? null : await earliestPullAt());
-    if (resuming) console.log(`  resuming the full pull that began at ${resuming}`);
-    startedAt = await beginFullPull(resuming ?? new Date().toISOString());
+    const where = resumeFrom({
+      marker: await readFullPull(),
+      watermark: state,
+      earliestPulledAt: state ? null : await earliestPullAt(),
+      now: new Date().toISOString(),
+    });
+    if (where.resumed) console.log(`  resuming the full pull that began at ${where.startedAt}`);
+    startedAt = await beginFullPull(where.startedAt);
   }
 
   const { cached, failed } = await crawlDetails(
@@ -722,7 +721,7 @@ async function run() {
   // past events it never actually read. A `--limit` run that happens to close
   // the last gap therefore counts, and one that doesn't, doesn't.
   const missing = events.filter((event) => !cached.has(event.id)).length;
-  const complete = failed.length === 0 && missing === 0;
+  const complete = pullComplete({ failed: failed.length, missing });
   await writeFeed(merged, events.length, plan, { complete, fullRefresh });
 
   // A full pull that got everything is finished with; one that didn't keeps its

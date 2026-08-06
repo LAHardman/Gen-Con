@@ -458,7 +458,20 @@ function convert(path, venue, level, rooms, report, sheet = {}) {
    * staying the size they are. Clipping them to the footprint would leave
    * fragments the right size to be mistaken for an escalator.
    */
-  if (sheet.geo) clipToVenue(plan, frame, venue, perLng, report);
+  if (sheet.geo) {
+    // The georeference is three numbers measured against one sheet at one
+    // zoom. Given a sheet of a different size they are all still numbers, and
+    // the whole campus lands somewhere plausible and wrong.
+    if (plan.width !== CAMPUS_PIXELS || plan.height !== CAMPUS_PIXELS) {
+      throw new Error(
+        `campus sheet is ${plan.width}x${plan.height}, not ${CAMPUS_PIXELS} square: ` +
+          'CAMPUS_GEO was measured against the z5 sheet and its scale would be ' +
+          `off by ${(CAMPUS_PIXELS / plan.width).toFixed(2)}x. Re-run ` +
+          '`npm run plans:campus` without --zoom, or re-derive CAMPUS_GEO.',
+      );
+    }
+    clipToVenue(plan, frame, venue, perLng, report);
+  }
 
   const project = ([px, py]) => {
     const east = frame.east0 - frame.scale * px;
@@ -891,11 +904,43 @@ async function main() {
  * badly are the ones Gen Con does not colour as its own venues — Circle
  * Centre, the Indiana Rep, the escape room.
  *
- * This is for the z5 sheet `plans:campus` writes. A different zoom is a
- * different number of pixels for the same ground, so `scale` would need
- * halving or doubling with it.
+ * This is for the z5 sheet `plans:campus` writes, which is 8192 pixels square.
+ * A different zoom is a different number of pixels for the same ground, so
+ * `scale` would need halving or doubling with it — and nothing about the output
+ * would look wrong, because every building on the sheet would move together and
+ * each would still be a plausible building somewhere. `CAMPUS_PIXELS` below is
+ * checked before the constant is trusted, so a change of zoom stops the run
+ * rather than quietly relocating the campus.
  */
 const CAMPUS_GEO = { scale: 0.155266, lat0: 39.758405, lng0: -86.154774 };
+
+/** The sheet size `CAMPUS_GEO` was measured against. See above. */
+const CAMPUS_PIXELS = 8192;
+
+/*
+ * WHY FIVE BUILDINGS STILL INFER EVERY FLOOR CHANGE THEY HAVE.
+ *
+ * The Crowne Plaza, the Hilton, the Omni, the Embassy Suites and Le Méridien
+ * have no drawn shaft between any pair of their floors. Their own screenshots
+ * show no hatched block the reader recognises, and the obvious next move —
+ * read their marks off the campus tiles the way the convention centre's are
+ * read, which needs no change to the grey rule — was tried and measured:
+ *
+ *   Le Méridien, Embassy Suites   no marks on either floor's tile
+ *   Crowne Plaza                  3 marks on the Mezzanine, none on the 1st
+ *   Omni                          1 mark on each floor, 33 m apart
+ *   Hilton                        none on the 1st; 2nd to 9th nearest pair 19 m
+ *
+ * A shaft is in the same place on both storeys, so a pair 33 m apart is two
+ * different things and a pair 19 m apart across seven storeys is not evidence
+ * of one. `SAME_SHAFT` is 18 m and is slack for the fit rather than for the
+ * building; stretching it by a metre to claim the Hilton's would be choosing
+ * the threshold to fit the answer.
+ *
+ * So this is not the reader and not the rule: these five buildings' vertical
+ * circulation is not drawn consistently on either source. Their floor changes
+ * stay inferred, and the map and the route wording both say so.
+ */
 
 /**
  * Which of Gen Con's campus levels holds which building's floor.
@@ -946,8 +991,15 @@ const CAMPUS_SHEETS = {
     // LOWER SUITE LEVEL.
     { venueId: 'lucas-oil', level: 'Lower Suite level', geo: CAMPUS_GEO },
   ],
-  // The JW's Grand Ballroom, rooms 300 to 314, and DOWN TO 2ND FLOOR.
-  'level-3': [{ venueId: 'jw-marriott', level: '3rd floor', geo: CAMPUS_GEO }],
+  // Gen Con's level 3 is the JW's 3rd, the Hyatt's 3rd, the Embassy's 5th and
+  // the Hilton's 9th at once — it numbers the campus, not any one building.
+  //
+  // Only the JW is registered on it. Reading the other three for their stairs
+  // was tried and gave nothing: see the note under CAMPUS_GEO.
+  'level-3': [
+    // The JW's Grand Ballroom, rooms 300 to 314, and DOWN TO 2ND FLOOR.
+    { venueId: 'jw-marriott', level: '3rd floor', geo: CAMPUS_GEO },
+  ],
 };
 
 /**

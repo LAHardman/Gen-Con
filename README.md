@@ -137,9 +137,14 @@ every one of the twenty-two distinct `Location` strings a full import contains.
 Vitest's `include` covers `scripts/**/*.test.mjs` for the first of those, so
 the scripts are tested where they live.
 
-The importer's resume-an-interrupted-pull logic is still verified by running it
-rather than by a test: `fetch-events.mjs` takes its lock and runs on import, so
-nothing in it can be called from a test without that happening.
+**The importer's three decisions about its own cache are tested too**, which
+took extracting them: `fetch-events.mjs` takes a lock and starts fetching on
+import, so nothing in it could be called from a test without that happening.
+`scripts/lib/import-plan.mjs` now holds what a run may keep, where a full pull
+resumes from, and whether it may say it finished — all pure, all silent when
+wrong, and in different directions. Keeping too much means a full pull that
+refreshes nothing; too little means one that can never finish; finishing early
+means events skipped for good.
 
 ## The map
 
@@ -460,8 +465,14 @@ says so: the map draws a dashed ring rather than a pin, and the step reads "the
 stairs and lifts are off this stretch" rather than "Up the stairs to Level 2".
 A stair has to land on walkable floor on both storeys, so it lies in the overlap
 of the two floors' circulation — that much is certain, and where in the overlap
-is not. Three buildings still infer: the Crowne Plaza, the Hilton and the Omni,
-whose sheets show no stair the reader recognises.
+is not. Five buildings still infer every floor change they have — the Crowne
+Plaza, the Hilton, the Omni, the Embassy Suites and Le Méridien — and reading
+Gen Con's campus tiles for their stairs does not fix it. It was tried and
+measured: the tiles do show marks their own screenshots miss, but never on both
+floors of a pair, which is what a link needs. The Crowne Plaza's and the
+Hilton's ground floors show nothing the reader recognises at all, and the Omni
+has one mark on each of its two floors 33 m apart, which is not one shaft seen
+twice. `docs/next-steps.md` §6 has the table.
 
 Reading the real ones is not only a labelling improvement. With twelve
 escalators to choose between rather than one guessed spot, the router picks the
@@ -510,6 +521,11 @@ and that is live: `npm run plans:campus` fetches it from
 `…/maps/v9/floor-<level>/{z}/{x}/{y}.png` and stitches one PNG per campus level.
 Level 1 does draw its escalators — two of them, hatched on the Hoosier and
 Speedway concourses, each lettered UP TO 2ND FLOOR.
+
+`CAMPUS_GEO`'s three numbers were measured against the z5 sheet, which is 8192
+pixels square, and the script checks that before trusting them: fetched at
+another zoom they would still all be numbers, and the whole campus would land
+somewhere plausible and wrong.
 
 **These sheets are georeferenced rather than fitted**, and the difference is the
 difference between knowing and guessing. `fit` puts a hotel screenshot on the
