@@ -50,7 +50,7 @@ interface Props {
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
-const ROOM_LABEL_MIN_ZOOM = 16;
+export const ROOM_LABEL_MIN_ZOOM = 16;
 
 /** And street names, once you are near enough a street to be walking it. */
 const LABEL_MIN_ZOOM = 17;
@@ -65,9 +65,18 @@ const LABEL_MIN_ZOOM = 17;
  * labelled at the zoom you see the whole campus at, and the small rooms name
  * themselves as you zoom into the building they're in.
  */
-const LABEL_MIN_PIXELS = { width: 38, height: 12 };
+export const LABEL_MIN_PIXELS = { width: 38, height: 12 };
 
-function roomFitsLabel(map: L.Map, room: Room) {
+/**
+ * All `roomFitsLabel` needs of a map: where a coordinate lands on screen.
+ * Narrower than `L.Map` so the rule can be asked at a scale of the caller's
+ * choosing, which a map in a zero-height test container cannot provide.
+ */
+export interface LabelSizer {
+  latLngToLayerPoint(latlng: [number, number]): { x: number; y: number };
+}
+
+export function roomFitsLabel(map: LabelSizer, room: Room) {
   const [nw, se] = roomBounds(room);
   const a = map.latLngToLayerPoint([nw.lat, nw.lng]);
   const b = map.latLngToLayerPoint([se.lat, se.lng]);
@@ -77,12 +86,32 @@ function roomFitsLabel(map: L.Map, room: Room) {
   );
 }
 
+/**
+ * Whether this room writes its name on itself right now.
+ *
+ * The whole rule in one place, and separate from the effect that applies it,
+ * because the effect cannot be asked: it needs a map with a size, and a test
+ * container has none — every room comes out big enough at a zoom Leaflet picked
+ * out of nothing. Here the zoom and the scale are given, so all three parts can
+ * be checked, including the exception, which is the part that matters most:
+ * the room you have tapped names itself however small it is, because you have
+ * tapped it and being told what it is, is the answer.
+ */
+export function roomShowsLabel(
+  map: LabelSizer,
+  room: Room,
+  { zoom, selectedRoomId }: { zoom: number; selectedRoomId: string | null },
+) {
+  if (room.id === selectedRoomId) return true;
+  return zoom >= ROOM_LABEL_MIN_ZOOM && roomFitsLabel(map, room);
+}
+
 function toLatLngBounds([nw, se]: ReturnType<typeof roomBounds>) {
   return L.latLngBounds([nw.lat, nw.lng], [se.lat, se.lng]);
 }
 
 /** OSM footprint and plan rings are both [latitude, longitude] — Leaflet's order. */
-function toLatLngs(ring: Venue['footprint'] | PlanRing | Line) {
+export function toLatLngs(ring: Venue['footprint'] | PlanRing | Line) {
   return ring.map(([lat, lng]) => L.latLng(lat, lng));
 }
 
@@ -93,7 +122,7 @@ function toLatLngs(ring: Venue['footprint'] | PlanRing | Line) {
  * changes it — the floor picker, or opening a room upstairs. Buildings hold
  * their floor independently, so reading the JW's 3rd doesn't move the Hyatt.
  */
-function levelOf(venueId: string, levels: Record<string, string>) {
+export function levelOf(venueId: string, levels: Record<string, string>) {
   return levels[venueId] ?? defaultLevel(venueId);
 }
 
@@ -559,15 +588,14 @@ export function MapView({
     if (!map) return;
 
     const applyLabels = () => {
-      const showLabels = map.getZoom() >= ROOM_LABEL_MIN_ZOOM;
+      const zoom = map.getZoom();
       for (const room of ROOMS) {
         const layer = roomLayersRef.current.get(room.id);
         if (!layer) continue;
 
         layer.unbindTooltip();
         if (roomState(room) !== 'shown') continue;
-        // The room you've picked always names itself, however small it is.
-        if (room.id !== selectedRoomId && (!showLabels || !roomFitsLabel(map, room))) continue;
+        if (!roomShowsLabel(map, room, { zoom, selectedRoomId })) continue;
 
         const count = eventCounts.get(room.id) ?? 0;
         const label = room.shortName ?? room.name;

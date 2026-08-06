@@ -8,10 +8,12 @@
  * click handler bound to the wrong thing — none of them throw, and the map
  * still looks like a map.
  *
- * So these assert on the DOM Leaflet actually produced. jsdom gives every
- * container zero size, which rules out anything about zoom or label crowding
- * (`roomFitsLabel` is the honest gap here), but every layer, class and handler
- * is real.
+ * So these assert on the DOM Leaflet actually produced. Every layer, class and
+ * handler is real. What jsdom cannot give is a *size* — every container is zero
+ * by zero, so Leaflet picks a zoom out of nothing and every room comes out big
+ * enough to label — so the label rule is asked directly instead, with the
+ * pixels supplied rather than measured. That is not a workaround: it is the
+ * only way to put a case either side of a threshold.
  *
  * The taps are the part worth having most. There are three meanings for a
  * click — open a building, open a room, answer the question the directions
@@ -21,8 +23,17 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MapView } from './MapView';
+import {
+  MapView,
+  ROOM_LABEL_MIN_ZOOM,
+  levelOf,
+  roomFitsLabel,
+  roomShowsLabel,
+  toLatLngs,
+  type LabelSizer,
+} from './MapView';
 import { routeBetween } from '../data/navigation';
+import { ROOMS_BY_ID, defaultLevel, roomBounds, type Room } from '../data/venues';
 
 afterEach(cleanup);
 
@@ -210,5 +221,105 @@ describe('drawing the route', () => {
     expect(routeLegs().length).toBeGreaterThan(0);
     rerender({ route: null });
     expect(routeLegs()).toHaveLength(0);
+  });
+});
+
+describe('when a room is big enough to hold its name', () => {
+  /**
+   * A map on which `room` comes out exactly `width` by `height` screen pixels.
+   *
+   * The real map cannot be asked in jsdom — every container is zero by zero, so
+   * Leaflet picks a zoom out of nothing and every room comes out big enough.
+   * This rule is arithmetic on screen pixels, which is precisely what that
+   * makes unavailable, so the pixels are supplied rather than measured. Written
+   * as "put this room at this size" rather than as a scale, because the cases
+   * that matter are the ones either side of a threshold.
+   */
+  const sized = (room: Room, width: number, height: number): LabelSizer => {
+    const [nw, se] = roomBounds(room);
+    const perLng = width / (se.lng - nw.lng);
+    const perLat = height / (nw.lat - se.lat);
+    return {
+      latLngToLayerPoint: ([lat, lng]) => ({ x: lng * perLng, y: -lat * perLat }),
+    };
+  };
+
+  const HALL = () => ROOMS_BY_ID['hall-b'];
+
+  it('wants a room wide enough and tall enough to write on', () => {
+    // 38 by 12 pixels, which is about what a room's short name needs. Either
+    // dimension short of it and the name is written across the wall.
+    expect(roomFitsLabel(sized(HALL(), 38, 12), HALL())).toBe(true);
+    expect(roomFitsLabel(sized(HALL(), 37, 12), HALL())).toBe(false);
+    expect(roomFitsLabel(sized(HALL(), 38, 11), HALL())).toBe(false);
+  });
+
+  it('wants both of them, not the area between them', () => {
+    // A corridor is long and thin and has area to spare. A name written down
+    // the middle of one still lands outside it — this is the shape the rule
+    // exists to reject, and an area test accepts it.
+    expect(roomFitsLabel(sized(HALL(), 1_000, 5), HALL())).toBe(false);
+    expect(roomFitsLabel(sized(HALL(), 5, 1_000), HALL())).toBe(false);
+  });
+
+  it('is not the same test twice: width and height differ', () => {
+    // 38 and 12 are different numbers and swapping them changes the answer for
+    // any room wider than it is tall — which, at the zoom you read a floor at,
+    // is most of them.
+    expect(roomFitsLabel(sized(HALL(), 20, 30), HALL())).toBe(false);
+    expect(roomFitsLabel(sized(HALL(), 30, 20), HALL())).toBe(false);
+    expect(roomFitsLabel(sized(HALL(), 40, 20), HALL())).toBe(true);
+  });
+
+  it('says nothing at all until you are inside a building', () => {
+    // Room names over a view of the whole campus are a thousand words across
+    // fourteen outlines. The size test cannot substitute for the zoom
+    // threshold: Exhibit Hall B is 100 m across and passes it at any zoom.
+    const big = sized(HALL(), 400, 300);
+    const at = { zoom: ROOM_LABEL_MIN_ZOOM - 1, selectedRoomId: null };
+    expect(roomFitsLabel(big, HALL())).toBe(true);
+    expect(roomShowsLabel(big, HALL(), at)).toBe(false);
+    expect(roomShowsLabel(big, HALL(), { ...at, zoom: ROOM_LABEL_MIN_ZOOM })).toBe(true);
+  });
+
+  it('and nothing about a room too small, however far in you are', () => {
+    // The other half. Zoomed right in on a floor of single-table rooms — the
+    // Marriott's ten state and city rooms, Union Station's eleven railroad
+    // rooms — a dozen labels go into a space that fits two and pile up on each
+    // other. That is what the size test is for.
+    const tiny = sized(HALL(), 20, 6);
+    expect(roomShowsLabel(tiny, HALL(), { zoom: 19, selectedRoomId: null })).toBe(false);
+  });
+
+  it('names the room you picked however small it is, and wherever you are', () => {
+    // The exception, and the reason the rule is worth having in one piece: you
+    // have tapped it, so being told what it is, is the answer. It beats both
+    // halves — too far out *and* too small.
+    const tiny = sized(HALL(), 10, 4);
+    const far = { zoom: 1, selectedRoomId: null };
+    expect(roomShowsLabel(tiny, HALL(), far)).toBe(false);
+    expect(roomShowsLabel(tiny, HALL(), { ...far, selectedRoomId: 'hall-b' })).toBe(true);
+  });
+});
+
+describe('reading a ring off the data', () => {
+  it('keeps latitude first, as every source here writes it', () => {
+    // The classic silent one. Footprints, plan rings and skywalk lines are all
+    // [latitude, longitude], which is Leaflet's order — and swapping them
+    // renders perfectly, off the coast of Somalia, with every other test in
+    // this file still passing.
+    const [point] = toLatLngs([[39.7663, -86.1652]]);
+    expect(point.lat).toBeCloseTo(39.7663, 4);
+    expect(point.lng).toBeCloseTo(-86.1652, 4);
+  });
+});
+
+describe('which floor a building is showing', () => {
+  it('starts on the one it opens on and stays there until told otherwise', () => {
+    // Buildings hold their floor independently, so reading the JW's 3rd must
+    // not move the Hyatt.
+    expect(levelOf('icc', {})).toBe(defaultLevel('icc'));
+    expect(levelOf('icc', { icc: 'Level 2', 'jw-marriott': '3rd floor' })).toBe('Level 2');
+    expect(levelOf('hyatt', { 'jw-marriott': '3rd floor' })).toBe(defaultLevel('hyatt'));
   });
 });

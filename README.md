@@ -158,12 +158,19 @@ keys out — a check made through the lookup cannot fail.
 **The map is tested on the DOM Leaflet produced.** Everything `MapView` does is
 imperative Leaflet inside effects, and Leaflet fails by drawing *something*: a
 layer never added, a shape on the wrong pane, a handler bound to the wrong
-thing — none of them throw and the map still looks like a map. jsdom gives
-every container zero size, which rules out anything about zoom or label
-crowding, but every layer, class and handler is real. The taps matter most:
-there are three meanings for a click — open a building, open a room, answer the
-question the directions panel is asking — and the third silently changes the
-other two.
+thing — none of them throw and the map still looks like a map. Every layer,
+class and handler is real. The taps matter most: there are three meanings for a
+click — open a building, open a room, answer the question the directions panel
+is asking — and the third silently changes the other two.
+
+What jsdom cannot give is a **size**: every container is zero by zero, so
+Leaflet picks a zoom out of nothing and every room comes out big enough to
+label. So the rule deciding that — zoomed in far enough, *and* big enough on
+screen, *or* the room you have tapped — is asked directly, on a map built to
+put a given room at a given pixel size. That is not a way round the limitation;
+it is the only way to put a case either side of a threshold, and it is what
+catches width and height being swapped, or the pair of them collapsing into a
+test of area.
 
 **The router is tested twice over, and the two are not interchangeable.**
 `route.test.ts` runs over the real campus and asserts the properties a route
