@@ -319,11 +319,75 @@ interface Campus {
 
 let CAMPUS: Campus | null = null;
 
+/**
+ * The build, part-done. See `warmCampus`.
+ *
+ * Kept between calls so a warm-up that ran out of idle time and a route that
+ * arrives mid-way are the same piece of work rather than two: whoever needs
+ * the graph next carries on from wherever the last one stopped.
+ */
+let BUILDING: Generator<void, Campus> | null = null;
+
 function campusGraph(): Campus {
   if (CAMPUS) return CAMPUS;
+  const steps = (BUILDING ??= buildCampus());
+  for (;;) {
+    const step = steps.next();
+    if (step.done) {
+      CAMPUS = step.value;
+      BUILDING = null;
+      return CAMPUS;
+    }
+  }
+}
 
+/**
+ * Build the campus graph before somebody asks for a route, a step at a time.
+ *
+ * Measured, cold: **1,642 ms** for the first route and 5 ms for every one
+ * after it. That second and a half is 565 ms gridding 29 floors and 637 ms of
+ * A\* between the static nodes, and left alone all of it lands inside the first
+ * tap on "Directions" — on the main thread, with nothing on screen to say why
+ * the app has stopped.
+ *
+ * So: `more()` is asked before every step and the build stops when it says no,
+ * which lets the caller hand over whatever idle time the browser is offering
+ * and give the rest back. Returns true when there is nothing left to do.
+ *
+ * The steps are small deliberately — one floor, or one node against all the
+ * others — so the longest is a single grid rather than the whole build. That
+ * still leaves one 150 ms step for the convention centre's Level 1, which is
+ * the biggest floor on the campus and is not divisible without cutting up the
+ * grid itself.
+ */
+export function warmCampus(more: () => boolean): boolean {
+  if (CAMPUS) return true;
+  const steps = (BUILDING ??= buildCampus());
+  while (more()) {
+    const step = steps.next();
+    if (step.done) {
+      CAMPUS = step.value;
+      BUILDING = null;
+      return true;
+    }
+  }
+  return false;
+}
+
+function* buildCampus(): Generator<void, Campus> {
   const nodes = new Map<string, Node>();
   const measured: Span[] = [];
+
+  // Every floor first, one per step. `floorOf` remembers what it has gridded,
+  // so the passes below get them free — and gridding is half the build, so
+  // hiding it inside a step that also does the doors would make that step the
+  // longest thing here by a distance.
+  for (const venue of VENUES) {
+    for (const level of VENUE_LEVELS[venue.id] ?? []) {
+      floorOf(venue.id, level);
+      yield;
+    }
+  }
 
   const doors = doorNodes();
   for (const door of doors) nodes.set(door.id, door);
@@ -352,10 +416,14 @@ function campusGraph(): Campus {
     ]);
   }
 
+  yield;
+
   // And the way onto them from each building.
   for (const door of doors) {
     for (const [id, edge] of ontoPavement(door, pavement)) measured.push([door.id, id, edge]);
   }
+
+  yield;
 
   allVerticals().forEach((link, i) => {
     const pair = verticalNodes(link, i);
@@ -429,16 +497,18 @@ function campusGraph(): Campus {
   }
 
   // Same floor: the walk between them, found over the squares of that floor.
+  // One node against all the rest per step — there are some eight hundred, so
+  // this is the finely-divided half of the build.
   const list = [...nodes.values()];
   for (let a = 0; a < list.length; a += 1) {
     for (let b = a + 1; b < list.length; b += 1) {
       const edge = walkEdge(list[a], list[b]);
       if (edge) measured.push([list[a].id, list[b].id, edge]);
     }
+    yield;
   }
 
-  CAMPUS = { nodes, measured, pavement };
-  return CAMPUS;
+  return { nodes, measured, pavement };
 }
 
 /**

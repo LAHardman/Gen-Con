@@ -61,8 +61,9 @@ Note that the published site is public whichever host you use, even when the
 repository is private. It is a convention map, so that is usually the point.
 
 **What still needs signal.** The schedule is baked into the page, so it survives
-bad convention Wi-Fi. The map tiles are not — they stream from the tile
-provider. Offline tiles are on the list below.
+bad convention Wi-Fi — 27,467 events, 9.1 MB, which every host above serves
+gzipped at about 0.5 MB. The map tiles are not baked in; they stream from the
+tile provider. Offline tiles are on the list below.
 
 ## Working on it locally
 
@@ -138,14 +139,22 @@ every one of the twenty-two distinct `Location` strings a full import contains.
 Vitest's `include` covers `scripts/**/*.test.mjs` for the first of those, so
 the scripts are tested where they live.
 
-**The importer's three decisions about its own cache are tested too**, which
+**The importer's four decisions about its own cache are tested too**, which
 took extracting them: `fetch-events.mjs` takes a lock and starts fetching on
 import, so nothing in it could be called from a test without that happening.
 `scripts/lib/import-plan.mjs` now holds what a run may keep, where a full pull
-resumes from, and whether it may say it finished — all pure, all silent when
-wrong, and in different directions. Keeping too much means a full pull that
-refreshes nothing; too little means one that can never finish; finishing early
-means events skipped for good.
+resumes from, whether it may say it finished, and which fields the feed carries
+— all pure, all silent when wrong, and in different directions. Keeping too
+much means a full pull that refreshes nothing; too little means one that can
+never finish; finishing early means events skipped for good; and shipping the
+wrong fields means either a bigger download for nothing or a room that has
+quietly gone blank.
+
+**The warm-up is tested by counting the work, not the answer.** Whether the
+router resumed a half-built graph or threw it away and started again is
+invisible in the route — same legs, same metres, twice the time — so
+`useWarmCampus.test.ts` counts grid searches instead, and asserts that the
+build is divided finely enough to be interrupted at all.
 
 ## The map
 
@@ -492,6 +501,18 @@ is — along Level 1, up to Level 2, over the skywalk to the Westin, through it,
 over the second skywalk, and along the Marriott's 2nd floor — rather than a
 620 m line through six walls. The panel lists them, and the map draws each leg
 on the floor it belongs to.
+
+**The graph is built before anybody waits for it.** Those junctions and the
+walks between them are the same on every route, so they are worked out once —
+1,642 ms of gridding floors and running A\* — and every route after that costs
+about 5 ms. Left to itself all of that lands inside the first tap on
+"Directions", on the main thread, with nothing on screen to explain the pause.
+So `useWarmCampus` builds it on the browser's idle callbacks instead, a step at
+a time: 900 steps, 16 of them over one frame and the longest the 150 ms it takes
+to grid the convention centre's Level 1. A route arriving mid-way is not a
+wasted warm-up — the part-built graph is kept and the route carries on from
+where the warming stopped. Measured in the running app, the first route now
+takes **70 ms**.
 
 **Rooms are entered at their doors.** A room's centre is where its label goes;
 for a hall the size of Exhibit Hall A that is eighty metres from any door, so a

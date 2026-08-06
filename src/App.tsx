@@ -9,6 +9,7 @@ import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
 import { useDeviceLocation } from './hooks/useDeviceLocation';
+import { useWarmCampus } from './hooks/useWarmCampus';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
 import {
@@ -43,6 +44,11 @@ export default function App() {
   const [pickOnMap, setPickOnMap] = useState(false);
 
   const { status, feed, index } = useEventFeed();
+
+  // Directions cost a second and a half the first time and 5 ms after it, and
+  // that second and a half used to be spent inside the tap. Now it is spent
+  // here, while the map is being looked at.
+  useWarmCampus();
 
   // Built once per feed and shared: the header's search and the directions
   // panel search the same 27,000 titles, and lowercasing them twice per feed

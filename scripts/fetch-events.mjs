@@ -40,7 +40,7 @@
  * Use `--full` to ignore all of that and re-pull every page.
  */
 
-import { mkdir, writeFile, readFile, appendFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, appendFile, rm, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'node-html-parser';
@@ -57,7 +57,7 @@ import {
   readFieldTable,
   readGameCodes,
 } from './lib/parse-events.mjs';
-import { keepFromCache, pullComplete, resumeFrom } from './lib/import-plan.mjs';
+import { keepFromCache, pullComplete, resumeFrom, shipped } from './lib/import-plan.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = resolve(ROOT, 'public/events.json');
@@ -730,7 +730,7 @@ async function run() {
 }
 
 async function writeFeed(events, catalogueCount, plan, { complete = true, fullRefresh = false } = {}) {
-  const usable = events.filter((event) => event && event.title && event.start);
+  const usable = shipped(events.filter((event) => event && event.title && event.start));
   const dropped = catalogueCount - usable.length;
 
   if (usable.length === 0) {
@@ -753,7 +753,11 @@ async function writeFeed(events, catalogueCount, plan, { complete = true, fullRe
   };
 
   await mkdir(dirname(OUTPUT), { recursive: true });
-  await writeFile(OUTPUT, `${JSON.stringify(feed, null, 2)}\n`);
+  // Not indented. This is 27,467 events and the file is downloaded rather than
+  // read: two spaces a line is 3.1 MB of them. Whatever needs to look at it can
+  // pipe it through `jq`, and the cache in `.cache/` is one event per line for
+  // exactly that.
+  await writeFile(OUTPUT, `${JSON.stringify(feed)}\n`);
 
   if (plan && complete) {
     const previous = await readState();
@@ -771,7 +775,8 @@ async function writeFeed(events, catalogueCount, plan, { complete = true, fullRe
     console.log('Re-run to finish; what did arrive is cached and will not be fetched again.');
   }
 
-  console.log(`\nWrote ${usable.length} events to ${OUTPUT}`);
+  const megabytes = ((await stat(OUTPUT)).size / 1024 / 1024).toFixed(1);
+  console.log(`\nWrote ${usable.length} events to ${OUTPUT} (${megabytes} MB)`);
   if (dropped > 0) console.log(`Skipped ${dropped} with no title or no parseable start time.`);
   console.log('Reload the app to pick them up.');
 }

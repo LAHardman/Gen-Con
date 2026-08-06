@@ -14,13 +14,16 @@
  *   finish early    — the watermark moves past change sets covering events
  *                     this run never read, and the feed keeps whatever it last
  *                     said about them for ever
+ *   ship the wrong   — a bookkeeping field on every event makes the download
+ *   fields             bigger for nothing; dropping one the app reads makes
+ *                      every session lose it, with no error either way
  *
  * The second is not hypothetical; it is the bug this file's subject was
  * written to fix.
  */
 
 import { describe, expect, it } from 'vitest';
-import { keepFromCache, pullComplete, resumeFrom } from './import-plan.mjs';
+import { keepFromCache, pullComplete, resumeFrom, shipped } from './import-plan.mjs';
 
 /** A cache of records, keyed by game code, with the times they were pulled. */
 const cache = (entries) =>
@@ -164,5 +167,53 @@ describe('whether a run may say it got everything', () => {
     expect(pullComplete()).toBe(false);
     expect(pullComplete({ failed: 0 })).toBe(false);
     expect(pullComplete({ missing: 0 })).toBe(false);
+  });
+});
+
+describe('what the feed carries', () => {
+  /** An event as the cache holds it, with the importer's own field on it. */
+  const cachedEvent = {
+    id: 'BGM26ND306429',
+    title: '12 Rivers',
+    type: 'BGM',
+    gameSystem: '12 Rivers',
+    locationText: 'Stadium',
+    roomText: 'Field : Fight in the Skies',
+    tableText: 'HQ',
+    start: '2026-07-30T20:00:00-04:00',
+    end: '2026-07-30T22:00:00-04:00',
+    cost: 2,
+    ticketsAvailable: 0,
+    ageRequirement: 'Everyone (6+)',
+    url: 'https://www.gencon.com/events/306429',
+    pulledAt: '2026-08-05T01:43:14.897Z',
+  };
+
+  it('leaves the importer’s own bookkeeping behind', () => {
+    // 0.7 MB across 27,467 events, on the file a phone has to fetch before it
+    // can show a single session — and `ConEvent` never declared the field, so
+    // nothing in the app was reading it.
+    const [event] = shipped([cachedEvent]);
+    expect(event).not.toHaveProperty('pulledAt');
+    expect(cachedEvent).toHaveProperty('pulledAt');
+  });
+
+  it('carries everything else through untouched', () => {
+    // The other direction, and the worse one: a field dropped here is a field
+    // every session loses, with no error — just a room gone blank in the app.
+    const [event] = shipped([cachedEvent]);
+    const { pulledAt, ...rest } = cachedEvent;
+    expect(pulledAt).toBeTruthy();
+    expect(event).toEqual(rest);
+  });
+
+  it('does not reach back into what it was given', () => {
+    // The cache is written from the same records, and it is the cache that
+    // `keepFromCache` reads `pulledAt` off. Stripping in place would leave a
+    // full pull unable to tell what it had already refreshed.
+    const held = [{ ...cachedEvent }];
+    shipped(held);
+    expect(held[0].pulledAt).toBe(cachedEvent.pulledAt);
+    expect(keepFromCache(new Map([['x', held[0]]]), { refresh: true, since: '2026-08-01T00:00:00.000Z' }).kept).toBe(1);
   });
 });

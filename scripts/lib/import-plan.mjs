@@ -94,3 +94,34 @@ export function pullComplete({ failed, missing } = {}) {
   if (typeof failed !== 'number' || typeof missing !== 'number') return false;
   return failed === 0 && missing === 0;
 }
+
+/**
+ * What the cache keeps for itself and does not ship.
+ *
+ * `pulledAt` is how a full pull recognises the records it has already refreshed
+ * — `keepFromCache` above reads nothing else — so it belongs on the cached
+ * record and nowhere near the feed. It was reaching the feed anyway, because
+ * merging a detail page copies every field it left behind, and `ConEvent` does
+ * not declare it, so nothing in the app has ever read it.
+ *
+ * At 27,467 events that is 0.7 MB a phone downloads, parses and holds for
+ * nothing, on a file it fetches before it can show a single session.
+ */
+const BOOKKEEPING = ['pulledAt'];
+
+/**
+ * The events as the feed carries them.
+ *
+ * Both directions of this are silent. Ship a bookkeeping field and the app is
+ * merely slower, on a page whose whole reason for being a local file is that
+ * convention Wi-Fi is bad. Strip one the app *does* read and every session
+ * loses it — no error, just a room that has gone blank — so this names what
+ * goes rather than what stays, and `events.test.ts` holds the app's side.
+ */
+export function shipped(events) {
+  return events.map((event) => {
+    const carried = { ...event };
+    for (const field of BOOKKEEPING) delete carried[field];
+    return carried;
+  });
+}
