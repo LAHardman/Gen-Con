@@ -16,7 +16,7 @@
  * bearing.
  */
 
-import { ROOMS_BY_ID, VENUES_BY_ID, roomBounds, roomShapes, type Room } from './venues';
+import { ROOMS, ROOMS_BY_ID, VENUES_BY_ID, roomBounds, roomShapes, type Room } from './venues';
 import { roomEntrance } from './walkable';
 import { walkBetween, type Anchor, type Walk } from './route';
 import { distanceMetres, walkingMinutes, type LatLng } from '../utils/geo';
@@ -67,15 +67,46 @@ function roomRings(room: Room) {
  * wall. `roomEntrance` finds the point on the outline nearest the corridor
  * outside it. Rooms on a floor with no corridor drawn keep their centre, since
  * there is nothing to be near.
+ *
+ * The other rooms on the floor are handed over with it, because a doorway you
+ * cannot walk out of is not a doorway. Union Station's B&O room has circulation
+ * 20 m off its wall and two other railroad rooms in between; the nearest
+ * walkable pixel is through both of them, and a door there leads into somebody
+ * else's meeting. This is the layer that knows what a room is, so this is the
+ * layer that says so.
  */
 const DOORS = new Map<string, LatLng | null>();
 
 export function roomDoor(room: Room): LatLng | null {
   if (!DOORS.has(room.id)) {
-    const found = roomEntrance(roomRings(room), room.venueId, room.level);
+    const found = roomEntrance(roomRings(room), room.venueId, room.level, throughAnotherRoom(room));
     DOORS.set(room.id, found?.door ?? null);
   }
   return DOORS.get(room.id) ?? null;
+}
+
+/** Is this point inside a *different* room on the same floor? */
+function throughAnotherRoom(room: Room) {
+  const others = ROOMS.filter(
+    (other) =>
+      other.id !== room.id &&
+      other.venueId === room.venueId &&
+      other.level === room.level &&
+      !other.fillsVenue,
+  ).flatMap((other) => roomRings(other) as ReadonlyArray<ReadonlyArray<readonly [number, number]>>);
+
+  return ({ lat, lng }: LatLng) => others.some((ring) => within(ring, lat, lng));
+}
+
+/** Even-odd, on a ring written [latitude, longitude] as every source here does. */
+function within(ring: ReadonlyArray<readonly [number, number]>, lat: number, lng: number) {
+  let odd = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const [ai, bi] = ring[i];
+    const [aj, bj] = ring[j];
+    if (ai > lat !== aj > lat && lng < ((bj - bi) * (lat - ai)) / (aj - ai) + bi) odd = !odd;
+  }
+  return odd;
 }
 
 /** A place as the router wants it: a position, and the floor it stands on. */

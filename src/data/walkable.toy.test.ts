@@ -69,6 +69,13 @@ vi.mock('./venue-plan', () => {
   /** A corridor along the north wall of a hall, for the doorway tests. */
   const alongside = ring([0, 0], [60, 0], [60, 4], [0, 4]);
 
+  /**
+   * A corridor at the east end of a floor, for the doorway tests: a room whose
+   * east wall is at x 20 has this 20 m away — further than any plan draws a
+   * door, and with room for another room in between.
+   */
+  const eastCorridor = ring([40, 0], [46, 0], [46, 30], [40, 30]);
+
   /** Two runs that do not touch, 40 m apart, for the per-piece door rule. */
   const eastRun = ring([0, 0], [30, 0], [30, 6], [0, 6]);
   const westRun = ring([70, 0], [100, 0], [100, 6], [70, 6]);
@@ -80,6 +87,7 @@ vi.mock('./venue-plan', () => {
       'toy/pinch': [[pinchA], [pinchB]],
       'toy/speck': [[solid], [speck]],
       'toy/alongside': [[alongside]],
+      'toy/east-corridor': [[eastCorridor]],
       'toy/two-runs': [[eastRun], [westRun]],
       'toy/nothing': [],
     },
@@ -281,11 +289,76 @@ describe('roomEntrance', () => {
     expect(roomEntrance([faraway], 'toy', 'alongside')).toBeNull();
   });
 
+  it('reaches across the gap a plan left uncoloured', () => {
+    // The corridor is 30 m east of this room and nothing is drawn in between.
+    // That gap is a drawing artefact — a plan whose circulation starts well
+    // inside the block — not a distance anybody walks, and refusing to reach
+    // it left seven rooms on drawn floors falling back to their centres.
+    const room = ring([0, 8], [20, 8], [20, 22], [0, 22]);
+    const found = roomEntrance([room], 'toy', 'east-corridor')!;
+    expect(found).not.toBeNull();
+    // On the east wall, which is the one facing the corridor, 20 m away.
+    expect(metres(toPoint(found.door)).x).toBeCloseTo(20, 1);
+  });
+
+  it('will not open a door through another room', () => {
+    // The failure the reach makes possible, and the reason it can be generous.
+    // This room's nearest walkable pixel is due east — through the whole of a
+    // room in between. A door there leads into somebody else's meeting, and it
+    // would look like a perfectly ordinary route.
+    const room = ring([0, 8], [20, 8], [20, 22], [0, 22]);
+    const between_ = ring([24, 4], [36, 4], [36, 26], [24, 26]);
+    expect(roomEntrance([room], 'toy', 'east-corridor', inside(between_))).toBeNull();
+    // ...and without being told, it happily does.
+    expect(roomEntrance([room], 'toy', 'east-corridor')).not.toBeNull();
+  });
+
+  it('takes the next-best door when the nearest one is blocked', () => {
+    // Not simply "give up": a room with two ways out keeps the one that works.
+    // Here the room reaches the corridor round the south end of the obstacle.
+    const room = ring([0, 8], [20, 8], [20, 22], [0, 22]);
+    const between_ = ring([24, 0], [36, 0], [36, 14], [24, 14]);
+    const found = roomEntrance([room], 'toy', 'east-corridor', inside(between_))!;
+    expect(found).not.toBeNull();
+    // The south-east corner, below the obstacle rather than through it.
+    expect(metres(toPoint(found.door)).y).toBeGreaterThan(14);
+  });
+
   it('has no door on a floor no plan was read for', () => {
     const hall = ring([10, 4], [50, 4], [50, 24], [10, 24]);
     expect(roomEntrance([hall], 'toy', 'nothing')).toBeNull();
   });
+
+  it('lets a door clip the neighbour it shares a wall with', () => {
+    // Most room outlines on this campus are schematic rectangles that abut, so
+    // the two-metre line from a door to the corridor clips the room next door.
+    // That is a drawing artefact, not a route through a meeting — and treating
+    // it as one cost Union Station two of its doorways before the rule had a
+    // tolerance.
+    //
+    // The corridor is y 0–4; this room starts at y 6, with a 2 m sliver of
+    // somebody else's rectangle in between. Roughly a metre and a half of the
+    // line is inside it, which is one grid cell.
+    const room = ring([10, 6], [50, 6], [50, 26], [10, 26]);
+    // Wider than the room, so there is no corner to slip round: the only way
+    // out is across it.
+    const sliver = ring([0, 4], [60, 4], [60, 6], [0, 6]);
+    expect(roomEntrance([room], 'toy', 'alongside', inside(sliver))).not.toBeNull();
+  });
 });
+
+/** "Is this point inside that ring", as `navigation.ts` asks it. */
+function inside(shape: PlanRing) {
+  return ({ lat, lng }: { lat: number; lng: number }) => {
+    let odd = false;
+    for (let i = 0, j = shape.length - 1; i < shape.length; j = i, i += 1) {
+      const [ai, bi] = shape[i];
+      const [aj, bj] = shape[j];
+      if (ai > lat !== aj > lat && lng < ((bj - bi) * (lat - ai)) / (aj - ai) + bi) odd = !odd;
+    }
+    return odd;
+  };
+}
 
 describe('doorsOf', () => {
   /** A building outline round the straight corridor, 2 m clear of it. */

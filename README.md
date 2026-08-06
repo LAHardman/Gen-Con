@@ -593,6 +593,19 @@ wasted warm-up — the part-built graph is kept and the route carries on from
 where the warming stopped. Measured in the running app, the first route now
 takes **70 ms**.
 
+**A doorway is only a doorway if you can walk out of it.** The door is not in
+any of the data; what is in the data is the room's outline and the corridor
+beside it, so the point on the outline nearest walkable floor is the doorway to
+within the width of a door. The catch is that the *nearest* walkable floor is
+not always on the near side of the neighbours: Union Station's B&O room has
+circulation 20 m off its wall with two whole railroad rooms in between. So the
+line from each candidate to its corridor is stepped along, and one that goes
+through another room is thrown away in favour of the next best — with three
+metres of tolerance, because the outlines are schematic rectangles that abut
+and a door two metres from a corridor clips the room it shares a wall with.
+That took the rooms with no doorway from 14 to 7, and the pairs of buildings
+routed entirely under cover from 12 to 14.
+
 **Rooms are entered at their doors.** A room's centre is where its label goes;
 for a hall the size of Exhibit Hall A that is eighty metres from any door, so a
 route measured centre to centre is wrong by the length of the room at both ends.

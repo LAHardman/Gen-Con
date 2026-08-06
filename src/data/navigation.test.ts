@@ -15,12 +15,14 @@ import {
   placeKey,
   placeLabel,
   placePosition,
+  roomDoor,
   roomPlace,
   routeBetween,
   type DeviceFix,
   type NavPlace,
 } from './navigation';
-import { ROOMS_BY_ID, roomBounds } from './venues';
+import { ROOMS, ROOMS_BY_ID, roomBounds, roomShapes, type Room } from './venues';
+import { between, cellCentre, floorOf, nearestOpen, toLatLng, toPoint } from './walkable';
 import { distanceMetres } from '../utils/geo';
 
 /* Real rooms, so the geometry under these is the geometry the app draws. */
@@ -249,5 +251,97 @@ describe('formatDistance', () => {
   it('switches to kilometres, with a decimal only where it means something', () => {
     expect(formatDistance(1_240)).toBe('1.2 km');
     expect(formatDistance(282_000)).toBe('282 km');
+  });
+});
+
+describe('the doorways, over the real campus', () => {
+  /** Even-odd, on a ring written [latitude, longitude] as every source here does. */
+  const within = (ring: ReadonlyArray<readonly [number, number]>, lat: number, lng: number) => {
+    let odd = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const [ai, bi] = ring[i];
+      const [aj, bj] = ring[j];
+      if (ai > lat !== aj > lat && lng < ((bj - bi) * (lat - ai)) / (aj - ai) + bi) odd = !odd;
+    }
+    return odd;
+  };
+
+  const outline = (room: Room): ReadonlyArray<ReadonlyArray<readonly [number, number]>> => {
+    const drawn = roomShapes(room);
+    if (drawn.length) return drawn as never;
+    const [nw, se] = roomBounds(room);
+    return [
+      [
+        [nw.lat, nw.lng],
+        [nw.lat, se.lng],
+        [se.lat, se.lng],
+        [se.lat, nw.lng],
+      ],
+    ];
+  };
+
+  it('opens no door through another room', () => {
+    // The invariant that lets the search reach 25 m instead of 12. A doorway is
+    // only a doorway if you can walk out of it, and the nearest walkable pixel
+    // to a room is not always on the near side of its neighbours: Union
+    // Station's B&O room has circulation 20 m off its wall with two whole
+    // railroad rooms in between, and a door there leads into somebody else's
+    // meeting. It draws and routes perfectly.
+    //
+    // Measured over every room that has a doorway, against every other room on
+    // its floor, so it is the campus saying this rather than one case.
+    const wrong: string[] = [];
+    for (const room of ROOMS) {
+      const door = roomDoor(room);
+      if (!door) continue;
+      const floor = floorOf(room.venueId, room.level);
+      const open = nearestOpen(floor, toPoint(door), 40);
+      if (!open) continue;
+      const cell = cellCentre(floor, open.cx, open.cy);
+      const from = toPoint(door);
+      const others = ROOMS.filter(
+        (other) =>
+          other.id !== room.id &&
+          other.venueId === room.venueId &&
+          other.level === room.level &&
+          !other.fillsVenue,
+      ).flatMap(outline);
+
+      const span = between(from, cell);
+      const steps = Math.max(1, Math.ceil(span / 1.5));
+      let inside = 0;
+      for (let s = 1; s < steps; s += 1) {
+        const t = s / steps;
+        const at = toLatLng({ x: from.x + (cell.x - from.x) * t, y: from.y + (cell.y - from.y) * t });
+        if (others.some((ring) => within(ring, at.lat, at.lng))) inside += span / steps;
+      }
+      // Three metres: enough for the shared wall of two schematic rectangles,
+      // not enough to be walking the length of a room.
+      if (inside > 3) wrong.push(`${room.id} (${inside.toFixed(1)} m through another room)`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('finds one for all but seven rooms, and names the seven', () => {
+    // Counted and named rather than counted alone, because the way this gets
+    // worse is that a room quietly falls back to its centre — which for a hall
+    // the size of Exhibit Hall A is eighty metres from any door, and looks like
+    // a route.
+    //
+    // Three of these are single-room venues Gen Con does not colour on its own
+    // campus sheets, so nothing draws a corridor for them to open onto. The
+    // other four are rooms whose schematic rectangle sits further from the
+    // drawn circulation than any honest search reaches — Lucas Oil's two are
+    // 64 m and 112 m out.
+    const roomless = ROOMS.filter((room) => !roomDoor(room)).map((room) => room.id);
+    expect(roomless.sort()).toEqual([
+      'circle-centre-mall',
+      'escape-room-venue',
+      'hall-g',
+      'indiana-rep-stage',
+      'jw-rooms-206-207',
+      'lucas-oil-exhibit-halls',
+      'lucas-oil-meeting-rooms',
+    ]);
   });
 });

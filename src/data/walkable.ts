@@ -396,6 +396,23 @@ function smooth(floor: Floor, cells: Array<{ cx: number; cy: number }>): Point[]
 }
 
 /**
+ * How far a doorway may be from the circulation it opens onto. Metres.
+ *
+ * Not the width of a door — the width of what the plan did not colour. A
+ * hotel's drawn corridor can start well inside the block, so the gap between a
+ * room's outline and the nearest walkable pixel is a drawing artefact rather
+ * than a distance anybody walks. This was 12 m, which left seven rooms on drawn
+ * floors falling back to their centres for want of two or three metres.
+ *
+ * It can be this generous because `crosses` below does the discriminating: the
+ * danger in reaching further was never the distance, it was landing on a
+ * corridor that happens to be near but is on the far side of somebody else's
+ * room. That is now tested for directly rather than guarded against with a
+ * number.
+ */
+const REACH = 25;
+
+/**
  * Where you go into a room from the corridor outside it.
  *
  * A room's centre is where its label goes, not where its door is, and for a
@@ -408,11 +425,20 @@ function smooth(floor: Floor, cells: Array<{ cx: number; cy: number }>): Point[]
  * point on its boundary closest to walkable surface is the doorway, to within
  * the width of the door. Rooms opening off two corridors get the nearer one,
  * which is also the one you would use.
+ *
+ * `blocked` is what keeps that honest over a longer reach. Union Station's
+ * B&O room has a corridor 20 m away and two other railroad rooms in between,
+ * and the nearest walkable pixel is on the wrong side of both of them: a door
+ * there is a door through a wall into somebody else's meeting. Given a way to
+ * ask, this steps along the line from each candidate to its corridor and
+ * throws away any that does not get there — which is what "you can walk out of
+ * this door" actually means, and is a better rule than any radius.
  */
 export function roomEntrance(
   rings: readonly PlanRing[],
   venueId: string,
   level: string,
+  blocked?: (at: LatLng) => boolean,
 ): { door: LatLng; cell: { cx: number; cy: number } } | null {
   const floor = floorOf(venueId, level);
   if (floor.empty || !rings.length) return null;
@@ -429,15 +455,53 @@ export function roomEntrance(
       for (let s = 0; s <= steps; s += 1) {
         const t = s / steps;
         const on = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-        const open = nearestOpen(floor, on, 12);
+        const open = nearestOpen(floor, on, REACH);
         if (!open) continue;
-        if (!best || open.away < best.away) {
-          best = { door: on, cell: { cx: open.cx, cy: open.cy }, away: open.away };
+        if (best && open.away >= best.away) continue;
+        if (blocked && throughSomethingElse(on, cellCentre(floor, open.cx, open.cy), blocked) > THROUGH) {
+          continue;
         }
+        best = { door: on, cell: { cx: open.cx, cy: open.cy }, away: open.away };
       }
     }
   }
   return best ? { door: toLatLng(best.door), cell: best.cell } : null;
+}
+
+/**
+ * How much of a doorway is somebody else's room. Metres.
+ *
+ * Not zero, and that is the whole subtlety. Most room outlines here are
+ * schematic rectangles that abut, so the line from a door to the corridor two
+ * metres away clips the neighbour it shares a wall with — which is a drawing
+ * artefact, not a route through a meeting. Union Station lost two rooms'
+ * doorways to exactly that before this had a tolerance.
+ *
+ * Past a couple of metres it is no longer a shared edge: Union Station's B&O
+ * room has circulation 20 m off its wall with two whole railroad rooms in
+ * between, and that is the case worth refusing.
+ */
+const THROUGH = 3;
+
+/**
+ * How far the way from a doorway to its corridor runs inside something else.
+ *
+ * Sampled rather than solved: the caller's test is "is this point inside
+ * another room", and a room is a polygon, so stepping along at the grid's own
+ * resolution measures any crossing wider than one cell. Anything narrower than
+ * a cell is not a room anybody could be walking through.
+ */
+function throughSomethingElse(from: Point, to: Point, blocked: (at: LatLng) => boolean) {
+  const span = between(from, to);
+  const steps = Math.max(1, Math.ceil(span / CELL));
+  let inside = 0;
+  for (let s = 1; s < steps; s += 1) {
+    const t = s / steps;
+    if (blocked(toLatLng({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }))) {
+      inside += span / steps;
+    }
+  }
+  return inside;
 }
 
 /** Metres from a point to a segment, in the campus frame. */

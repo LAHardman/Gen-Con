@@ -199,25 +199,54 @@ version of that test — one room per floor — caught only two of them.
 
 ---
 
-## 3. Fourteen rooms have no doorway — was twenty-nine
+## 3. Seven rooms have no doorway — was twenty-nine, then fourteen
 
-**Measured.** `roomEntrance` finds nothing for 14 of 146 rooms, which then use
-their centre — the inaccuracy the doorway work existed to remove:
+**Measured.** `roomDoor` finds nothing for 7 of 146 rooms, which then use their
+centre — the inaccuracy the doorway work existed to remove:
 
 ```
-Crowne Plaza 5 · Convention Center 2 · Lucas Oil 2 · JW Marriott 2
-Indiana Rep 1 · Escape Room 1 · Circle Centre 1
+circle-centre-mall, escape-room-venue, indiana-rep-stage   single-room venues
+                                                           Gen Con does not
+                                                           colour, so no
+                                                           corridor is drawn
+hall-g                     30 m from the nearest drawn circulation
+jw-rooms-206-207           36 m
+lucas-oil-exhibit-halls    112 m
+lucas-oil-meeting-rooms    64 m
 ```
 
-Half of them went with the floors §2 and §2b filled, as expected: the two are
-one piece of work and should be measured together.
+**What closed the last seven, and it was not a bigger number.** The search
+reached 12 m, and this document used to say that widening it "would find a
+doorway on the wrong wall". That was worth testing rather than believing.
+Measured at 25 m, seven rooms gained a doorway and *one* of them — Union
+Station's B&O room — was exactly the predicted failure: circulation 20 m off
+its wall with two whole railroad rooms in between, so the nearest walkable
+pixel is through both of them and the door leads into somebody else's meeting.
 
-What is left is no longer a floor problem — every one of these rooms is on a
-floor that *is* drawn, except the three single-room venues. They are rooms
-whose outline sits further than `roomEntrance`'s 12 m search from any
-circulation, which for the stadium and the Crowne Plaza is mostly because their
-room rectangles are schematic rather than traced. Widening the search would
-find a doorway on the wrong wall; the fix is better rectangles.
+So the rule is no longer a radius. A doorway is only a doorway if you can walk
+out of it, and `roomEntrance` now steps along the line from each candidate to
+its corridor and throws away any that goes through another room — taking the
+next-best instead, which is how the B&O room ends up with a door on a different
+wall rather than with none. The reach can then be generous, because the thing
+it was guarding against is tested for directly.
+
+It needed a tolerance, and that took a second attempt: most outlines here are
+schematic rectangles that abut, so the two-metre line from a door to the
+corridor clips the room it shares a wall with. Refusing those cost Union
+Station two doorways it had before. Three metres — one grid cell and a little —
+separates a shared edge from walking the length of a room.
+
+```
+                        roomless   under cover (182 pairs)
+ 12 m, no crossing test        14                       12
+ 25 m, no crossing test         7   one door through two rooms
+ 25 m, crossing test            7                       14
+```
+
+Both remaining numbers are unblocked by anything in the code. The three
+single-room venues need a plan Gen Con does not publish; the other four need
+better rectangles — Lucas Oil's two sit 64 m and 112 m from the floor that is
+drawn, which no honest search will cross.
 
 ---
 
