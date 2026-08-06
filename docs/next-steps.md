@@ -89,8 +89,9 @@ before anything is traced from it, and the pixels are cut rather than the
 finished shapes — a corridor running from one building into the next is one
 component either way, and only a cut divides it.
 
-**What it bought.** Empty floors 15 → 3, rooms with no doorway 29 → 14 (§3),
-floor changes 19 → 50, and building pairs needing a long straight line 2 → **0**.
+**What it bought.** Empty floors 15 → 3, rooms with no doorway 29 → 14 and
+then 7 (§3), floor changes 19 → 75, and building pairs needing a long straight
+line 2 → **0**.
 Every pair on the campus now walks a drawn floor, a skywalk or a surveyed
 pavement, and every room of a building reaches every other room of it.
 
@@ -483,3 +484,54 @@ exhibit-hall map with the letters over the booth grid, or an aisle-to-hall
 range published anywhere. Until one turns up, a booth number resolves to an
 exhibitor and not to a place, and the 41 events at booths #1229 and #1853 stay
 in the unmatched report where they belong.
+
+---
+
+## 8. What is left, and what each thing is waiting on
+
+Everything below has been measured rather than estimated, and none of it is
+waiting on more code.
+
+**Booth to hall — waiting on one file this session cannot fetch.** §7 said the
+gap would close given "Gen Con's own printed exhibit-hall map with the letters
+over the booth grid". It exists:
+
+```
+https://files.gencon.com/2026.exhibithallmap.pdf
+```
+
+linked from `gencon.com/experience/exhibithallinfo`, which is itself reachable.
+`files.gencon.com` is refused by this environment's egress policy — the gateway
+answers 403 to the CONNECT, before any request is made — so this is a
+permission, not a dead link and not a Gen Con problem. `www.gencon.com` answers
+200 throughout. With the file in hand the work is the OCR path the repo already
+has (`scripts/plan-labels.py`) plus a booth-to-hall table beside
+`exhibitors.ts`.
+
+**Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
+the Escape Room and Circle Centre are single-room venues Gen Con does not
+colour as its own on the campus sheets, so there is nothing to read. Their
+rooms keep their centres and their routes say so. Nothing short of a floor plan
+for each changes this, and each is one room.
+
+**Four rooms with no doorway — waiting on better rectangles.** `hall-g` and
+`jw-rooms-206-207` sit 30 m and 36 m from the drawn circulation; Lucas Oil's
+exhibit halls and meeting rooms sit 64 m and 112 m from it. Those last two are
+not a threshold problem at any honest reach — the rectangles are schematic and
+in the wrong place relative to the sheet the floor was traced from. Tracing
+them from the campus tiles, as the halls were, is the fix.
+
+**Five buildings inferring every floor change — waiting on a source that draws
+their shafts.** The Crowne Plaza, the Hilton, the Omni, the Embassy Suites and
+Le Méridien: 75 floor changes across the campus, 25 of them read off a drawn
+shaft, and none of those 25 in these five. Both sources were measured (see the
+comment in `venue-plans.mjs`) and neither shows a mark on both storeys of an
+adjacent pair. The remaining idea is the campus tiles at z6 rather than z5,
+which is four times the detail — and four times 1,024 tiles per level, past
+`MAX_TILES`, and it needs `CAMPUS_GEO` re-derived, which the guard added in §6
+will stop the run over. Worth doing only if somebody wants those five buildings
+badly enough to pay for it; the routes already say the stairs are inferred.
+
+**The forecourt hop.** Still 25–90 m of straight line between a door and the
+nearest surveyed footway, at every building. OpenStreetMap `entrance=` nodes
+would shorten it where they exist. It is the smallest of these.

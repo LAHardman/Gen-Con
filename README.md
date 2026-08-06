@@ -618,7 +618,7 @@ corridor drawn, and keep their centres because there is nothing to be near.
 thing itself — an escalator is a hatched grey block, and beside the big ones the
 sheet letters UP TO 2ND FLOOR — so `venue-plans.mjs` reads those out, and a
 block read on two adjacent floors in the same spot is one shaft seen twice. That
-is a measurement, and **16 of the 19 floor changes are one**, the convention
+is a measurement, and **25 of the 75 floor changes are one**, the convention
 centre's twelve included.
 
 Where no sheet shows a stair the link is **inferred**, and everything about it
