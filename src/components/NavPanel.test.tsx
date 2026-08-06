@@ -205,14 +205,14 @@ describe('what it says about the line', () => {
   });
 
   it('marks an outdoor leg as the straight line it is', () => {
-    // Between two buildings no skywalk joins there is no pavement in the data,
-    // so that leg is a bearing and has to look like one.
+    // Lucas Oil's plazas are drawn as nothing walkable, so the last leg to it
+    // is unmapped ground and has to look like one.
     const far: NavPlace = { kind: 'room', roomId: 'lucas-oil-field' };
     const route = routeBetween(SAGAMORE, far, READY.fix);
     setup({ from: SAGAMORE, to: far, route });
     if (route?.walk) {
       expect(route.walk.indoors).toBe(false);
-      expect(screen.getByText(/no pavements in the map data/)).toBeTruthy();
+      expect(screen.getByText(/nothing maps/)).toBeTruthy();
     } else {
       // No route at all: the summary falls back to the bearing and the note
       // says the data has no floor for it to follow.

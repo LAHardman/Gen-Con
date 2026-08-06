@@ -16,23 +16,27 @@
  * What this cannot do is claim more than its sources support, and there are two
  * places it stops:
  *
- *   Outdoors, there is no pavement network in this repository. OpenStreetMap
- *   has the streets, but not as anything walkable — no crossings, no kerbs. So
- *   a leg between buildings that no skywalk joins is drawn as a straight line
- *   and called what it is.
+ *   Outdoors, the pavements are mapped and this walks them (`pavements.ts`),
+ *   but nothing maps the ground between a building's door and the nearest
+ *   footway — its forecourt, its plaza, its car park. That step is a straight
+ *   line, and is drawn and named as one.
  *
- *   Between floors, no source marks a staircase (see `vertical.ts`). A route
- *   that changes floor says where the stairs must be rather than where they
- *   are.
+ *   Between floors, most staircases are drawn and three buildings' are not
+ *   (see `vertical.ts`). A leg over a drawn one names it; a leg over an
+ *   inferred one says which stretch of corridor it must be off, because
+ *   saying "take the stairs" of a guess would be inventing a staircase.
  */
 
 import { CONNECTIONS, reachesOf, type Connection } from './connections';
+import { PAVEMENT_EDGES, PAVEMENT_NODES } from './pavements';
 import { FLOOR_CHANGE_METRES, allVerticals, type Vertical } from './vertical';
-import { VENUES_BY_ID } from './venues';
+import { VENUES, VENUES_BY_ID, VENUE_LEVELS, venueOutline } from './venues';
 import {
   between,
   cellOf,
   floorOf,
+  cellCentre,
+  doorsOf,
   nearestOpen,
   pathBetween,
   toLatLng,
@@ -49,7 +53,7 @@ export interface Anchor {
   level?: string;
 }
 
-export type LegKind = 'walk' | 'stairs' | 'skywalk' | 'tunnel' | 'outdoor';
+export type LegKind = 'walk' | 'stairs' | 'skywalk' | 'tunnel' | 'pavement' | 'outdoor';
 
 export interface Leg {
   kind: LegKind;
@@ -80,6 +84,8 @@ interface Node {
   level?: string;
   /** Its square on that floor, where it has one. */
   cell?: { cx: number; cy: number };
+  /** A way out of a building, or a junction of the pavement network. */
+  role?: 'door' | 'pavement';
 }
 
 const venueName = (venueId?: string) =>
@@ -160,41 +166,178 @@ interface Edge {
   points?: LatLng[];
   /** For a floor change: whether the plans drew it or the floors implied it. */
   certainty?: 'plan' | 'region';
+  /** Out in the weather: a pavement, or the line from a door to one. */
+  outdoors?: true;
 }
 
 /**
- * How much further apart two points must be, outdoors, before a straight line
- * between them is worth offering at all. Beyond the campus this is a bearing
- * and the panel already says so.
+ * Past this, a straight line to the nearest pavement is not worth drawing:
+ * whoever asked is not on the campus, and the panel says so already.
  */
 const OUTDOOR_LIMIT = 4_000;
 
-export function walkBetween(from: Anchor, to: Anchor): Walk | null {
-  const start = anchorNode('start', from);
-  const end = anchorNode('end', to);
+/**
+ * What a straight line outdoors really costs to walk.
+ *
+ * Downtown Indianapolis is a grid, and you cannot walk a diagonal across a
+ * block: for origin-destination pairs at random angles the walk over a grid
+ * averages 4/π — about 1.27 — times the straight line between them, before any
+ * of the waiting at crossings. So an outdoor leg is charged, and reported, at
+ * a little over that.
+ *
+ * Leaving it at 1.0 does not merely under-report; it changes the answer. An
+ * uncorrected straight line between two doors beats the real indoor route
+ * almost every time, so the router would send you out into an Indianapolis
+ * August rather than over the skywalk that exists precisely to avoid it.
+ */
+const OUTDOOR_DETOUR = 1.3;
 
-  const nodes = new Map<string, Node>([
-    [start.id, start],
-    [end.id, end],
-  ]);
-  const edges = new Map<string, Edge[]>();
-  const add = (a: string, b: string, edge: Omit<Edge, 'to'>) => {
-    if (!edges.has(a)) edges.set(a, []);
-    if (!edges.has(b)) edges.set(b, []);
-    edges.get(a)!.push({ ...edge, to: b });
-    edges.get(b)!.push({ ...edge, to: a, points: edge.points ? [...edge.points].reverse() : undefined });
-  };
+/**
+ * How far a door may reach to find a pavement. Metres.
+ *
+ * Nothing maps the ground between a building and the footway outside it, and
+ * across the campus that gap runs from 9 m at the Embassy Suites to 126 m at
+ * the Crowne Plaza, whose drawn floor is a corridor well inside a block. The
+ * gap has to be crossable or no route could ever reach the network at all; how
+ * far is the only question, and past about this the line stops being a
+ * forecourt and starts being a journey nobody measured.
+ *
+ * Every building has a door within this of a pavement, the Crowne Plaza by its
+ * second one.
+ */
+const TO_THE_PAVEMENT = 90;
+
+/**
+ * Ways off a door onto the network: the nearest pavement in each quarter of the
+ * compass, rather than simply the nearest.
+ *
+ * A building has doors on more than one side, and the single nearest footway
+ * node is on whichever side happens to win. Joining only that one sends
+ * everything leaving the Westin round the same corner, adding a block to half
+ * its routes. Four quadrants is enough to get out on the right side without
+ * joining a door to fifty nodes it will never use.
+ */
+const QUADRANTS = 4;
+
+/**
+ * The ways out of each building: which floor you leave from, and where on it.
+ *
+ * The lowest floor that has any circulation drawn, because that is the one
+ * nearest the street — not `defaultLevel`, which is the floor a building holds
+ * *events* on and is often upstairs. Where the ground floor was never drawn the
+ * door lands on whatever floor was, which is wrong about the storey and right
+ * about the building; the leg it produces is a straight line either way.
+ *
+ * One door per connected piece of that floor rather than one per floor — see
+ * `doorsOf`. A building whose corridors are drawn in several disconnected
+ * pieces would otherwise strand everything outside the piece the door landed
+ * in, which is how the JW Marriott became unreachable from everywhere.
+ *
+ * Built once. It depends on nothing but the floor data, and rebuilding it per
+ * route meant scanning every open cell of every building on every search.
+ */
+let DOORS: Node[] | null = null;
+
+function doorNodes(): Node[] {
+  if (DOORS) return DOORS;
+  const doors: Node[] = [];
+  for (const venue of VENUES) {
+    for (const level of VENUE_LEVELS[venue.id] ?? []) {
+      const floor = floorOf(venue.id, level);
+      if (floor.empty) continue;
+      const cells = doorsOf(floor, venueOutline(venue));
+      cells.forEach((cell, n) => {
+        doors.push({
+          id: `door:${venue.id}:${n}`,
+          at: cellCentre(floor, cell.cx, cell.cy),
+          venueId: venue.id,
+          level,
+          cell,
+          role: 'door',
+        });
+      });
+      break;
+    }
+  }
+  DOORS = doors;
+  return doors;
+}
+
+/** An edge before it knows which end it is being read from. */
+type Span = [a: string, b: string, edge: Omit<Edge, 'to'>];
+
+/**
+ * The campus without the route in it.
+ *
+ * Every node but the two ends — a staircase, a skywalk landing, a door — is the
+ * same on every search, and so is every edge between them. That is nearly all
+ * the work: joining the static nodes on a floor means an A\* per pair of them,
+ * and doing it per route made each one about a quarter of a second and the
+ * all-pairs test three quarters of a minute. Built once, a route costs only the
+ * edges its own two ends need.
+ */
+interface Campus {
+  nodes: Map<string, Node>;
+  /** Floors, stairs, skywalks, the tunnel, pavements — what somebody surveyed. */
+  measured: Span[];
+  /** Every pavement junction, for an end of the route to join the network at. */
+  pavement: Node[];
+}
+
+let CAMPUS: Campus | null = null;
+
+function campusGraph(): Campus {
+  if (CAMPUS) return CAMPUS;
+
+  const nodes = new Map<string, Node>();
+  const measured: Span[] = [];
+
+  const doors = doorNodes();
+  for (const door of doors) nodes.set(door.id, door);
+
+  /* The pavements, as OpenStreetMap has them. */
+  const pavement: Node[] = PAVEMENT_NODES.map(([lat, lng], i) => ({
+    id: `pave:${i}`,
+    at: toPoint({ lat, lng }),
+    role: 'pavement',
+  }));
+  for (const node of pavement) nodes.set(node.id, node);
+  for (const edge of PAVEMENT_EDGES) {
+    measured.push([
+      pavement[edge.a].id,
+      pavement[edge.b].id,
+      {
+        metres: edge.metres,
+        kind: 'pavement',
+        outdoors: true,
+        points: [
+          toLatLng(pavement[edge.a].at),
+          ...(edge.bend ?? []).map(([lat, lng]) => ({ lat, lng })),
+          toLatLng(pavement[edge.b].at),
+        ],
+      },
+    ]);
+  }
+
+  // And the way onto them from each building.
+  for (const door of doors) {
+    for (const [id, edge] of ontoPavement(door, pavement)) measured.push([door.id, id, edge]);
+  }
 
   allVerticals().forEach((link, i) => {
     const pair = verticalNodes(link, i);
     if (!pair) return;
     for (const node of pair) nodes.set(node.id, node);
-    add(pair[0].id, pair[1].id, {
-      metres: FLOOR_CHANGE_METRES,
-      kind: 'stairs',
-      points: [toLatLng(pair[0].at), toLatLng(pair[1].at)],
-      certainty: link.certainty,
-    });
+    measured.push([
+      pair[0].id,
+      pair[1].id,
+      {
+        metres: FLOOR_CHANGE_METRES,
+        kind: 'stairs',
+        points: [toLatLng(pair[0].at), toLatLng(pair[1].at)],
+        certainty: link.certainty,
+      },
+    ]);
   });
 
   CONNECTIONS.forEach((connection, i) => {
@@ -208,11 +351,15 @@ export function walkBetween(from: Anchor, to: Anchor): Walk | null {
     // pair, which is what a bridge over a junction really does.
     for (let a = 0; a < ends.length; a += 1) {
       for (let b = a + 1; b < ends.length; b += 1) {
-        add(ends[a].id, ends[b].id, {
-          metres: Math.max(metres, 5),
-          kind: connection.kind === 'tunnel' ? 'tunnel' : 'skywalk',
-          points: line,
-        });
+        measured.push([
+          ends[a].id,
+          ends[b].id,
+          {
+            metres: Math.max(metres, 5),
+            kind: connection.kind === 'tunnel' ? 'tunnel' : 'skywalk',
+            points: line,
+          },
+        ]);
       }
     }
   });
@@ -221,70 +368,182 @@ export function walkBetween(from: Anchor, to: Anchor): Walk | null {
   const list = [...nodes.values()];
   for (let a = 0; a < list.length; a += 1) {
     for (let b = a + 1; b < list.length; b += 1) {
-      const one = list[a];
-      const two = list[b];
-      if (!one.cell || !two.cell) continue;
-      if (one.venueId !== two.venueId || one.level !== two.level) continue;
-      const floor = floorOf(one.venueId!, one.level!);
-      const path = pathBetween(floor, one.cell, two.cell);
-      if (!path) continue;
-      let metres = 0;
-      for (let p = 1; p < path.length; p += 1) metres += between(path[p - 1], path[p]);
-      // The ends themselves sit off the walkable surface — a doorway is in the
-      // wall — so the step from each into its square counts.
-      metres += between(one.at, path[0]) + between(two.at, path[path.length - 1]);
-      add(one.id, two.id, {
-        metres,
-        kind: 'walk',
-        points: [toLatLng(one.at), ...path.map(toLatLng), toLatLng(two.at)],
-      });
+      const edge = walkEdge(list[a], list[b]);
+      if (edge) measured.push([list[a].id, list[b].id, edge]);
     }
   }
 
-  // Outdoors, with no pavements to follow: a straight line from an end that is
-  // outside to every way into a building, and between two ends that are both
-  // outside. Never between two indoor nodes — that would be a shortcut through
-  // a wall dressed up as a route.
-  const outside = list.filter((node) => !node.cell);
-  for (const node of outside) {
-    for (const other of list) {
-      if (other.id === node.id) continue;
-      const metres = between(node.at, other.at);
-      if (metres > OUTDOOR_LIMIT) continue;
-      // Only to a way in, or to the other loose end: joining a loose point to
-      // the middle of a floor would tunnel through the building's wall.
-      const isDoor = other.cell && (other.id.startsWith('s') || other.id === 'end' || other.id === 'start');
-      if (!isDoor && other.cell) continue;
-      add(node.id, other.id, {
-        metres,
-        kind: 'outdoor',
-        points: [toLatLng(node.at), toLatLng(other.at)],
-      });
+  CAMPUS = { nodes, measured, pavement };
+  return CAMPUS;
+}
+
+/**
+ * The straight lines from a point to the pavement network, one per quadrant.
+ *
+ * Charged the same detour as any other unmapped line, because that is what it
+ * is: nobody has drawn the path across the forecourt, so its real length is not
+ * known and the line may well cross a flower bed.
+ */
+function ontoPavement(from: Node, pavement: Node[]): Array<[string, Omit<Edge, 'to'>]> {
+  const best: Array<{ node: Node; away: number } | null> = new Array(QUADRANTS).fill(null);
+  let nearest: { node: Node; away: number } | null = null;
+  for (const node of pavement) {
+    const away = between(from.at, node.at);
+    if (!nearest || away < nearest.away) nearest = { node, away };
+    if (away > TO_THE_PAVEMENT) continue;
+    const quadrant =
+      Math.floor(
+        ((Math.atan2(node.at.y - from.at.y, node.at.x - from.at.x) + Math.PI) / (2 * Math.PI)) *
+          QUADRANTS,
+      ) % QUADRANTS;
+    if (!best[quadrant] || away < best[quadrant]!.away) best[quadrant] = { node, away };
+  }
+
+  // Nothing within reach, so reach further. Lucas Oil's rooms are 270 m from
+  // the nearest mapped footway — its plazas are not drawn as anything walkable
+  // — and a point that cannot get onto the network at all can only be given a
+  // bearing. One long straight line, said to be one, beats that.
+  const found = best.filter((entry) => entry !== null);
+  const ways = found.length ? found : nearest && nearest.away <= OUTDOOR_LIMIT ? [nearest] : [];
+
+  return ways.map(
+    (way) =>
+      [
+        way!.node.id,
+        {
+          metres: way!.away * OUTDOOR_DETOUR,
+          kind: 'outdoor' as const,
+          outdoors: true as const,
+          points: [toLatLng(from.at), toLatLng(way!.node.at)],
+        },
+      ] as [string, Omit<Edge, 'to'>],
+  );
+}
+
+/** The walk between two nodes standing on the same floor, if there is one. */
+function walkEdge(one: Node, two: Node): Omit<Edge, 'to'> | null {
+  if (!one.cell || !two.cell) return null;
+  if (one.venueId !== two.venueId || one.level !== two.level) return null;
+  const floor = floorOf(one.venueId!, one.level!);
+  const path = pathBetween(floor, one.cell, two.cell);
+  if (!path) return null;
+  let metres = 0;
+  for (let p = 1; p < path.length; p += 1) metres += between(path[p - 1], path[p]);
+  // The ends themselves sit off the walkable surface — a doorway is in the
+  // wall — so the step from each into its square counts.
+  metres += between(one.at, path[0]) + between(two.at, path[path.length - 1]);
+  return {
+    metres,
+    kind: 'walk',
+    points: [toLatLng(one.at), ...path.map(toLatLng), toLatLng(two.at)],
+  };
+}
+
+/**
+ * The shortest way, unless staying under cover costs little.
+ *
+ * Two searches, and the reason is no longer that a straight line would cheat.
+ * Every door joins the footway network now and the network is one piece, so the
+ * shortest route is a real route and can be trusted on distance. The question
+ * the second search answers is a different one: whether it is *worth* it.
+ *
+ * Gen Con is the first week of August in Indianapolis, and downtown is joined
+ * by a mile of skywalk built for exactly that. Measured against the covered
+ * route, the shortest one saves 1% between the Marriott and the Westin and 4%
+ * between the convention centre and the Marriott — for which nobody would
+ * choose to cross Maryland St in thirty degrees. It saves more than half on
+ * Exhibit Hall B to the Marriott Ballroom, where the skywalk doglegs through
+ * the Westin and back, and there the street is plainly right.
+ *
+ * So: take the covered route when it is within `WORTH_STAYING_IN`, and the
+ * shortest otherwise. Seven of the fifteen skywalk-joined pairs have no covered
+ * route at all — the bridges into the JW and the Hyatt land on floors nothing
+ * has drawn — and those are unaffected either way.
+ */
+export function walkBetween(from: Anchor, to: Anchor): Walk | null {
+  const shortest = search(from, to, false);
+  const covered = search(from, to, true);
+  if (!covered) return shortest;
+  if (!shortest) return covered;
+  return covered.metres <= shortest.metres * WORTH_STAYING_IN ? covered : shortest;
+}
+
+/**
+ * How much further a route may go to keep out of the weather.
+ *
+ * A quarter further under cover beats the direct line in August; three times
+ * further does not. Between those two the honest answer is that it depends on
+ * the weather and on who is walking, and this picks the sheltered one.
+ */
+const WORTH_STAYING_IN = 1.25;
+
+function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
+  const start = anchorNode('start', from);
+  const end = anchorNode('end', to);
+
+  const campus = campusGraph();
+  const nodes = new Map(campus.nodes);
+  nodes.set(start.id, start);
+  nodes.set(end.id, end);
+
+  const edges = new Map<string, Edge[]>();
+  const add = (a: string, b: string, edge: Omit<Edge, 'to'>) => {
+    if (!edges.has(a)) edges.set(a, []);
+    if (!edges.has(b)) edges.set(b, []);
+    edges.get(a)!.push({ ...edge, to: b });
+    edges.get(b)!.push({ ...edge, to: a, points: edge.points ? [...edge.points].reverse() : undefined });
+  };
+
+  for (const [a, b, edge] of campus.measured) {
+    if (coveredOnly && edge.outdoors) continue;
+    add(a, b, edge);
+  }
+
+  // What the two ends themselves reach: everything on their own floor, and —
+  // where an end stands outdoors rather than on a floor somebody drew — the
+  // pavements. Without the second, the device could only ever be given a
+  // bearing.
+  const ours = [start, end];
+  for (let i = 0; i < ours.length; i += 1) {
+    const anchor = ours[i];
+    // The other end is joined once, from the first of the pair to hold it.
+    for (const other of [...campus.nodes.values(), ...ours.slice(i + 1)]) {
+      const walk = walkEdge(anchor, other);
+      if (walk) add(anchor.id, other.id, walk);
+    }
+    if (!anchor.cell && !coveredOnly) {
+      for (const [id, edge] of ontoPavement(anchor, campus.pavement)) add(anchor.id, id, edge);
     }
   }
 
-  /* Dijkstra: forty nodes at the outside, so nothing cleverer is called for. */
+  /*
+   * Dijkstra, over a heap.
+   *
+   * This used to scan the whole frontier for its minimum, which was the right
+   * shape when the graph was forty portals. The pavements bring seven hundred
+   * junctions, and a scan per step made that quadratic — about a fifth of a
+   * second a route, on the phone that is holding the map.
+   */
   const cost = new Map<string, number>([[start.id, 0]]);
   const cameBy = new Map<string, { from: string; edge: Edge }>();
   const done = new Set<string>();
+  const queue = new Frontier();
+  queue.push(start.id, 0);
 
   for (;;) {
-    let here: string | null = null;
-    let best = Infinity;
-    for (const [id, value] of cost) {
-      if (done.has(id) || value >= best) continue;
-      here = id;
-      best = value;
-    }
+    const here = queue.pop();
     if (here === null) break;
+    if (done.has(here)) continue;
     if (here === end.id) break;
     done.add(here);
 
+    const best = cost.get(here)!;
     for (const edge of edges.get(here) ?? []) {
       const next = best + edge.metres;
       if (next >= (cost.get(edge.to) ?? Infinity)) continue;
       cost.set(edge.to, next);
       cameBy.set(edge.to, { from: here, edge });
+      queue.push(edge.to, next);
     }
   }
 
@@ -311,8 +570,63 @@ export function walkBetween(from: Anchor, to: Anchor): Walk | null {
   };
 }
 
+/**
+ * A binary heap keyed on cost, with no decrease-key.
+ *
+ * A node is pushed again whenever a cheaper way to it is found, and the stale
+ * copies are skipped on the way out by the `done` set. That costs a little
+ * memory and saves keeping an index of where each node sits in the heap.
+ */
+class Frontier {
+  private ids: string[] = [];
+  private costs: number[] = [];
+
+  push(id: string, cost: number) {
+    let i = this.ids.push(id) - 1;
+    this.costs.push(cost);
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (this.costs[parent] <= this.costs[i]) break;
+      this.swap(parent, i);
+      i = parent;
+    }
+  }
+
+  pop(): string | null {
+    if (!this.ids.length) return null;
+    const top = this.ids[0];
+    const id = this.ids.pop()!;
+    const cost = this.costs.pop()!;
+    if (this.ids.length) {
+      this.ids[0] = id;
+      this.costs[0] = cost;
+      let i = 0;
+      for (;;) {
+        const left = i * 2 + 1;
+        const right = left + 1;
+        let small = i;
+        if (left < this.costs.length && this.costs[left] < this.costs[small]) small = left;
+        if (right < this.costs.length && this.costs[right] < this.costs[small]) small = right;
+        if (small === i) break;
+        this.swap(small, i);
+        i = small;
+      }
+    }
+    return top;
+  }
+
+  private swap(a: number, b: number) {
+    [this.ids[a], this.ids[b]] = [this.ids[b], this.ids[a]];
+    [this.costs[a], this.costs[b]] = [this.costs[b], this.costs[a]];
+  }
+}
+
 function describe(edge: Edge, from: Node, to: Node): Leg {
-  const points = edge.points ?? [toLatLng(from.at), toLatLng(to.at)];
+  // Copied, because the campus graph is built once and its lines are handed to
+  // every route that uses them. Only the legs of the winning route reach here,
+  // so this is a few arrays per search rather than a few hundred — and it means
+  // nothing downstream has to remember not to append to what it was given.
+  const points = edge.points ? [...edge.points] : [toLatLng(from.at), toLatLng(to.at)];
   const base = { points, metres: edge.metres, kind: edge.kind };
   switch (edge.kind) {
     // Two different claims, and the wording is the difference between them.
@@ -332,8 +646,21 @@ function describe(edge: Edge, from: Node, to: Node): Leg {
       return { ...base, venueId: to.venueId, level: to.level, text: `Skywalk to ${venueName(to.venueId)}` };
     case 'tunnel':
       return { ...base, venueId: to.venueId, level: to.level, text: `Tunnel to ${venueName(to.venueId)}` };
+    case 'pavement':
+      return { ...base, text: 'Along the pavement' };
+    // Three different things, and only the first is a step towards a building:
+    // the hop off the network into a doorway, the hop from a doorway out to the
+    // network, and — where the pavements cannot help at all — the whole
+    // straight line from one building to another.
     case 'outdoor':
-      return { ...base, text: 'Outside, direct — there are no pavements in the map data' };
+      return {
+        ...base,
+        text: to.venueId
+          ? `Outside to ${venueName(to.venueId)}`
+          : to.role === 'pavement'
+            ? 'Out to the street'
+            : 'Outside',
+      };
     default:
       return {
         ...base,

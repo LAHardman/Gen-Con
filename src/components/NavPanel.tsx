@@ -287,8 +287,8 @@ export function NavPanel({
         <p className="nav__note">
           {route.walk
             ? route.walk.indoors
-              ? 'Followed along the floors the plans draw — corridors, skywalks and the tunnel. Where it changes floor it names the stretch the stairs are on rather than a staircase, because no plan here marks one.'
-              : 'Indoors this follows the floors the plans draw. The dashed leg is outdoors, where there are no pavements in the map data, so it is a straight line rather than a route.'
+              ? 'Followed along the floors the plans draw — corridors, skywalks and the tunnel. Kept under cover: where crossing the street would be shorter, it was not shorter by much.'
+              : 'Followed along the floors the plans draw and the pavements OpenStreetMap has surveyed. The dashed legs are the ground between a door and the nearest footway, which nothing maps, so those are straight lines rather than routes.'
             : 'A straight line between the two, not a walking route: nothing here has floor drawn for it to follow, so it goes through walls and ignores the streets.'}
         </p>
       )}

@@ -149,7 +149,15 @@ describe('routeBetween', () => {
   });
 
   it('routes over the skywalks rather than through the wall between buildings', () => {
-    const route = routeBetween(HALL_B, { kind: 'room', roomId: 'marriott-ballroom' }, null)!;
+    // The Sagamore Ballroom to the Marriott's: 407 m under cover against 391 m
+    // across Maryland St, so the skywalk wins on the 4% it costs. (From Exhibit
+    // Hall B the same bridges are a 500 m dogleg through the Westin against
+    // 217 m on the pavement, and there the street wins — see `route.test.ts`.)
+    const route = routeBetween(
+      { kind: 'room', roomId: 'sagamore-ballroom' },
+      { kind: 'room', roomId: 'marriott-indiana-ballroom' },
+      null,
+    )!;
     expect(route.walk).not.toBeNull();
     const kinds = route.walk!.legs.map((leg) => leg.kind);
     expect(kinds).toContain('skywalk');

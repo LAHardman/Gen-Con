@@ -1371,9 +1371,10 @@ body {
 
 /* --------------------------------------------------------- walking routes */
 
-/* A leg along a floor is a line over surface somebody drew, so it is solid. An
-   outdoor leg is a bearing — there are no pavements in the data — and stays
-   dashed, as the whole route used to be when the whole route was a guess. */
+/* Three claims, three lines. A leg along a floor, or along a pavement, is over
+   something somebody surveyed, so it is solid. An outdoor leg is the unmapped
+   ground between a door and the kerb, so it stays dashed — as the whole route
+   used to be, when the whole route was a guess. */
 .map__route {
   stroke: var(--accent);
   stroke-opacity: 0.95;
@@ -1384,6 +1385,11 @@ body {
 
 .map__route--outdoor {
   stroke-opacity: 0.8;
+}
+
+/* Real footway, but out in the weather rather than under cover. */
+.map__route--pavement {
+  stroke: #7fb5e6;
 }
 
 .map__route--skywalk,
