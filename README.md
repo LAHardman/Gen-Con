@@ -110,15 +110,27 @@ document.
 `npm run check` is what CI runs on every push and every pull request: types,
 then tests, before anything is built or deployed.
 
-What is covered today is the directions feature and everything under it —
-`navigation.ts`, `route.ts`, `walkable.ts`, `vertical.ts`, `geo.ts`,
-`useDeviceLocation.ts`, `NavPanel` and the directions button in `RoomDialog` —
-plus the three generated data tables, `connections.ts`, `venue-plan.ts` and
-`pavements.ts`. Those are keyed by strings a human wrote (`icc/Level 2`), and a
-key naming a floor its building calls something else draws *nothing*, silently,
-which looks exactly like a sheet that was never read. So the tests assert the
-keys resolve, and they assert it against the tables rather than through the
-lookups that filter bad keys out — a check made through the lookup cannot fail.
+Covered today: the directions feature and everything under it
+(`navigation.ts`, `route.ts`, `walkable.ts`, `vertical.ts`, `geo.ts`,
+`useDeviceLocation.ts`, `useWarmCampus.ts`), the searching (`search.ts`,
+`SearchBar`), the drawing (`MapView`, `NavPanel`, `RoomDialog`), the app's own
+state (`App.tsx`), the import, and the generated data tables — `connections.ts`,
+`venue-plan.ts`, `pavements.ts`, `exhibitors.ts`. Those tables are keyed by
+strings a human wrote (`icc/Level 2`), and a key naming a floor its building
+calls something else draws *nothing*, silently, which looks exactly like a
+sheet that was never read. So the tests assert the keys resolve, and they
+assert it against the tables rather than through the lookups that filter bad
+keys out — a check made through the lookup cannot fail.
+
+**The map is tested on the DOM Leaflet produced.** Everything `MapView` does is
+imperative Leaflet inside effects, and Leaflet fails by drawing *something*: a
+layer never added, a shape on the wrong pane, a handler bound to the wrong
+thing — none of them throw and the map still looks like a map. jsdom gives
+every container zero size, which rules out anything about zoom or label
+crowding, but every layer, class and handler is real. The taps matter most:
+there are three meanings for a click — open a building, open a room, answer the
+question the directions panel is asking — and the third silently changes the
+other two.
 
 **The router is tested twice over, and the two are not interchangeable.**
 `route.test.ts` runs over the real campus and asserts the properties a route
