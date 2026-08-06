@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { registerServiceWorker } from './registerServiceWorker';
 import 'leaflet/dist/leaflet.css';
 import './styles.css';
 
@@ -12,3 +13,6 @@ createRoot(container).render(
     <App />
   </StrictMode>,
 );
+
+// Last, and only on a built site — see the module for why.
+registerServiceWorker();

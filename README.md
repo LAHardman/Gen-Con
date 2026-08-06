@@ -60,10 +60,27 @@ install and no account to make.
 Note that the published site is public whichever host you use, even when the
 repository is private. It is a convention map, so that is usually the point.
 
-**What still needs signal.** The schedule is baked into the page, so it survives
-bad convention Wi-Fi — 27,467 events, 9.1 MB, which every host above serves
-gzipped at about 0.5 MB. The map tiles are not baked in; they stream from the
-tile provider. Offline tiles are on the list below.
+**It works without signal, after one visit that has it.** Gen Con is fifty
+thousand people in four buildings all holding a phone, and the one thing worse
+than an app that needs a network is an app that *had* the answer and threw it
+away on a refresh. A service worker (`public/sw.js`) keeps two caches:
+
+- **the app** — the page, its JavaScript, its stylesheet and the 9.1 MB of
+  events — served stale-while-revalidate, so a reload answers from the cache
+  immediately and fetches a fresh copy behind you. On a connection that is
+  present but hopeless, waiting for the network to fail is most of the wait.
+- **the map tiles**, cache-first and capped at 900, because a tile of a city
+  block does not change during a convention and panning downtown at every zoom
+  would otherwise fill the origin's storage quota and get everything evicted.
+
+Nothing is precached by name — the built filenames carry a content hash, so a
+list would be wrong on the next deploy. Instead the page tells the worker what
+it just loaded. That hand-over is not a nicety: a worker does not control the
+page that installs it, so on a first visit every asset goes straight past it,
+and the app then *looks* cached because the browser's own HTTP cache is
+answering — until it isn't. Verified by loading the built site once, clearing
+the HTTP cache, going offline and reloading: the map draws, the schedule is
+there, and a room opens with its sessions.
 
 ## Working on it locally
 
@@ -177,6 +194,14 @@ Grand Hall and a Grand Bar, a theatre whose street address begins 140. That
 last one was a live bug the tests found: typing `140` offered the Indiana
 Repertory Theatre above the convention centre's Meeting Room 140, because an
 alias *prefix* scored better than an exact alias.
+
+**The service worker is driven directly**, in `src/sw.test.ts`: it is loaded
+into a scope built for the purpose and its handlers are called. More machinery
+than a test usually deserves, and it is there because caching *nothing* leaves
+an app that works perfectly — online — right up to the reload that matters. It
+found its own bug: `cache.add` refuses a cross-origin tile, because it insists
+on a readable 200 and an opaque response reports status 0, so the tile cache
+stayed empty while every other cache filled.
 
 **The plan build refuses rather than warning.** `plans/campus/` is gitignored,
 and a rebuild without it wrote a `venue-plan.ts` that parsed, type-checked and
