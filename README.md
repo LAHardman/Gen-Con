@@ -60,6 +60,14 @@ install and no account to make.
 Note that the published site is public whichever host you use, even when the
 repository is private. It is a convention map, so that is usually the point.
 
+**What a first visit costs.** 191 KB of JavaScript and CSS, gzipped, and
+442 KB of schedule — 27,467 events, which every host above serves compressed.
+The schedule does not hold up the map: it loads alongside and the app is a map
+before it arrives. Two things came out of that file that were pure repetition —
+the importer's own `pulledAt`, which the app never read, and `url`, which is
+the same thirty characters in front of a number the id already carries — and
+between them they were 1.9 MB raw and 93 KB gzipped.
+
 **It works without signal, after one visit that has it.** Gen Con is fifty
 thousand people in four buildings all holding a phone, and the one thing worse
 than an app that needs a network is an app that *had* the answer and threw it
@@ -72,6 +80,14 @@ away on a refresh. A service worker (`public/sw.js`) keeps two caches:
 - **the map tiles**, cache-first and capped at 900, because a tile of a city
   block does not change during a convention and panning downtown at every zoom
   would otherwise fill the origin's storage quota and get everything evicted.
+
+The JavaScript is split along the same grain — the libraries, the floor plans,
+the routing graph, the room table, the stand list — because the worker caches
+by URL and the filenames carry a content hash. Before that, a one-line change
+to a component invalidated all 710 KB of it, Leaflet and React included; now it
+invalidates 15 KB. On a *first* visit the split buys nothing (every chunk is
+preloaded, and eight files cost marginally more than one); it is the second
+visit it is for.
 
 Nothing is precached by name — the built filenames carry a content hash, so a
 list would be wrong on the next deploy. Instead the page tells the worker what

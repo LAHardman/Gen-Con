@@ -198,12 +198,21 @@ describe('what the feed carries', () => {
     expect(cachedEvent).toHaveProperty('pulledAt');
   });
 
+  it('leaves out what the app can work out for itself', () => {
+    // `url` is the same thirty characters in front of a number the id already
+    // carries. 1.2 MB, 93 KB of it gzipped, to say a second time what has
+    // already been said — see `eventUrl`, which says it.
+    const [event] = shipped([cachedEvent]);
+    expect(event).not.toHaveProperty('url');
+    expect(cachedEvent.url).toContain(cachedEvent.id.replace(/^[A-Z]+[0-9]{2}[A-Z]+/, ''));
+  });
+
   it('carries everything else through untouched', () => {
     // The other direction, and the worse one: a field dropped here is a field
     // every session loses, with no error — just a room gone blank in the app.
     const [event] = shipped([cachedEvent]);
-    const { pulledAt, ...rest } = cachedEvent;
-    expect(pulledAt).toBeTruthy();
+    const { pulledAt, url, ...rest } = cachedEvent;
+    expect(pulledAt && url).toBeTruthy();
     expect(event).toEqual(rest);
   });
 

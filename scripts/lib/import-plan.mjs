@@ -96,18 +96,22 @@ export function pullComplete({ failed, missing } = {}) {
 }
 
 /**
- * What the cache keeps for itself and does not ship.
+ * What the feed does not carry, and why each one goes.
  *
  * `pulledAt` is how a full pull recognises the records it has already refreshed
  * — `keepFromCache` above reads nothing else — so it belongs on the cached
  * record and nowhere near the feed. It was reaching the feed anyway, because
  * merging a detail page copies every field it left behind, and `ConEvent` does
- * not declare it, so nothing in the app has ever read it.
+ * not declare it, so nothing in the app has ever read it. 0.7 MB.
  *
- * At 27,467 events that is 0.7 MB a phone downloads, parses and holds for
- * nothing, on a file it fetches before it can show a single session.
+ * `url` is 27,467 copies of the same thirty characters in front of a number the
+ * `id` already carries — `BGM26ND306429` is `gencon.com/events/306429` — so the
+ * app derives it (`eventUrl`) instead. Checked against a full import before it
+ * was dropped: all 27,467 derive exactly, none is missing, none is an
+ * exception. 1.2 MB, and 93 KB of it gzipped, on the file a phone has to fetch
+ * before it can show a single session.
  */
-const BOOKKEEPING = ['pulledAt'];
+const BOOKKEEPING = ['pulledAt', 'url'];
 
 /**
  * The events as the feed carries them.

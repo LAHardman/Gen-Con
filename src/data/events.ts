@@ -31,7 +31,15 @@ export interface ConEvent {
   cost?: number;
   ticketsAvailable?: number;
   ageRequirement?: string;
-  /** Link back to the event on the source site. */
+  /**
+   * Link back to the event on the source site.
+   *
+   * Absent from the generated feed, and derived by `eventUrl` instead — it is
+   * the same 30 characters in front of a number the `id` already carries, and
+   * 27,467 copies of it were 93 KB gzipped on a file a phone fetches before it
+   * can show a single session. Kept on the type because an event from anywhere
+   * else may still carry one.
+   */
   url?: string;
 }
 
@@ -262,6 +270,25 @@ const TIME_FORMAT = new Intl.DateTimeFormat(undefined, {
   hour: 'numeric',
   minute: '2-digit',
 });
+
+/**
+ * The event's page on Gen Con's site.
+ *
+ * Derived rather than carried. Every id is a category, a two-digit year, a
+ * couple of letters and then the event number the URL ends with — `BGM26ND306429`
+ * is `gencon.com/events/306429` — so shipping the URL as well was 27,467 copies
+ * of the same thirty characters, 93 KB gzipped, on the file that has to arrive
+ * before the app can show anything.
+ *
+ * An event that carries its own URL keeps it, so a feed from somewhere else, or
+ * an older one still on somebody's phone, is unaffected. An id that does not
+ * end in a number gets no link rather than a wrong one.
+ */
+export function eventUrl(event: ConEvent): string | undefined {
+  if (event.url) return event.url;
+  const number = /([0-9]+)$/.exec(event.id)?.[1];
+  return number ? `https://www.gencon.com/events/${number}` : undefined;
+}
 
 /** Formats a timestamp in the convention's own local time, not the viewer's. */
 export function formatTime(iso: string) {

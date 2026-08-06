@@ -8,6 +8,7 @@ import {
 } from '../data/venues';
 import {
   dayKey,
+  eventUrl,
   formatDayLabel,
   formatTimeRange,
   isHappeningAt,
@@ -217,8 +218,8 @@ export function RoomDialog({
                     >
                       <span className="schedule__time">{formatTimeRange(event)}</span>
                       <span className="schedule__body">
-                        {event.url ? (
-                          <a href={event.url} target="_blank" rel="noreferrer noopener">
+                        {eventUrl(event) ? (
+                          <a href={eventUrl(event)} target="_blank" rel="noreferrer noopener">
                             {event.title}
                           </a>
                         ) : (

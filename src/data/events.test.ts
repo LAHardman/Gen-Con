@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { roomIdForEvent, venueIdForEvent, type ConEvent } from './events';
+import { eventUrl, roomIdForEvent, venueIdForEvent, type ConEvent } from './events';
 import { ROOMS_BY_ID, VENUES_BY_ID } from './venues';
 
 const at = (locationText: string, roomText?: string, tableText?: string): ConEvent => ({
@@ -203,5 +203,33 @@ describe('finding the room inside the building', () => {
   it('has no room for an event with no location at all', () => {
     expect(venueIdForEvent(at(''))).toBeNull();
     expect(roomIdForEvent(at(''))).toBeNull();
+  });
+});
+
+describe('the link back to an event', () => {
+  const at = (id: string, url?: string) =>
+    ({ id, title: 't', locationText: 'ICC', start: '2026-07-30T10:00:00-04:00', url }) as ConEvent;
+
+  it('works it out from the id, which the feed no longer says twice', () => {
+    // 27,467 copies of the same thirty characters in front of a number the id
+    // already carries: 1.2 MB, 93 KB of it gzipped, on the file a phone fetches
+    // before it can show a single session.
+    expect(eventUrl(at('BGM26ND306429'))).toBe('https://www.gencon.com/events/306429');
+    expect(eventUrl(at('SEM26ND299001'))).toBe('https://www.gencon.com/events/299001');
+  });
+
+  it('keeps a URL an event brought with it', () => {
+    // An older feed still on somebody's phone, or one from anywhere else. The
+    // derivation is a fallback, not an override.
+    expect(eventUrl(at('BGM26ND306429', 'https://example.test/elsewhere'))).toBe(
+      'https://example.test/elsewhere',
+    );
+  });
+
+  it('offers no link rather than a wrong one', () => {
+    // An id that does not end in a number cannot name an event page, and a link
+    // to `gencon.com/events/` is worse than no link: it looks like it works.
+    expect(eventUrl(at('NOT-A-CODE'))).toBeUndefined();
+    expect(eventUrl(at(''))).toBeUndefined();
   });
 });
