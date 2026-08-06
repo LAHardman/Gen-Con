@@ -127,14 +127,19 @@ count the answers by hand: a corridor bent into a U, two squares meeting at one
 corner, a speck of trace noise, a staircase read twice from two storeys. Every
 assertion in both is mutation-tested.
 
-**The rest of the codebase is still untested**, and the two riskiest parts are
-among the untested ones: the HTML scraper in `scripts/lib/parse-events.mjs` and
-the room matcher in `src/data/events.ts`, both of which fail by quietly
-returning `null` rather than by throwing. `docs/code-review.md` §1.2–§1.5 says
-what to write for them, in the order worth writing it. The importer's
-resume-an-interrupted-pull logic is verified by running it, not by a test:
-`fetch-events.mjs` takes its lock and runs on import, so nothing in it can be
-called from a test without that happening.
+**The import is tested too, against real pages.** The HTML scraper and the room
+matcher both fail by quietly returning `null` rather than by throwing, which
+made them the riskiest code here: a source redesign that renamed one row label
+would drop that field from every event and the run would still report success.
+`scripts/lib/parse-events.test.mjs` runs against three pages saved off the live
+site under `__fixtures__/`, and `src/data/events.test.ts` runs the matcher over
+every one of the twenty-two distinct `Location` strings a full import contains.
+Vitest's `include` covers `scripts/**/*.test.mjs` for the first of those, so
+the scripts are tested where they live.
+
+The importer's resume-an-interrupted-pull logic is still verified by running it
+rather than by a test: `fetch-events.mjs` takes its lock and runs on import, so
+nothing in it can be called from a test without that happening.
 
 ## The map
 
@@ -999,20 +1004,28 @@ tuned to it. It imports the full 2026 catalogue — **27,537 events across 19
 event types**, matching the total the site itself reports — with the days and
 times it publishes.
 
-Of a 2,739-event sample spread evenly across all 19 types, **99.6% resolved to
-a room on the map**. The source uses 16 distinct `Location` values and several
-hundred `Room` values, and every `Location` but two resolves to a building.
+Measured over a full import rather than a sample — 27,467 events — **99.53%
+resolve to a room on the map**. The source uses 22 distinct `Location` values
+and several hundred `Room` values, and 15 of those 22 resolve to a building.
 
-Re-measured since against a full import rather than a sample — 27,467 events,
-every one of them — **nothing is unmatched at all**. The straggler below is
-still five blocks off the map; it simply wasn't in that year's catalogue.
+The 130 that do not resolve are all places the map has not got, rather than
+matching failures, and they divide cleanly:
 
-One straggler is left in the sample: **416 Wabash** (1 event), an address five
-blocks east of the campus with no building on the map. Nothing else — every
-other `Location` resolves to a building, and nothing inside a building the map
-knows goes unmatched.
+| | Events | |
+| --- | ---: | --- |
+| `Exhibit Hall`, `Exhibit Hall Booth #1229` | 79 | The source does not say which hall, and there are eleven |
+| Seven venues that are not on the map | 40 | Janus Lofts, Taxman CityWay, St. Elmo Steak House, 416 Wabash, Victory Field, White River State Park, The Oceanaire Seafood Room |
+| Foyers and concourse spots with no room authored | 11 | `North Plaza`, `Georgia Street Entrance`, `3rd Floor Foyer`, `Eerie` |
 
-That last one used to be worse than unmatched. Its `Room` reads
+Only the first is worth acting on, and the action is not in the matcher:
+naming which hall a booth is in needs the booth numbers, which the source does
+not publish. `src/data/events.test.ts` holds every one of the 22 `Location`
+strings and the room shapes that go with them.
+
+The most interesting of the unmatched is **416 Wabash** (1 event), an address
+five blocks east of the campus.
+
+It used to be worse than unmatched. Its `Room` reads
 `416 E Wabash St`, and with no venue recognised the matcher searched every room
 on the campus and put it in the **convention centre's Wabash Ballroom** — a
 confident answer, in the wrong building, with nothing to say it was a guess.

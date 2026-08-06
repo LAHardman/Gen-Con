@@ -247,20 +247,51 @@ the property the panel depends on.
 
 ---
 
-## 5. The two riskiest modules in the repository are still untested
+## 5. The two riskiest modules — done, and one claim here was wrong
 
-Unchanged from `code-review.md` §1.2–1.3, and still true: the HTML scraper
-(`scripts/lib/parse-events.mjs`) and the room matcher (`src/data/events.ts`)
-both fail by quietly returning `null` rather than by throwing. A source redesign
-that dropped 40% of events would look identical to a good run in the logs.
+The HTML scraper (`scripts/lib/parse-events.mjs`) and the room matcher
+(`src/data/events.ts`) both fail by quietly returning `null`, which is why they
+were the riskiest things here: a source redesign that renamed one row label
+would drop that field from every event, and the run would finish, report
+success and publish a schedule with no locations in it.
 
-Worth noting what has changed since that review: the matcher is now measurably
-*better* than it claimed — a full 27,467-event import leaves **nothing**
-unmatched, against the 99.6% the README records from a 2,739-event sample. That
-is a reason to pin the behaviour with tests, not a reason to skip them.
+`scripts/lib/parse-events.test.mjs` runs against three real pages saved under
+`__fixtures__/` — an event page, a catalogue page cut down to four game systems
+from 2.8 MB, and the day/time index. `src/data/events.test.ts` runs the matcher
+over the real location strings: there are only twenty-two distinct `Location`
+values across a full import, and all of them are in the test.
 
-The scraper's tests need fixtures: one saved `event.php`, one `categoryAll.php`,
-one `dayTimeList.php` under `scripts/lib/__fixtures__/`.
+Vitest's `include` now covers `scripts/**/*.test.mjs` as well as `src`, so the
+scripts are tested where they live rather than being given hand-written
+declarations to be importable from `src`.
+
+**A claim in this document was wrong.** It recorded that a full 27,467-event
+import "leaves **nothing** unmatched". Measured, it leaves 130 — 0.47% — and
+every one of them is a place the map has not got rather than a matcher failure:
+
+```
+ 79  the convention centre's "Exhibit Hall" and "Exhibit Hall Booth #1229" —
+     the source does not name which hall, and there are eleven
+ 40  seven venues that are not on the map: Janus Lofts, Taxman CityWay,
+     St. Elmo Steak House, 416 Wabash, Victory Field, White River State Park,
+     The Oceanaire Seafood Room
+ 11  foyers and concourse spots no room is authored for — "North Plaza",
+     "Georgia Street Entrance", "3rd Floor Foyer", "Eerie"
+```
+
+That is a better result than the round number was, and it is checkable. The
+first group is the only one worth acting on and the action is not in the
+matcher: naming which exhibit hall a booth is in would need the booth numbers,
+which the source does not publish.
+
+**Mutation-tested, both files.** Between them they catch: the Location label
+renamed at the source; insisting on a `<table>` again (the 2,661 roleplaying
+events whose markup loses it); a catalogue session emitted before any title;
+the day index assumed rather than read; a ticket count losing its sign; a label
+claimed by two fields; searching every room on the campus rather than the
+building's; substring matching instead of token boundaries; first match winning
+rather than longest; aliases ignored; an unknown building falling through to
+every room; a venue with rooms falling back to its first one.
 
 ---
 
