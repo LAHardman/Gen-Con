@@ -54,6 +54,83 @@ export const CONNECTIONS: Connection[] = [
   { kind: 'tunnel', way: 524099194, line: [[39.762024, -86.161795], [39.762918, -86.16176]] },
 ];
 
+/* ------------------------------------------------------------------ landings */
+
+/**
+ * A building a skywalk crosses that is not somewhere anyone is going.
+ *
+ * The network was drawn span by span, and a span joins whatever is on either
+ * side of the street it crosses — which is not always a venue. Leaving the JW
+ * Marriott the bridge lands in the Government Center's car park, and it is the
+ * *second* bridge, off the far side of that car park, that reaches the
+ * convention centre. Both are in `CONNECTIONS`; neither joined anything,
+ * because the thing in the middle is a car park and a car park is not a venue.
+ *
+ * That is the whole of what a landing is: a footprint a span may reach, so that
+ * two spans reaching the same one are known to be two halves of one covered
+ * walk. There is no plan of the inside, so a route through it is a straight
+ * line and named as one — but it is a straight line indoors, which is the fact
+ * that was missing.
+ *
+ * Both of them are car parks, which is not a coincidence: downtown's skywalks
+ * were built to get people from a garage to a building without crossing a road,
+ * so the garage is the middle of the chain rather than an end of it.
+ *
+ * How to find another: take a span that reaches exactly one venue, and ask what
+ * building the other end of it stands on. If a second span stands on that
+ * building too, it belongs here; if not, it is a dead end and a landing would
+ * chain nothing. Rings come from the same Overpass extract as the spans:
+ *
+ *     [out:json];
+ *     (way(340480879); way(340480885););
+ *     out geom;
+ *
+ * © OpenStreetMap contributors, ODbL.
+ */
+export interface Landing {
+  id: string;
+  /** As it reads in a direction: "Through the Government Center car park". */
+  name: string;
+  /** The OpenStreetMap way this came from. */
+  way: number;
+  /** Its footprint, thinned to 2 m — a span either touches it or it doesn't. */
+  ring: Line;
+}
+
+export const LANDINGS: Landing[] = [
+  {
+    id: 'government-center-parking',
+    name: 'the Government Center car park',
+    way: 340480879,
+    ring: [
+      [39.766714, -86.166897], [39.766734, -86.166892], [39.766754, -86.166885],
+      [39.766772, -86.166877], [39.766790, -86.166866], [39.766795, -86.166812],
+      [39.766795, -86.166778], [39.766769, -86.165555], [39.766768, -86.165498],
+      [39.766693, -86.165500], [39.766514, -86.165507], [39.766358, -86.165513],
+      [39.766182, -86.165520], [39.766009, -86.165526], [39.765984, -86.165532],
+      [39.765960, -86.165542], [39.765937, -86.165557], [39.765942, -86.166091],
+      [39.765957, -86.166735], [39.765984, -86.166752], [39.766000, -86.166786],
+      [39.766001, -86.166825], [39.765986, -86.166860], [39.765960, -86.166879],
+      [39.765961, -86.166925], [39.766027, -86.166923],
+    ],
+  },
+  {
+    id: 'world-of-wonders-garage',
+    name: 'the World of Wonders garage',
+    way: 340480885,
+    ring: [
+      [39.765045, -86.160861], [39.765572, -86.160837], [39.765552, -86.160127],
+      [39.765463, -86.160128], [39.764459, -86.160157], [39.764423, -86.160168],
+      [39.764424, -86.160292], [39.764414, -86.160380], [39.764415, -86.160479],
+      [39.764415, -86.160578], [39.764466, -86.160577], [39.764470, -86.160879],
+    ],
+  },
+];
+
+export const LANDINGS_BY_ID: Record<string, Landing> = Object.fromEntries(
+  LANDINGS.map((landing) => [landing.id, landing]),
+);
+
 /* ------------------------------------------------- which building, which floor */
 
 /**
@@ -103,23 +180,44 @@ function toSegment(point: readonly [number, number], from: readonly [number, num
   return Math.hypot(px - (ax + along * dx), py - (ay + along * dy));
 }
 
+/** Metres from a point to the nearest edge of a closed ring. */
+function toRing(point: readonly [number, number], ring: Line) {
+  let nearest = Infinity;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    nearest = Math.min(nearest, toSegment(point, ring[j], ring[i]));
+  }
+  return nearest;
+}
+
+/** The end of a span nearer a footprint, and how near it gets. */
+function endsAt(connection: Connection, ring: Line) {
+  const ends = [connection.line[0], connection.line[connection.line.length - 1]];
+  const away = ends.map((end) => toRing(end, ring));
+  const which = away[0] <= away[1] ? 0 : 1;
+  return { end: ends[which], away: away[which] };
+}
+
 /** For each span, the buildings it reaches and the floor it reaches them on. */
 const REACHES = new Map<Connection, Map<string, string>>(
   CONNECTIONS.map((connection) => {
-    const ends = [connection.line[0], connection.line[connection.line.length - 1]];
     const found = new Map<string, string>();
     for (const venue of VENUES) {
-      const ring = venueOutline(venue);
-      let nearest = Infinity;
-      for (const end of ends) {
-        for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
-          nearest = Math.min(nearest, toSegment(end, ring[j], ring[i]));
-        }
-      }
-      if (nearest > REACH) continue;
+      if (endsAt(connection, venueOutline(venue)).away > REACH) continue;
       const levels = VENUE_LEVELS[venue.id] ?? [];
       const level = ENTERS_ON[venue.id] ?? (levels.length === 1 ? levels[0] : undefined);
       if (level) found.set(venue.id, level);
+    }
+    return [connection, found];
+  }),
+);
+
+/** For each span, the landings it reaches and where on each it comes down. */
+const LANDS_ON = new Map<Connection, Map<string, readonly [number, number]>>(
+  CONNECTIONS.map((connection) => {
+    const found = new Map<string, readonly [number, number]>();
+    for (const landing of LANDINGS) {
+      const { end, away } = endsAt(connection, landing.ring);
+      if (away <= REACH) found.set(landing.id, end);
     }
     return [connection, found];
   }),
@@ -134,6 +232,17 @@ const REACHES = new Map<Connection, Map<string, string>>(
  */
 export function reachesOf(connection: Connection): ReadonlyMap<string, string> {
   return REACHES.get(connection) ?? new Map();
+}
+
+/**
+ * The landings a span comes down on, and the point on each where it does.
+ *
+ * A landing has no plan and so no floor to name — what a route needs from it is
+ * only the place, so that the next span off the same building can be joined to
+ * this one.
+ */
+export function landingsOf(connection: Connection): ReadonlyMap<string, readonly [number, number]> {
+  return LANDS_ON.get(connection) ?? new Map();
 }
 
 /**

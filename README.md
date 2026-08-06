@@ -261,6 +261,18 @@ floors are named building by building in `connections.ts`, since every building
 names them differently — the convention centre's skywalk level is its Level 2,
 Union Station's is the mezzanine over the Grand Hall.
 
+**Some of them land on a car park.** Four spans reach exactly one Gen Con venue
+and used to join nothing, which left the JW Marriott and the Hyatt Regency with
+no covered route anywhere — and that looked for a while like missing data. It
+was not. Each of the four comes down on a multi-storey garage that a second span
+carries on from: the JW's on the Government Center's, the Hyatt's on the World
+of Wonders. That is what these bridges were built for, so the garage is the
+middle of the chain rather than the end of it. `LANDINGS` in `connections.ts`
+holds those footprints — a building a route passes through and nobody is going
+to. There is no plan of the inside and no floor to name, so the crossing is a
+straight line and the direction says so: "Through the Government Center car
+park".
+
 Inside a building the map draws the **hallways** — the prefunction space and
 corridors, as open floor a shade lighter than the fabric either side. Those used
 to be styled as the gap between the rooms and were nearly invisible, which is

@@ -115,6 +115,28 @@ describe('what a route is worth walking to stay dry', () => {
     expect(walk.legs.some((leg) => leg.kind === 'skywalk')).toBe(true);
   });
 
+  // A skywalk lands where it lands, and twice on this campus that is a car
+  // park. Both spans of each pair were in `CONNECTIONS` from the start, and
+  // each named exactly one venue, so neither joined anything — the JW and the
+  // Hyatt had no covered route anywhere. The JW's 1,008 room pairs with the
+  // Marriott, the Westin, the ICC and the Hyatt were all outdoors; 273 are not
+  // now. The Hyatt's 48 with Le Méridien were all outdoors; none is now.
+  //
+  // Neither garage is a venue or ever will be — nobody is going there — but
+  // each is a floor between two bridges, which is all a route needs of it.
+  it.each([
+    ['jw-griffin-hall', 'marriott-ballroom', 'Through the Government Center car park'],
+    ['hyatt-lobby', 'le-meridien-lobby', 'Through the World of Wonders garage'],
+  ])('crosses a building nobody is going to, %s -> %s', (from, to, crossing) => {
+    const walk = routeBetweenRooms(from, to)!;
+    expect(walk.indoors).toBe(true);
+    expect(walk.legs.filter((leg) => leg.kind === 'skywalk')).toHaveLength(2);
+    expect(walk.legs.map((leg) => leg.text)).toContain(crossing);
+    // Named, rather than reported as a floor of a building with no plan: there
+    // is no `undefined` in a direction anybody is meant to follow.
+    for (const leg of walk.legs) expect(leg.text).not.toMatch(/undefined/);
+  });
+
   it('takes the street when the covered way is a long way round', () => {
     // Exhibit Hall B to the Marriott Ballroom is 154 m apart and 500 m by
     // skywalk, which doglegs up through the Westin and back down. 217 m on the

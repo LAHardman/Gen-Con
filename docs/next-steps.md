@@ -94,23 +94,40 @@ floor changes 19 → 50, and building pairs needing a long straight line 2 → *
 Every pair on the campus now walks a drawn floor, a skywalk or a surveyed
 pavement, and every room of a building reaches every other room of it.
 
-**What it did not buy, and this is worth recording.** The premise of this
-section used to be that the JW's 2nd floor "is one line of `CAMPUS_SHEETS` and
-it connects a whole hotel to the network". That is wrong, and the floor was
-necessary but not sufficient: **the JW's skywalk does not reach any Gen Con
-venue.** In OpenStreetMap its only bridge (way 340480902) runs east from the
-hotel and lands on the Indiana Government Center Parking Facility, 69 m short of
-the convention centre's outline, and no elevated way continues from there. The
-same is true of the Hyatt's (way 340480901) and of the pair at the Marriott
-(340480897, 340480908). Four of the twelve spans in `connections.ts` therefore
-touch exactly one registered building and join nothing.
+**What it did not buy, and it turned out not to be a hole in the source.** The
+premise of this section used to be that the JW's 2nd floor "is one line of
+`CAMPUS_SHEETS` and it connects a whole hotel to the network". That was wrong,
+and the floor was necessary but not sufficient: the JW's only bridge (way
+340480902) runs east from the hotel and lands 69 m short of the convention
+centre's outline. The same was true of the Hyatt's (way 340480901) and of the
+pair at the Marriott (340480897, 340480908) — four of the twelve spans touched
+exactly one registered building and so joined nothing.
 
-That is a hole in the source, not a filter: every `bridge` footway in the campus
-bounding box was checked, and the ten not already in `connections.ts` are all
-out in the margin — Blackford Street, the IUPUI footbridges, the ones north of
-Michigan Street. So seven of the fifteen skywalk-joined pairs of buildings still
-have no covered route, and closing that means either finding the missing spans
-in another source or drawing them.
+This was written up as a gap in OpenStreetMap. It was not. What each of those
+four spans lands on is a **car park**, and a second span carries on off the far
+side of it: the JW's bridge lands on the Indiana Government Center Parking
+Facility, from which the Marriott's two spans continue east; the Hyatt's lands
+on the World of Wonders Garage, from which Le Méridien's continues. That is
+what downtown's skywalks were built for — getting from a garage to a building
+without crossing a road — so a garage is the middle of a chain rather than the
+end of one. The spans were all there; the thing between them was not a venue,
+so nothing joined them up.
+
+`LANDINGS` in `connections.ts` is that missing piece: a footprint a span may
+come down on, with no plan of the inside and no floors to name. Two spans
+reaching the same landing are two halves of one covered walk, and `route.ts`
+joins them with a straight line across it, named as one ("Through the Government
+Center car park"). Finding another is mechanical: take a span reaching exactly
+one venue, ask what building its other end stands on, and check whether a second
+span stands on that building too. If not, it is a dead end and a landing there
+would chain nothing.
+
+**What it bought.** All 1,008 of the JW's room pairs with the Marriott, the
+Westin, the ICC and the Hyatt used to go out into the street; 273 no longer do.
+All 48 of the Hyatt's with Le Méridien did; none does now. The rest are covered
+routes that exist and lose to the pavement on distance, which is `walkBetween`
+working rather than failing — the JW to Exhibit Hall B is 293 m across the road
+against 862 m round three hotels.
 
 ---
 

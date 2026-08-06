@@ -27,7 +27,13 @@
  *   saying "take the stairs" of a guess would be inventing a staircase.
  */
 
-import { CONNECTIONS, reachesOf, type Connection } from './connections';
+import {
+  CONNECTIONS,
+  LANDINGS_BY_ID,
+  landingsOf,
+  reachesOf,
+  type Connection,
+} from './connections';
 import { PAVEMENT_EDGES, PAVEMENT_NODES } from './pavements';
 import { FLOOR_CHANGE_METRES, allVerticals, type Vertical } from './vertical';
 import { VENUES, VENUES_BY_ID, VENUE_LEVELS, venueOutline } from './venues';
@@ -69,7 +75,17 @@ export interface Walk {
   legs: Leg[];
   metres: number;
   minutes: number;
-  /** True where every leg is a measured surface — no outdoor guesswork. */
+  /**
+   * True where the whole route is under cover — which is exactly the route the
+   * covered search would have been allowed to find, because this is read off
+   * the same `outdoors` flag that search filters on rather than worked out
+   * again from the legs. The panel says "kept under cover" on the strength of
+   * it, and the two answering differently is how that sentence would come to
+   * be printed over a walk down Maryland St.
+   *
+   * A pavement is a surveyed surface and an accurate leg, but it is a surveyed
+   * surface out in the rain, so it counts against this.
+   */
   indoors: boolean;
   /** The route changes floor somewhere, and no source says exactly where. */
   viaStairs: boolean;
@@ -84,12 +100,18 @@ interface Node {
   level?: string;
   /** Its square on that floor, where it has one. */
   cell?: { cx: number; cy: number };
-  /** A way out of a building, or a junction of the pavement network. */
-  role?: 'door' | 'pavement';
+  /** Where a span comes down on a building nobody is going to. */
+  landingId?: string;
+  /** A way out of a building, a junction of the pavement network, or a landing. */
+  role?: 'door' | 'pavement' | 'landing';
 }
 
 const venueName = (venueId?: string) =>
   (venueId && (VENUES_BY_ID[venueId]?.shortName ?? VENUES_BY_ID[venueId]?.name)) ?? 'outside';
+
+/** What to call the far end of a leg — a venue, or the landing it crosses. */
+const placeName = (node: Node) =>
+  node.landingId ? LANDINGS_BY_ID[node.landingId].name : venueName(node.venueId);
 
 function anchorNode(id: string, anchor: Anchor): Node {
   const at = toPoint(anchor.at);
@@ -126,7 +148,10 @@ function verticalNodes(link: Vertical, index: number): [Node, Node] | null {
   return lower && upper ? [lower, upper] : null;
 }
 
-/** A span is two nodes, one at each end, each on the floor it lands on. */
+/**
+ * A span is two nodes, one at each end — each on the floor it lands on, or on
+ * the landing it comes down on where the thing it reaches has no floors.
+ */
 function spanNodes(connection: Connection, index: number): Node[] {
   const reaches = reachesOf(connection);
   const ends = [connection.line[0], connection.line[connection.line.length - 1]];
@@ -151,6 +176,14 @@ function spanNodes(connection: Connection, index: number): Node[] {
       venueId,
       level,
       cell: { cx: open.cx, cy: open.cy },
+    });
+  }
+  for (const [landingId, end] of landingsOf(connection)) {
+    nodes.push({
+      id: `s${index}_l${landingId}`,
+      at: toPoint({ lat: end[0], lng: end[1] }),
+      landingId,
+      role: 'landing',
     });
   }
   return nodes;
@@ -364,6 +397,37 @@ function campusGraph(): Campus {
     }
   });
 
+  /*
+   * Across a landing: the spans that come down on the same building are two
+   * halves of one covered walk, so join them.
+   *
+   * Nothing has drawn the inside, so the line across it is a straight one and
+   * costs what a straight one costs — no detour factor, because unlike a
+   * forecourt this is a floor, and a floor does not make you walk round a
+   * block. It is charged and named as the guess it is.
+   */
+  const byLanding = new Map<string, Node[]>();
+  for (const node of nodes.values()) {
+    if (!node.landingId) continue;
+    if (!byLanding.has(node.landingId)) byLanding.set(node.landingId, []);
+    byLanding.get(node.landingId)!.push(node);
+  }
+  for (const group of byLanding.values()) {
+    for (let a = 0; a < group.length; a += 1) {
+      for (let b = a + 1; b < group.length; b += 1) {
+        measured.push([
+          group[a].id,
+          group[b].id,
+          {
+            metres: Math.max(between(group[a].at, group[b].at), 5),
+            kind: 'walk',
+            points: [toLatLng(group[a].at), toLatLng(group[b].at)],
+          },
+        ]);
+      }
+    }
+  }
+
   // Same floor: the walk between them, found over the squares of that floor.
   const list = [...nodes.values()];
   for (let a = 0; a < list.length; a += 1) {
@@ -456,9 +520,12 @@ function walkEdge(one: Node, two: Node): Omit<Edge, 'to'> | null {
  * the Westin and back, and there the street is plainly right.
  *
  * So: take the covered route when it is within `WORTH_STAYING_IN`, and the
- * shortest otherwise. Seven of the fifteen skywalk-joined pairs have no covered
- * route at all — the bridges into the JW and the Hyatt land on floors nothing
- * has drawn — and those are unaffected either way.
+ * shortest otherwise.
+ *
+ * Where there is no covered route at all the question does not arise, and the
+ * shortest is simply taken. That used to include everything to or from the JW
+ * Marriott and the Hyatt, whose bridges land on car parks rather than on
+ * venues — see `LANDINGS`.
  */
 export function walkBetween(from: Anchor, to: Anchor): Walk | null {
   const shortest = search(from, to, false);
@@ -550,11 +617,13 @@ function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
   if (!cost.has(end.id)) return null;
 
   const legs: Leg[] = [];
+  let exposed = false;
   for (let id = end.id; id !== start.id; ) {
     const step = cameBy.get(id);
     if (!step) return null;
     const node = nodes.get(id)!;
     const previous = nodes.get(step.from)!;
+    if (step.edge.outdoors) exposed = true;
     legs.push(describe(step.edge, previous, node));
     id = step.from;
   }
@@ -565,7 +634,7 @@ function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
     legs: merge(legs),
     metres,
     minutes: walkingMinutes(metres),
-    indoors: legs.every((leg) => leg.kind !== 'outdoor'),
+    indoors: !exposed,
     viaStairs: legs.some((leg) => leg.kind === 'stairs'),
   };
 }
@@ -643,9 +712,9 @@ function describe(edge: Edge, from: Node, to: Node): Leg {
           : `Change to ${to.level} — the stairs and lifts are off this stretch`,
       };
     case 'skywalk':
-      return { ...base, venueId: to.venueId, level: to.level, text: `Skywalk to ${venueName(to.venueId)}` };
+      return { ...base, venueId: to.venueId, level: to.level, text: `Skywalk to ${placeName(to)}` };
     case 'tunnel':
-      return { ...base, venueId: to.venueId, level: to.level, text: `Tunnel to ${venueName(to.venueId)}` };
+      return { ...base, venueId: to.venueId, level: to.level, text: `Tunnel to ${placeName(to)}` };
     case 'pavement':
       return { ...base, text: 'Along the pavement' };
     // Three different things, and only the first is a step towards a building:
@@ -661,13 +730,18 @@ function describe(edge: Edge, from: Node, to: Node): Leg {
             ? 'Out to the street'
             : 'Outside',
       };
+    // A walk, which is a floor somebody drew — except across a landing, where
+    // it is the straight line over a building nobody drew, and there is no
+    // floor to name because there is no plan to have named one.
     default:
-      return {
-        ...base,
-        venueId: to.venueId,
-        level: to.level,
-        text: `Through ${venueName(to.venueId)}, ${to.level}`,
-      };
+      return to.landingId
+        ? { ...base, text: `Through ${placeName(to)}` }
+        : {
+            ...base,
+            venueId: to.venueId,
+            level: to.level,
+            text: `Through ${venueName(to.venueId)}, ${to.level}`,
+          };
   }
 }
 
