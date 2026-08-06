@@ -355,9 +355,17 @@ overlay laid out area by area, each area at its own zoom, the areas beside one
 another rather than where the buildings are. The booth cloud is aspect 1.84
 against 1.49 for the halls it would have to be, and laid on those halls each of
 the eight ways a rectangle can be, the best fit puts 72% of booths inside a
-hall where a real plan would put all of them. So a booth number resolves to an
-exhibitor and not to a place, and the app says nothing about which hall rather
-than guessing one.
+hall where a real plan would put all of them.
+
+**Gen Con's printed exhibit-hall map does not close it either**, which was worth
+finding out rather than assuming: it is a true plan of the booth grid, drawn to
+scale, and it letters no hall. Its only named regions are the Art Show, Authors
+Avenue, Entrepreneurs Avenue and the Family Fun Pavilion — that last one being
+Hall K under the name Gen Con gives it — and its booth numbers are vector art
+rather than text. See `docs/next-steps.md` §8.
+
+So a booth number resolves to an exhibitor and not to a place, and the app says
+nothing about which hall rather than guessing one.
 
 ### Getting between buildings
 

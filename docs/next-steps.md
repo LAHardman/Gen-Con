@@ -492,21 +492,48 @@ in the unmatched report where they belong.
 Everything below has been measured rather than estimated, and none of it is
 waiting on more code.
 
-**Booth to hall — waiting on one file this session cannot fetch.** §7 said the
+**Booth to hall — the map I predicted would close it does not.** §7 said the
 gap would close given "Gen Con's own printed exhibit-hall map with the letters
-over the booth grid". It exists:
+over the booth grid". That map exists —
+`files.gencon.com/2026.exhibithallmap.pdf`, blocked by this environment's
+egress policy but supplied by hand — and it was read. **It does not letter the
+halls.** That prediction was wrong and this is the correction.
 
-```
-https://files.gencon.com/2026.exhibithallmap.pdf
-```
+What the document actually is: one page, a two-page programme spread. The upper
+three-quarters is a true plan of the booth grid, drawn to scale, one continuous
+run of aisles numbered from the 100s at the left to the 3000s at the right. The
+lower quarter is the exhibitor index — name, leader dots, booth number — which
+is the same information `exhibitors.ts` already holds, and a "Sponsor Locations
+Outside Exhibit Hall" block giving hall letters for about thirty *demo spaces*,
+which is the same information again (`ICC : Hall B` and friends).
 
-linked from `gencon.com/experience/exhibithallinfo`, which is itself reachable.
-`files.gencon.com` is refused by this environment's egress policy — the gateway
-answers 403 to the CONNECT, before any request is made — so this is a
-permission, not a dead link and not a Gen Con problem. `www.gencon.com` answers
-200 throughout. With the file in hand the work is the OCR path the repo already
-has (`scripts/plan-labels.py`) plus a booth-to-hall table beside
-`exhibitors.ts`.
+Four things are worth knowing before anybody opens it again:
+
+  - **The booth numbers on the plan are vector art, not text.** Its text layer
+    holds 1,914 items and every one of them is either the index or one of a
+    dozen big labels. Reading the grid means OCR, which is `plan-labels.py`'s
+    job and about two thousand small numbers of it.
+  - **The only lettered regions are ART SHOW & AUTHORS AVENUE, ENTREPRENEURS
+    AVENUE, FAMILY FUN PAVILION and the EXHIBITOR SERVICES DESK**, plus five
+    EXHIBIT HALL ENTRANCE arrows. No hall letter appears anywhere.
+  - **One of those is a hall.** Gen Con calls Hall K "Family Fun" and
+    `venues.ts` follows it, so the shaded Family Fun Pavilion block — roughly
+    booths 1801–2215 — is Hall K. That is one hall of eleven, and neither of
+    the two booth numbers the schedule leaves unmatched (#1229, #1853) is in
+    it.
+  - **The plan and the hall rectangles disagree about where things are, and
+    that is unresolved.** The schedule places booth 174 in Hall J, and 174 is
+    at the extreme left of the plan; the Family Fun Pavilion, which is Hall K,
+    is centre-right. `venues.ts` has J and K adjacent at the east end of the
+    building. Two halls that share a wall are not at opposite ends of their own
+    plan, so one of those three things is wrong and no fit should be attempted
+    until it is known which.
+
+**What would actually close it** is a statement, from anywhere, of which halls
+an aisle range falls in — the exhibitor portal, a floor-plan sheet with the air
+walls lettered, or Gen Con asked directly. Failing that, OCR of the plan gives
+booth *positions*, which combined with a hall arrangement that can be trusted
+would give the answer geometrically. Neither half is in hand.
 
 **Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
 the Escape Room and Circle Centre are single-room venues Gen Con does not
