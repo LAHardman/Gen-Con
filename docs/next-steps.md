@@ -367,12 +367,35 @@ pair with, and until one of those yields a mark, these five keep the inference.
 That is not a bad answer for a route to give: it says which stretch of corridor
 the stairs are off rather than naming one, which is what the plans support.
 
-**Still open: `plans/campus/` is gitignored**, so a rebuild without
-`npm run plans:campus` writes a `venue-plan.ts` missing the convention centre's
-stairs and nine whole floors. The script warns, and `venue-plan.test.ts` names
-every floor it expects rather than counting them, so the gap fails the build
-rather than shipping. Committing the sheets is the alternative and costs
-eighteen megabytes of somebody else's drawings.
+**Done: `plans/campus/` being gitignored no longer writes a bad file.** The
+sheets are Gen Con's drawings and eighteen megabytes of them, so a fresh clone
+has none — and a rebuild without them used to *warn* and then write a
+`venue-plan.ts` missing ten floors and the convention centre's staircases. That
+file parses, type-checks and renders; the only symptoms arrive much later and
+somewhere else, as a building that stops changing floors and hotels no route
+can reach. A warning scrolls past in a build log.
+
+It now refuses, exits 1, and leaves the existing file alone, naming what would
+have gone:
+
+```
+plans/campus/ is empty, so this run would write a venue-plan.ts missing
+10 floors and the stairs of 2 more — a file that looks
+perfectly healthy and cannot route into half the hotels.
+
+  no floor at all   embassy-suites 2nd floor
+  ...
+  no stairs         icc Level 2
+
+Run `npm run plans:campus` first. To build without them anyway, and get
+that file on purpose, pass --without-campus.
+```
+
+That list is derived from `CAMPUS_SHEETS` rather than written beside it,
+because the old warning said "six whole floors" for as long as there were
+nine. The decision is `refuseToWrite` in `scripts/lib/plan-sources.mjs`, kept
+out of `venue-plans.mjs` because that script reads and writes on import and
+could not otherwise be asked.
 
 ---
 

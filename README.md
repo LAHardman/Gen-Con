@@ -156,6 +156,25 @@ invisible in the route — same legs, same metres, twice the time — so
 `useWarmCampus.test.ts` counts grid searches instead, and asserts that the
 build is divided finely enough to be interrupted at all.
 
+**The search is tested on order, not membership**, since that is where it goes
+wrong invisibly: the list is full, every entry is a real room, and the only
+sign is that you keep looking past the first one. Written against the real
+rooms rather than a fixture, because the cases that matter are collisions the
+campus actually has — two buildings that both number a room 104, a hotel with a
+Grand Hall and a Grand Bar, a theatre whose street address begins 140. That
+last one was a live bug the tests found: typing `140` offered the Indiana
+Repertory Theatre above the convention centre's Meeting Room 140, because an
+alias *prefix* scored better than an exact alias.
+
+**The plan build refuses rather than warning.** `plans/campus/` is gitignored,
+and a rebuild without it wrote a `venue-plan.ts` that parsed, type-checked and
+rendered while missing ten floors and the convention centre's staircases —
+the quietest failure here, because its output is a valid file. It now exits 1
+and leaves the old file alone, naming every floor that would have gone;
+`--without-campus` is the way to mean it. The decision is `refuseToWrite` in
+`scripts/lib/plan-sources.mjs`, kept out of `venue-plans.mjs` because that
+script reads and writes on import and could not otherwise be asked.
+
 ## The map
 
 The basemap is real: live tiles of downtown Indianapolis, with real streets and

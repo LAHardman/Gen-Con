@@ -46,6 +46,8 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { decodePng } from './lib/png.mjs';
 
+import { refuseToWrite } from './lib/plan-sources.mjs';
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PLANS = join(ROOT, 'plans/venues');
 const CAMPUS = join(ROOT, 'plans/campus');
@@ -801,35 +803,30 @@ function everySheet() {
     else console.warn(`  ${file}: not in SHEETS, skipped`);
   }
   /*
-   * Campus sheets are read whenever they are there, and their absence is said
-   * out loud.
+   * Campus sheets are read whenever they are there, and their absence stops the
+   * run — see `refuseToWrite` in `lib/plan-sources.mjs`, which is where that
+   * decision lives and is tested.
    *
-   * They are not committed — they are Gen Con's drawings and eighteen megabytes
-   * of them — so a fresh clone has none, and a rebuild without them writes a
-   * `venue-plan.ts` missing the convention centre's stairs and six whole
-   * floors: the JW's 2nd and 3rd, the Hyatt's, Hilton's and Le Meridien's 1st,
-   * and the Embassy's 2nd. That file looks perfectly healthy; the only signs
-   * are a building that stops changing floors and hotels that cannot be routed
-   * into. Hence the warning rather than a silent skip, and the named list in
-   * `venue-plan.test.ts` rather than a count.
+   * They are not committed, so a fresh clone has none, and a rebuild without
+   * them used to write a `venue-plan.ts` missing ten floors and the convention
+   * centre's staircases. That file looks perfectly healthy; the only signs are
+   * a building that stops changing floors and hotels no route can reach.
    */
-  let campus = [];
-  try {
-    campus = readdirSync(CAMPUS).filter((n) => n.endsWith('.png')).sort();
-  } catch {
-    campus = [];
-  }
-  if (!campus.length) {
-    console.warn('  no plans/campus — run `npm run plans:campus` first, or the');
-    console.warn("  convention centre's stairs and six whole floors of hotels");
-    console.warn('  will be missing from the output');
-  }
-  for (const file of campus) {
+  for (const file of campusSheetFiles()) {
     const targets = CAMPUS_SHEETS[file.replace(/\.png$/, '')];
     if (targets) add(CAMPUS, file, targets);
     else console.warn(`  campus/${file}: not in CAMPUS_SHEETS, skipped`);
   }
   return list;
+}
+
+/** The campus sheets on disk, or none if `plans:campus` has not been run. */
+function campusSheetFiles() {
+  try {
+    return readdirSync(CAMPUS).filter((name) => name.endsWith('.png')).sort();
+  } catch {
+    return [];
+  }
 }
 
 async function main() {
@@ -874,6 +871,20 @@ async function main() {
   }
 
   if (only) return;
+
+  // Checked here rather than at the top, so a run that was going to fail has
+  // still reported every sheet it did read before it says why it is stopping.
+  const refusal = refuseToWrite({
+    campusFiles: campusSheetFiles(),
+    allowed: process.argv.includes('--without-campus'),
+    campusSheets: CAMPUS_SHEETS,
+  });
+  if (refusal) {
+    console.error(`\n${refusal}`);
+    process.exitCode = 1;
+    return;
+  }
+
   writeFileSync(OUT, render(halls, snapped, lifts));
   const size = Math.round(readFileSync(OUT).length / 1024);
   const shapes = [...halls.values()].reduce((n, list) => n + list.length, 0);

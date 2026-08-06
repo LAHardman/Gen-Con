@@ -1,0 +1,217 @@
+/**
+ * What comes back when somebody types, and in what order.
+ *
+ * Ordering is the whole feature. A search that returns the right eight results
+ * in the wrong order is a search that put what you asked for below what you
+ * didn't, and there is nothing to see: the list is full, every entry is a real
+ * room, and the only sign is that you keep having to look past the first one.
+ * So most of these assert the order rather than the membership.
+ *
+ * They also assert against the real rooms rather than a fixture, because the
+ * cases that matter are the collisions the campus actually has — two buildings
+ * that both number a room 104, a hotel with a Grand Hall and a Grand Bar — and
+ * those are the ones a made-up fixture would never think to contain.
+ */
+
+import { describe, expect, it } from 'vitest';
+import { buildEventSearchIndex, search, type EventSearchIndex } from './search';
+import { indexEvents, type ConEvent } from './events';
+
+const NO_EVENTS: EventSearchIndex = { entries: [] };
+
+const ids = (query: string, events: EventSearchIndex = NO_EVENTS, limit = 8) =>
+  search(query, events, limit).map((hit) => hit.room.id);
+
+/** An event in a room, with only the fields the search and the index read. */
+const event = (over: Partial<ConEvent> & { title: string; roomText: string }): ConEvent => ({
+  id: over.title + over.roomText + (over.start ?? ''),
+  locationText: 'ICC',
+  start: '2026-07-30T10:00:00-04:00',
+  ...over,
+});
+
+describe('finding a room', () => {
+  it('puts the room whose name starts with what you typed first', () => {
+    const [first] = search('exhibit hall b', NO_EVENTS);
+    expect(first.room.id).toBe('hall-b');
+    expect(first.kind).toBe('room');
+  });
+
+  it('takes an exact alias as seriously as a name', () => {
+    // "Hall B" is what the schedule calls it and what is printed on it; the
+    // room's actual name is "Exhibit Hall B", which that does not start.
+    expect(ids('hall b')[0]).toBe('hall-b');
+  });
+
+  it('matches a word inside a name, not just the beginning of one', () => {
+    // Nobody types "white river ballroom a–d" with the dash in the right place.
+    const hits = ids('river');
+    expect(hits.length).toBeGreaterThan(0);
+    for (const id of hits) expect(id).toMatch(/^jw-white-river/);
+  });
+
+  it('puts the room actually called 140 above the one whose address begins 140', () => {
+    // A real ordering bug, and one nobody would have found by reading the code.
+    // The Indiana Repertory Theatre's only alias is its street address, 140 W
+    // Washington St, so "140" matched it as a prefix — and a prefix scored
+    // *better* than an exact alias, which is what the convention centre's
+    // Meeting Room 140 had. Typing a room number offered a theatre.
+    const hits = search('140', NO_EVENTS, 10);
+    expect(hits[0].room.id).toBe('rooms-130-145');
+    expect(hits.map((hit) => hit.room.id)).toContain('indiana-rep-stage');
+
+    // On the scores, not only on the order: these two also differ in name
+    // length, and the tie-break would put the right one first by luck even with
+    // the ranking back to front.
+    const at = (id: string) => hits.find((hit) => hit.room.id === id)!;
+    expect(at('rooms-130-145').score).toBeLessThan(at('indiana-rep-stage').score);
+  });
+
+  it('ranks the three ways a name can match, in that order', () => {
+    // "room" is the query that has all three on the real campus, which is why
+    // it is this one: the JW's `Room 109` starts with it, the Hyatt's `Board
+    // Room` has it as a later word, and `Sagamore Ballroom` merely contains it.
+    // They are not equally good answers and the order is the whole of saying
+    // so.
+    const scored = search('room', NO_EVENTS, 40);
+    const at = (id: string) => scored.find((hit) => hit.room.id === id)!;
+    const starts = at('jw-room-109');
+    const word = at('hyatt-board-room');
+    const anywhere = at('sagamore-ballroom');
+    expect([starts, word, anywhere].every(Boolean)).toBe(true);
+    expect(starts.score).toBeLessThan(word.score);
+    expect(word.score).toBeLessThan(anywhere.score);
+    // And the list itself is in that order, not merely scored in it.
+    expect(scored.indexOf(starts)).toBeLessThan(scored.indexOf(word));
+    expect(scored.indexOf(word)).toBeLessThan(scored.indexOf(anywhere));
+  });
+
+  it('breaks a tie on the shorter name', () => {
+    // Five rooms called Grand something, all matched the same way. Length is
+    // the only thing left, and it is the right thing: the shorter name is the
+    // more likely to be the whole of what somebody meant.
+    const hits = search('grand', NO_EVENTS, 20).map((hit) => hit.room.name);
+    const lengths = hits.map((name) => name.length);
+    expect(hits.length).toBeGreaterThan(2);
+    expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+  });
+
+  it('offers both buildings that number a room the same', () => {
+    // The convention centre and the JW both have a 104, and there is nothing in
+    // "104" to say which. Picking one would take half the people who type it to
+    // the wrong building, and look exactly like a working search.
+    const hits = search('104', NO_EVENTS, 20);
+    expect(new Set(hits.map((hit) => hit.room.venueId)).size).toBeGreaterThan(1);
+    expect(hits.map((hit) => hit.room.id)).toEqual(
+      expect.arrayContaining(['rooms-101-117', 'jw-rooms-101-104']),
+    );
+  });
+
+  it('finds a room by the building it is in', () => {
+    const hits = search('lucas oil', NO_EVENTS, 20);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) expect(hit.room.venueId).toBe('lucas-oil');
+  });
+
+  it('ranks the building below anything the room itself is called', () => {
+    // "Westin" matches every room in the Westin by its building, and the
+    // Westin's own Grand Ballroom by name. The named one is what was meant.
+    const byName = search('grand ballroom', NO_EVENTS, 20);
+    const byVenue = search('westin', NO_EVENTS, 20);
+    expect(byName[0].score).toBeLessThan(byVenue[0].score);
+  });
+
+  it('says nothing at all for one character', () => {
+    // "h" matches most of the campus. An eight-item list assembled from that is
+    // noise arriving before anybody has finished typing.
+    expect(search('h', NO_EVENTS)).toEqual([]);
+    expect(search('', NO_EVENTS)).toEqual([]);
+    expect(search('ha', NO_EVENTS).length).toBeGreaterThan(0);
+  });
+
+  it('stops at the limit it was given', () => {
+    expect(search('hall', NO_EVENTS, 3)).toHaveLength(3);
+    expect(search('hall', NO_EVENTS, 20).length).toBeGreaterThan(3);
+  });
+});
+
+describe('finding an event', () => {
+  const feed = (events: ConEvent[]) => buildEventSearchIndex(indexEvents(events));
+
+  it('takes you to the room the event is in', () => {
+    // An event is not a place; the hit is really a hit on where it happens.
+    const events = feed([event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall B' })]);
+    const [hit] = search('catan', events);
+    expect(hit.kind).toBe('event');
+    expect(hit.room.id).toBe('hall-b');
+    expect(hit.event?.title).toBe('Learn to Play Catan');
+  });
+
+  it('collapses repeats of one title in one room, and counts them', () => {
+    // "Learn to Play" runs forty times in the same hall. Listing each would
+    // fill the list with one answer and hide every other.
+    const events = feed(
+      ['09:00', '11:00', '13:00'].map((at) =>
+        event({
+          title: 'Learn to Play Catan',
+          roomText: 'Exhibit Hall B',
+          start: `2026-07-30T${at}:00-04:00`,
+        }),
+      ),
+    );
+    const hits = search('catan', events);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].sessions).toBe(3);
+    // The soonest, because that is the one somebody can still get to.
+    expect(hits[0].event?.start).toContain('T09:00');
+  });
+
+  it('keeps one title in two rooms as two answers', () => {
+    // The same collapse must not reach across rooms: which hall it is in is
+    // exactly what somebody is searching to find out.
+    const events = feed([
+      event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall B' }),
+      event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall C' }),
+    ]);
+    expect(new Set(search('catan', events).map((hit) => hit.room.id))).toEqual(
+      new Set(['hall-b', 'hall-c']),
+    );
+  });
+
+  it('ranks a room above the events happening in it', () => {
+    // Typing "hall b" means the room. It has forty events whose titles contain
+    // those letters, and every one of them would otherwise be in the way.
+    const events = feed([
+      event({ title: 'Hall B Speedrun', roomText: 'Exhibit Hall B' }),
+      event({ title: 'Hall B Tournament', roomText: 'Exhibit Hall B' }),
+    ]);
+    const [first] = search('hall b', events);
+    expect(first.kind).toBe('room');
+    expect(first.room.id).toBe('hall-b');
+  });
+
+  it('prefers a title that starts with what you typed', () => {
+    const events = feed([
+      event({ title: 'Advanced Catan Strategy', roomText: 'Exhibit Hall C' }),
+      event({ title: 'Catan Championship', roomText: 'Exhibit Hall B' }),
+    ]);
+    expect(search('catan', events).map((hit) => hit.room.id)).toEqual(['hall-b', 'hall-c']);
+  });
+
+  it('leaves out events the map cannot place', () => {
+    // An event in a room nothing draws has nowhere to take you, so offering it
+    // is a dead end dressed as a result. 130 of a real import's 27,467 are like
+    // this. The filtering is `indexEvents`' — an unplaceable event never
+    // reaches `byRoom` — and this asserts it end to end, from the feed to what
+    // somebody sees, since that is the property that actually matters.
+    const events = feed([
+      event({ title: 'Catan Somewhere', roomText: 'Booth #1229', locationText: 'ICC' }),
+      event({ title: 'Catan In A Hall', roomText: 'Exhibit Hall B' }),
+    ]);
+    expect(search('catan', events).map((hit) => hit.event?.title)).toEqual(['Catan In A Hall']);
+  });
+
+  it('has no events at all before a feed arrives', () => {
+    expect(buildEventSearchIndex(null).entries).toEqual([]);
+  });
+});

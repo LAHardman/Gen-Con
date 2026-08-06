@@ -34,7 +34,22 @@ export interface SearchHit {
 /** Lower is better. Ordered by how directly the text was matched. */
 const SCORE = {
   roomNameStart: 0,
-  aliasExact: 1,
+  /**
+   * Typed the whole of what the room is called, so as good as it gets — and it
+   * has to be at least as good as `aliasStart` below, which is where this was
+   * wrong. Ranked *under* a prefix, "140" offered the Indiana Repertory Theatre
+   * above the convention centre's Meeting Room 140, because the theatre's only
+   * alias is its street address and that address is 140 W Washington St. The
+   * one room on the campus actually called 140 came second to a coincidence of
+   * house numbering.
+   */
+  aliasExact: 0,
+  /**
+   * Typed the start of one of its other names. Weaker than an exact match and
+   * than the room's own name, because a prefix of an alias is the loosest thing
+   * here that still counts as naming the place.
+   */
+  aliasStart: 1,
   roomNameWord: 2,
   roomNameAnywhere: 3,
   // A room found because somebody is standing in it. Below the room's own
@@ -109,7 +124,7 @@ const ROOM_KEYS: RoomKeys[] = ROOMS.map((room) => ({
 function scoreRoom(keys: RoomKeys, query: string): number | null {
   if (keys.name.startsWith(query)) return SCORE.roomNameStart;
   if (keys.aliases.some((alias) => alias === query)) return SCORE.aliasExact;
-  if (keys.aliases.some((alias) => alias.startsWith(query))) return SCORE.roomNameStart;
+  if (keys.aliases.some((alias) => alias.startsWith(query))) return SCORE.aliasStart;
   if (startsWord(keys.name, query)) return SCORE.roomNameWord;
   if (keys.aliases.some((alias) => startsWord(alias, query))) return SCORE.roomNameWord;
   if (keys.name.includes(query)) return SCORE.roomNameAnywhere;
