@@ -7,53 +7,69 @@
  * is not in this repository; it is published each year and has to be fetched by
  * hand (`files.gencon.com` refuses this environment's egress).
  *
- * WHAT IS ON THE PAGE. The lower quarter is the exhibitor index, which is text
- * and which `exhibitors.ts` already holds. The upper three quarters is the
- * booth grid, and *none of it is text*: 4,612 filled paths, of which 405 are
- * stand rectangles and about 1,900 are the outlines of digits. The page's text
- * layer has 1,914 items and every one is the index or one of a dozen big
- * labels. So the booth numbers have to be read as shapes.
+ * WHAT IS ON THE PAGE. The exhibitor index is text, and `exhibitors.ts`
+ * already holds it. The floor is not: 4,495 filled paths, of which 2,099 are
+ * the outlines of digits and most of the rest are the lines between stands.
+ * The page's text layer holds the index and a dozen big labels and nothing
+ * else, so the booth numbers have to be read as shapes.
  *
- * HOW THEY ARE READ, and each step is checkable:
+ * WHICH PATHS ARE ON THE FLOOR. The floor is not a band across the page — it
+ * is an L, whose right-hand third comes down 140 points further than its left,
+ * with the index filling the notch beside it. This used to be cut at `y > 300`
+ * and that took 205 stands off the plan along with the index. The sheet draws
+ * the floor as a single filled polygon, over the index's white background
+ * rather than under it, so the polygon answers the question directly.
+ *
+ * HOW THE NUMBERS ARE READ, and each step is checkable:
  *
  *   1. Every filled path is replayed through the content stream with its
  *      transform, so each shape lands in page coordinates.
- *   2. A digit is navy, 4.2 pt tall and no wider than tall. That is 1,935
+ *   2. A digit is navy, 4.2 pt tall and no wider than tall. That is 2,099
  *      shapes. The hairlines between stands are the same colour and are 0.7 pt
  *      tall, which is what separates them.
  *   3. Each digit is scan-filled into a 12x16 coverage raster, normalised to
  *      its own bounding box, and clustered by mean absolute difference. Ten
- *      clusters come out far larger than the rest — 330 down to 82 — and they
- *      are the ten digits. `DIGITS` below is what those ten look like, read off
- *      a rendering of the cluster means. Everything after them is a handful of
- *      stray letters from labels that happen to be the same height.
- *   4. Digits are grouped into lines by baseline proximity, then into numbers
+ *      clusters come out far larger than the rest. Those are the ten digits;
+ *      `DIGITS` below is what they look like, read off a rendering of the
+ *      cluster means, which is the one step here a machine did not do.
+ *   4. Every glyph is then read as the *nearest of those ten means*, not as
+ *      whichever cluster absorbed it. A cluster exists because nothing took
+ *      its seed, and a seed is an arbitrary specimen — reading by cluster
+ *      dropped 36 glyphs into an eleventh one and took a digit off 36 numbers.
+ *   5. Digits are grouped into lines by baseline proximity, then into numbers
  *      by *advance* — the distance from one glyph's left edge to the next.
  *      Not by the gap between their boxes: "1" is 1.2 pt narrower than every
  *      other digit, so the gap after a 1 is the same size as the gap between
  *      two numbers, and no threshold on it can tell them apart. The advance is
  *      2.7 pt inside a number and 6.4 pt between two.
- *   5. A number is three or four digits. A longer run is two numbers set closer
+ *   6. A number is three or four digits. A longer run is two numbers set closer
  *      than the rest — booths facing each other across an aisle — and is cut at
  *      the widest advance inside it.
  *
- * HOW IT IS CHECKED, which matters more than any of the above. `exhibitors.ts`
- * holds 562 booth numbers, pulled from a different Gen Con system on a
- * different day. 521 of the 524 numbers read here are in it: 99.4%. The three
- * that are not are valid-looking numbers for stands nobody had taken. Nothing
- * about this pipeline was tuned against that list — it is the answer sheet, and
- * it is the reason the reading can be believed.
+ * HOW THE STANDS ARE FOUND. Not by looking for rectangles: a stand's outline
+ * is drawn as four separate strips and only some of them leave the content
+ * stream as one closed path, so "the rectangle nearest this number" gave one
+ * rectangle to several numbers and wrote 316 stands on top of each other.
+ * Every line on the sheet is rasterised instead, the digits left out of it, and
+ * each stand grows out from its number until it meets a line or another stand.
+ * They grow together, which is what makes overlapping impossible rather than
+ * unlikely.
  *
- * WHAT THIS DOES NOT DO. It reads the sheet; it does not place anything. `x`
- * and `y` in what it writes are page points and nothing else — the halls are
- * laid along the page in numbering order rather than in the arrangement the
- * building has, so Halls F and G are side by side here and stacked in the
- * convention centre's own floor plans. Turning page points into coordinates is
- * `fit-booths.mjs`, which lays each hall's block into that hall separately,
- * and there is a reason it is a second script rather than the end of this one.
+ * HOW IT IS CHECKED, which matters more than any of the above. `exhibitors.ts`
+ * holds 726 booth numbers, pulled from a different Gen Con system on a
+ * different day. 559 of the 565 numbers read here are in it: 98.9%. Nothing
+ * about this pipeline was tuned against that list — it is the answer sheet, it
+ * is the reason the reading can be believed, and the script refuses to write a
+ * file that disagrees with it, because a misreading produces numbers and
+ * numbers look like numbers.
+ *
+ * WHAT THIS DOES NOT DO. It reads the sheet; it does not place it. `x` and `y`
+ * here are page points. They do turn into coordinates — the sheet is one plan
+ * of the whole floor, drawn to scale — but doing that is `fit-booths.mjs`.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { encodePng } from './lib/png.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -68,10 +84,26 @@ const OUT = join(ROOT, 'src/data/booth-plan.ts');
  * as a picture and read. Re-run the script with `--digits` to write that
  * picture out again and check it.
  */
-const DIGITS = ['1', '2', '3', '5', '4', '6', '9', '0', '7', '8', '9', '6'];
+const DIGITS = ['2', '1', '3', '5', '4', '6', '0', '9', '7', '8'];
 
 /** Navy. Everything on the grid is drawn in it; nothing else is. */
 const INK = '22,30,39';
+/**
+ * The carpet, which is the exhibit floor and the only reliable way to say
+ * what is on it.
+ *
+ * This used to be `y > 300` — "the grid is the upper three quarters, below it
+ * is the exhibitor index" — and that is wrong, because the floor is not a
+ * band across the page. It is an L: the right-hand third comes down 140 points
+ * further than the left, and the index fills the notch beside it. A horizontal
+ * cut cannot separate those two, and this one took 205 stands off the plan
+ * along with the index.
+ *
+ * The sheet draws the floor as one filled polygon in this colour, over the
+ * index's white background rather than under it, so the polygon is the answer
+ * to the question directly and no cut has to be guessed.
+ */
+const CARPET = '246,242,236';
 /** A stand is a whole number of ten-foot booths. */
 const MODULE = 12;
 
@@ -152,7 +184,82 @@ async function shapesOf(pdfPath) {
       pending = null;
     }
   }
-  return shapes;
+  // The page's text layer is the exhibitor index and a dozen big labels, so it
+  // is no use for booth numbers — but five of those labels say EXHIBIT HALL
+  // ENTRANCE, and where a floor is entered is worth more to the fit than any
+  // amount of what is on it.
+  const texts = (await page.getTextContent()).items
+    .filter((it) => it.str && it.str.trim())
+    .map((it) => ({ text: it.str.trim(), x: it.transform[4], y: it.transform[5], width: it.width ?? 0, height: it.height ?? 0 }));
+  return { shapes, texts };
+}
+
+/**
+ * Where the sheet says you can get on to the floor.
+ *
+ * Each label is set beside the wall it names, reading along it, so the label's
+ * middle pushed on to the nearest point of the carpet outline is the doorway
+ * to within a few metres — which is finer than the outline itself is drawn.
+ */
+function entrancesOf(texts, carpet) {
+  const found = texts.filter((t) => /EXHIBIT\s+HALL\s+ENTRANCE/i.test(t.text));
+  return found.map((t) => {
+    // Rotated labels carry their length in y rather than x; either way the
+    // middle is half a label along whichever way it runs.
+    const along = t.width || 0;
+    const mid = t.height > t.width
+      ? [t.x, t.y + along / 2]
+      : [t.x + along / 2, t.y];
+    let best = mid;
+    let near = Infinity;
+    for (let i = 0, j = carpet.length - 1; i < carpet.length; j = i, i += 1) {
+      const [ax, ay] = carpet[j];
+      const [bx, by] = carpet[i];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = dx * dx + dy * dy;
+      const t0 = len ? Math.max(0, Math.min(1, ((mid[0] - ax) * dx + (mid[1] - ay) * dy) / len)) : 0;
+      const on = [ax + dx * t0, ay + dy * t0];
+      const gap = Math.hypot(on[0] - mid[0], on[1] - mid[1]);
+      if (gap < near) { near = gap; best = on; }
+    }
+    return { x: NUM(best[0]), y: NUM(best[1]), away: NUM(near) };
+  });
+}
+
+/**
+ * The exhibit floor's outline, off the sheet rather than off a guess.
+ *
+ * The widest single-ring fill in the carpet colour. The tinted feature blocks
+ * — Art Show, Family Fun, Entrepreneurs Avenue — are drawn on top of it in a
+ * different colour and do not compete; nothing else on the page is anywhere
+ * near this size.
+ */
+function floorOf(shapes) {
+  const carpets = shapes.filter((s) => s.ink === CARPET && s.rings === 1);
+  if (!carpets.length) throw new Error(`no ${CARPET} fill on the page: is this the exhibit hall map?`);
+  const widest = carpets.reduce((best, s) => (s.x1 - s.x0 > best.x1 - best.x0 ? s : best));
+  if (widest.x1 - widest.x0 < 500) throw new Error('the carpet is too small to be the floor');
+  return widest.subpaths[0];
+}
+
+const describe = (ring) => {
+  const xs = ring.map((p) => p[0]);
+  const ys = ring.map((p) => p[1]);
+  return `x ${Math.min(...xs).toFixed(0)}-${Math.max(...xs).toFixed(0)} y ${Math.min(...ys).toFixed(0)}-${Math.max(...ys).toFixed(0)}`;
+};
+
+/** Even-odd, on the shape's own middle. */
+function standsOn(ring, s) {
+  const x = (s.x0 + s.x1) / 2;
+  const y = (s.y0 + s.y1) / 2;
+  let odd = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const [px, py] = ring[i];
+    const [qx, qy] = ring[j];
+    if (py > y !== qy > y && x < ((qx - px) * (y - py)) / (qy - py) + px) odd = !odd;
+  }
+  return odd;
 }
 
 /** Coverage raster of a glyph, normalised to its own box, top row first. */
@@ -205,27 +312,266 @@ function cluster(rasters, tol = 0.06) {
   return out.sort((a, b) => b.length - a.length);
 }
 
+/**
+ * Every line the sheet draws, as a raster, so that a stand can be found by
+ * walking outwards from its number until something stops it.
+ *
+ * WHY NOT JUST TAKE THE RECTANGLES. Because they are not rectangles. A stand's
+ * outline is drawn as its four sides, each a separate filled strip, and only
+ * some of them happen to come out of the content stream as one closed path.
+ * Booth 131's outline is four fragments and was never found; 131 then took the
+ * nearest rectangle it could see, which was 129's, and the two were written
+ * with the same middle and the same size. 150 rectangles ended up carrying
+ * more than one number that way — 316 stands drawn on top of each other, which
+ * is most of what was wrong with the last map.
+ *
+ * So nothing here looks for a rectangle. The lines are drawn into a raster,
+ * the digits left out of it because they are inside the stands, and each stand
+ * is then whatever its number can expand into.
+ */
+function wallsOf(shapes, glyphs, scale = 4) {
+  const skip = new Set(glyphs);
+  const walls = shapes.filter((s) => s.ink === INK && !skip.has(s));
+  const points = walls.flatMap((s) => s.subpaths.flat());
+  const x0 = Math.min(...points.map((p) => p[0]));
+  const y0 = Math.min(...points.map((p) => p[1]));
+  const w = Math.ceil((Math.max(...points.map((p) => p[0])) - x0) * scale) + 2;
+  const h = Math.ceil((Math.max(...points.map((p) => p[1])) - y0) * scale) + 2;
+  const px = new Uint8Array(w * h);
+  const mark = (ax, ay, bx, by) => {
+    // The sides are drawn, not filled: a strip 0.7 pt thick is two pixels here
+    // and a scan-fill sampling at pixel centres can step straight over it.
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) * scale));
+    for (let i = 0; i <= steps; i += 1) {
+      const x = Math.round((ax + ((bx - ax) * i) / steps - x0) * scale);
+      const y = Math.round((ay + ((by - ay) * i) / steps - y0) * scale);
+      if (x >= 0 && x < w && y >= 0 && y < h) px[y * w + x] = 1;
+    }
+  };
+  for (const s of walls) {
+    for (const sp of s.subpaths) {
+      for (let i = 0; i < sp.length; i += 1) {
+        const a = sp[i];
+        const b = sp[(i + 1) % sp.length];
+        mark(a[0], a[1], b[0], b[1]);
+      }
+    }
+  }
+  return { px, w, h, x0, y0, scale };
+}
+
+/**
+ * The stand each number stands on: every stand grows out from its number, a
+ * pixel at a time, until it meets a drawn line or another stand.
+ *
+ * They grow *together* rather than one at a time, and that is the whole point.
+ * A stand grown to completion on its own will run straight through its
+ * neighbour wherever the sheet leaves a side open — and the sheet does, often,
+ * because a stand's outline is four separate strips and the ones on an aisle
+ * are frequently not closed. Growing them all at once and refusing any step
+ * that would cross another makes overlapping impossible rather than unlikely:
+ * two stands can meet, they cannot pass.
+ */
+function footprints(numbers, walls) {
+  const { px, w, h, x0, y0, scale } = walls;
+  const clear = (ax, ay, bx, by) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay)));
+    for (let i = 0; i <= steps; i += 1) {
+      const x = Math.round(ax + ((bx - ax) * i) / steps);
+      const y = Math.round(ay + ((by - ay) * i) / steps);
+      if (x < 0 || x >= w || y < 0 || y >= h) return false;
+      if (px[y * w + x]) return false;
+    }
+    return true;
+  };
+  const at = numbers.map((n) => [((n.x0 + n.x1) / 2 - x0) * scale, (n.y - y0) * scale]);
+  const box = at.map(() => ({ l: 1, r: 1, u: 1, d: 1 }));
+  /** Nothing fifteen booths away can ever be in the way. */
+  const REACH = 15 * MODULE * scale;
+  const near = at.map(([cx, cy], i) => at
+    .map((p, j) => j)
+    .filter((j) => j !== i && Math.abs(at[j][0] - cx) < REACH && Math.abs(at[j][1] - cy) < REACH));
+  const hits = (i, side, step) => {
+    const b = box[i];
+    const l = at[i][0] - b.l - (side === 'l' ? step : 0);
+    const r = at[i][0] + b.r + (side === 'r' ? step : 0);
+    const d = at[i][1] - b.d - (side === 'd' ? step : 0);
+    const u = at[i][1] + b.u + (side === 'u' ? step : 0);
+    return near[i].some((j) => {
+      const o = box[j];
+      return l < at[j][0] + o.r && r > at[j][0] - o.l && d < at[j][1] + o.u && u > at[j][1] - o.d;
+    });
+  };
+  const CAP = 14 * MODULE * scale;
+  for (let grew = true; grew;) {
+    grew = false;
+    for (let i = 0; i < numbers.length; i += 1) {
+      const b = box[i];
+      const [cx, cy] = at[i];
+      if (b.l < CAP && clear(cx - b.l - 1, cy - b.d, cx - b.l - 1, cy + b.u) && !hits(i, 'l', 1)) { b.l += 1; grew = true; }
+      if (b.r < CAP && clear(cx + b.r + 1, cy - b.d, cx + b.r + 1, cy + b.u) && !hits(i, 'r', 1)) { b.r += 1; grew = true; }
+      if (b.u < CAP && clear(cx - b.l, cy + b.u + 1, cx + b.r, cy + b.u + 1) && !hits(i, 'u', 1)) { b.u += 1; grew = true; }
+      if (b.d < CAP && clear(cx - b.l, cy - b.d - 1, cx + b.r, cy - b.d - 1) && !hits(i, 'd', 1)) { b.d += 1; grew = true; }
+    }
+  }
+  // Then out to the middle of the wall, which is where the boundary between
+  // two stands actually is.
+  //
+  // A wall is drawn with a thickness, and growth stops at the face of it — so
+  // both stands sharing a wall stop short by its whole width and each comes out
+  // 12% under a whole booth. Splitting that gap puts the boundary on the wall's
+  // middle, which is both the right answer and one that cannot overlap: two
+  // stands facing each other each move half way, so they meet exactly.
+  //
+  // Not a snap to the 12-point module, which was tried and is wrong: it put
+  // seven overlaps back, because the numbers are printed near their stands'
+  // edges rather than in the middle and the lattice cannot be phased from them.
+  /** Half a wall, so a side with nothing facing it does not run away. */
+  const REACHOUT = 0.75 * scale;
+  const gap = (i, side) => {
+    const [cx, cy] = at[i];
+    const b = box[i];
+    let best = Infinity;
+    for (const j of near[i]) {
+      const o = box[j];
+      const overlapsX = cx - b.l < at[j][0] + o.r && cx + b.r > at[j][0] - o.l;
+      const overlapsY = cy - b.d < at[j][1] + o.u && cy + b.u > at[j][1] - o.d;
+      // Only what is actually on that side. Taking the nearest of everything
+      // in line finds the neighbour behind you, at a negative distance, and
+      // every stand then stays exactly where it was.
+      let away = null;
+      if (side === 'l' && overlapsY) away = cx - b.l - (at[j][0] + o.r);
+      if (side === 'r' && overlapsY) away = at[j][0] - o.l - (cx + b.r);
+      if (side === 'd' && overlapsX) away = cy - b.d - (at[j][1] + o.u);
+      if (side === 'u' && overlapsX) away = at[j][1] - o.d - (cy + b.u);
+      if (away !== null && away >= 0) best = Math.min(best, away);
+    }
+    return Math.min(REACHOUT, best / 2);
+  };
+  return box.map((b, i) => {
+    const l = b.l + gap(i, 'l');
+    const r = b.r + gap(i, 'r');
+    const d = b.d + gap(i, 'd');
+    const u = b.u + gap(i, 'u');
+    return {
+      rx: NUM(at[i][0] / scale + x0 + (r - l) / 2 / scale),
+      ry: NUM(at[i][1] / scale + y0 + (u - d) / 2 / scale),
+      across: NUM((l + r) / scale / MODULE),
+      along: NUM((u + d) / scale / MODULE),
+    };
+  });
+}
+
+const meanOf = (members, rasters) => {
+  const mean = new Float32Array(rasters[0].length);
+  for (const m of members) for (let k = 0; k < mean.length; k += 1) mean[k] += rasters[m][k] / members.length;
+  return mean;
+};
+
+/**
+ * What each glyph is, as the nearest of the ten shapes rather than as
+ * whichever cluster happened to absorb it.
+ *
+ * Clustering finds the ten shapes; it is a poor way to *apply* them. A cluster
+ * exists because nothing absorbed its seed, and the seed is an arbitrary
+ * member — so the same digit drawn a shade heavier can sit far enough from one
+ * particular specimen to start an eleventh cluster, and reading the sheet by
+ * cluster then throws those glyphs away. That happened here: an eleventh
+ * cluster of 36 glyphs, which is 36 booth numbers quietly losing a digit and
+ * some of them still looking like booth numbers afterwards.
+ *
+ * So the clusters are used only to derive ten means, and every glyph is then
+ * measured against those. A mean is a far better specimen than any one member.
+ * What stays unread is what is not close to any digit, which is what the
+ * handful of stray label letters should be.
+ */
+function readGlyphs(rasters, groups, tol = 0.06) {
+  const means = groups.slice(0, DIGITS.length).map((members) => meanOf(members, rasters));
+  const digitAt = new Map();
+  let unread = 0;
+  rasters.forEach((r, i) => {
+    let best = -1;
+    let near = Infinity;
+    means.forEach((mean, d) => {
+      const gap = apart(mean, r);
+      if (gap < near) { near = gap; best = d; }
+    });
+    if (near <= tol) digitAt.set(i, DIGITS[best]);
+    else unread += 1;
+  });
+  return { digitAt, unread };
+}
+
+/**
+ * The cluster means, side by side, big enough to read.
+ *
+ * `DIGITS` is the one thing here a machine did not decide, so it needs a way
+ * to be checked and — when the clustering shifts, which it does as soon as the
+ * glyphs going into it change — a way to be read again. Each cluster is drawn
+ * as its average coverage, in the order `DIGITS` indexes.
+ */
+function digitSheet(groups, rasters, w = 12, h = 16, zoom = 14, pad = 26) {
+  const cols = groups.length;
+  const W = cols * (w * zoom + pad) + pad;
+  const H = h * zoom + pad * 2 + 10 * zoom;
+  const px = new Uint8Array(W * H * 4).fill(255);
+  for (let i = 3; i < px.length; i += 4) px[i] = 255;
+  groups.forEach((members, c) => {
+    const mean = new Float32Array(w * h);
+    for (const m of members) for (let k = 0; k < mean.length; k += 1) mean[k] += rasters[m][k] / members.length;
+    const left = pad + c * (w * zoom + pad);
+    for (let y = 0; y < h * zoom; y += 1) {
+      for (let x = 0; x < w * zoom; x += 1) {
+        const v = 255 - Math.round(255 * mean[Math.floor(y / zoom) * w + Math.floor(x / zoom)]);
+        const at = ((y + pad) * W + left + x) * 4;
+        px[at] = v; px[at + 1] = v; px[at + 2] = v;
+      }
+    }
+    // A tally under each column, so the picture also says which cluster is
+    // which without counting across.
+    for (let t = 0; t <= c && t < 10; t += 1) {
+      for (let y = 0; y < zoom - 2; y += 1) {
+        for (let x = 0; x < zoom - 2; x += 1) {
+          const at = ((h * zoom + pad * 2 + t * zoom + y) * W + left + x) * 4;
+          px[at] = 0; px[at + 1] = 0; px[at + 2] = 0;
+        }
+      }
+    }
+  });
+  return { width: W, height: H, pixels: px };
+}
+
 async function main() {
   const pdfPath = process.argv[2];
-  if (!pdfPath) throw new Error('usage: node scripts/read-booth-map.mjs <exhibithallmap.pdf>');
+  if (!pdfPath) throw new Error('usage: node scripts/read-booth-map.mjs <exhibithallmap.pdf> [--digits]');
+  const showDigits = process.argv.includes('--digits');
 
-  const shapes = await shapesOf(pdfPath);
-  // The grid is the upper three quarters; below it is the exhibitor index.
-  const grid = shapes.filter((s) => s.y0 > 300 && s.ink === INK);
+  const { shapes, texts } = await shapesOf(pdfPath);
+  const carpet = floorOf(shapes);
+  console.log(`carpet: ${carpet.length} corners, ${describe(carpet)}`);
+  const entrances = entrancesOf(texts, carpet);
+  console.log(`entrances: ${entrances.length}, each within ${Math.max(...entrances.map((e) => e.away)).toFixed(1)} pt of the wall`);
+  if (entrances.length < 4) throw new Error(`only ${entrances.length} entrances found; the fit is anchored on them`);
+  const grid = shapes.filter((s) => s.ink === INK && standsOn(carpet, s));
   const tall = (s) => s.y1 - s.y0;
   const wide = (s) => s.x1 - s.x0;
 
-  const stands = grid.filter((s) => wide(s) >= 4 && tall(s) >= 4 && s.rings === 1);
   const glyphs = grid.filter((s) => tall(s) > 3.8 && tall(s) < 4.8 && wide(s) < 4.5);
-  console.log(`${shapes.length} filled paths -> ${stands.length} stands, ${glyphs.length} digit-shaped glyphs`);
+  console.log(`${shapes.length} filled paths -> ${grid.length} on the floor, ${glyphs.length} digit-shaped glyphs`);
 
-  const groups = cluster(glyphs.map((g) => raster(g)));
+  const rasters = glyphs.map((g) => raster(g));
+  const groups = cluster(rasters);
   console.log(`clusters: ${groups.length}, sizes ${groups.slice(0, 14).map((g) => g.length).join(' ')}`);
-  const digitAt = new Map();
-  groups.forEach((members, i) => {
-    if (DIGITS[i] === undefined) return;
-    for (const m of members) digitAt.set(m, DIGITS[i]);
-  });
+  if (showDigits) {
+    // A couple past the named ones, so the picture also shows what was left
+    // out and whether leaving it out was right.
+    const sheet = digitSheet(groups.slice(0, DIGITS.length + 2), rasters);
+    const to = join(ROOT, 'digits.png');
+    writeFileSync(to, encodePng(sheet.width, sheet.height, sheet.pixels));
+    console.log(`${to}: the cluster means, in DIGITS order`);
+  }
+  const { digitAt, unread } = readGlyphs(rasters, groups);
+  console.log(`read ${digitAt.size} glyphs as digits, ${unread} too unlike any of the ten`);
 
   // Lines by baseline proximity, not by rounding to a grid: a line that
   // straddles a rounding boundary comes apart, and that cost 89 numbers.
@@ -287,27 +633,21 @@ async function main() {
   // printed on it. Fit on the first and draw the second — using the rectangle
   // to fit costs half the aisle correlation, and using the number to draw puts
   // a ninety-foot stand's outline in the wrong place.
+  const walls = wallsOf(shapes, glyphs);
+  const shapesOfStand = footprints(numbers, walls);
   let moved = 0;
-  const booths = numbers.map((n) => {
+  const booths = numbers.map((n, i) => {
     const cx = (n.x0 + n.x1) / 2;
-    let best = null;
-    let near = Infinity;
-    for (const s of stands) {
-      const dx = Math.max(s.x0 - cx, 0, cx - s.x1);
-      const dy = Math.max(s.y0 - n.y, 0, n.y - s.y1);
-      const d = Math.hypot(dx, dy);
-      if (d < near) { near = d; best = s; }
-    }
-    const own = best && near < 14;
-    if (own) moved = Math.max(moved, Math.hypot((best.x0 + best.x1) / 2 - cx, (best.y0 + best.y1) / 2 - n.y));
+    const own = shapesOfStand[i];
+    moved = Math.max(moved, Math.hypot(own.rx - cx, own.ry - n.y));
     return {
       booth: n.text,
       x: NUM(cx),
       y: NUM(n.y),
-      rx: NUM(own ? (best.x0 + best.x1) / 2 : cx),
-      ry: NUM(own ? (best.y0 + best.y1) / 2 : n.y),
-      across: own ? Math.round(wide(best) / MODULE) : 0,
-      along: own ? Math.round(tall(best) / MODULE) : 0,
+      rx: own.rx,
+      ry: own.ry,
+      across: own.across,
+      along: own.along,
     };
   });
   console.log(`the furthest a number sits from the middle of its own stand: ${moved.toFixed(1)} pt (${(moved * 3.048 / MODULE).toFixed(1)} m)`);
@@ -317,6 +657,31 @@ async function main() {
   console.log(`stand sizes: ${[...sizes].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([s, n]) => `${s}:${n}`).join(' ')}`);
 
   booths.sort((a, b) => Number(a.booth) - Number(b.booth));
+
+  // The answer sheet, and the reason this refuses rather than reports.
+  //
+  // A misread does not look like a failure. Get `DIGITS` out of order — which
+  // is what happens when the clustering shifts under it — and every number is
+  // still three or four digits, still on a stand, still plausible. That went
+  // out as a file once, 26% right and silent about it, so agreement with the
+  // independently-pulled list is checked here and a bad reading is not written
+  // at all.
+  const listed = new Set(
+    readFileSync(join(ROOT, 'src/data/exhibitors.ts'), 'utf8')
+      .matchAll(/\bbooth: '([^']+)'/g),
+  );
+  const known = new Set([...listed].map((m) => m[1]));
+  const agreed = booths.filter((b) => known.has(b.booth)).length;
+  const rate = agreed / booths.length;
+  console.log(`${agreed}/${booths.length} = ${(rate * 100).toFixed(1)}% are booths exhibitors.ts lists`);
+  if (rate < 0.95) {
+    throw new Error(
+      `only ${(rate * 100).toFixed(1)}% of the numbers read are booths anyone has taken, so this reading is wrong `
+      + 'and has not been written. The usual cause is DIGITS being out of order after the clustering shifted: '
+      + 're-run with --digits and read the picture again.',
+    );
+  }
+
   const source = `/**
  * Every stand on Gen Con's printed exhibit-hall map.
  *
@@ -324,17 +689,16 @@ async function main() {
  * carries the method and the checking; this is only its answer.
  *
  * The map has no text on it: the booth numbers are outlines, and these were
- * read by clustering 1,935 glyph shapes into ten digits. 99.4% of what came
- * out is a booth number \`exhibitors.ts\` independently lists, which is what
- * makes the reading believable.
+ * read by clustering ${glyphs.length.toLocaleString('en')} glyph shapes into ten digits. ${(rate * 100).toFixed(1)}% of what
+ * came out is a booth number \`exhibitors.ts\` independently lists, which is
+ * what makes the reading believable.
  *
- * \`x\` and \`y\` are PAGE POINTS ON THAT MAP AND NOTHING ELSE. They are not
- * coordinates and cannot be turned into any: the map is drawn to scale within
- * each hall and lays the halls out along the page in numbering order rather
- * than in the arrangement the building has — Halls F and G are side by side on
- * it and stacked in the convention centre's own plans. They are here because
- * they say which stands are next to which, which is true of a page layout as
- * much as of a survey.
+ * \`x\` and \`y\` are PAGE POINTS, and the page is drawn to scale: 12 points is
+ * a ten-foot booth everywhere on it, and the whole exhibit floor is one
+ * to-scale plan — the carpet outline is 282.2 m across against the building's
+ * 282.5 m. So these do turn into coordinates, and \`fit-booths.mjs\` turns them
+ * with a single rigid transform. They are still page points here because
+ * reading the sheet and placing it are separate jobs.
  *
  * \`across\` and \`along\` are the stand's size in ten-foot booths, so 1×1 is a
  * single booth and 2×4 is an eight-booth island.
@@ -356,6 +720,26 @@ export interface PlannedBooth {
 
 export const PLANNED_BOOTHS: ReadonlyArray<PlannedBooth> = [
 ${booths.map((b) => `  { booth: '${b.booth}', x: ${b.x}, y: ${b.y}, rx: ${b.rx}, ry: ${b.ry}, across: ${b.across}, along: ${b.along} },`).join('\n')}
+];
+
+/**
+ * The carpet: the exhibit floor's own outline, in the same page points.
+ *
+ * The single filled polygon the sheet draws the floor as. It is ${describe(carpet).replace(/\s+/g, ' ')}
+ * points, which at the printed module is ${((Math.max(...carpet.map((p) => p[0])) - Math.min(...carpet.map((p) => p[0]))) * 3.048 / MODULE).toFixed(1)} m across, and the six
+ * halls together measure ${'282.5'} m. That agreement is why the whole sheet can be
+ * laid down as one piece.
+ */
+export const PLAN_FLOOR: ReadonlyArray<readonly [number, number]> = [
+${carpet.map(([x, y]) => `  [${NUM(x)}, ${NUM(y)}],`).join('\n')}
+];
+
+/**
+ * The five ways on to the floor, each pushed from its label on to the wall it
+ * names. Page points. These are what the placement is lined up by.
+ */
+export const PLAN_ENTRANCES: ReadonlyArray<{ x: number; y: number }> = [
+${entrances.map((e) => `  { x: ${e.x}, y: ${e.y} },`).join('\n')}
 ];
 `;
   writeFileSync(OUT, source);

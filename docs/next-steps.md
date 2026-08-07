@@ -671,8 +671,8 @@ on none of them.
 ### Reading it
 
 `scripts/read-booth-map.mjs` reads Gen Con's printed exhibit-hall map, which
-has no text on it. The grid is 4,612 filled paths: 405 stand rectangles and
-about 1,900 digit outlines. The digits are scan-filled into coverage rasters,
+has no text on it. The page is 4,495 filled paths, of which 2,099 are digit
+outlines. The digits are scan-filled into coverage rasters,
 clustered by mean absolute difference, and ten clusters come out far larger
 than the rest — 330 down to 82. Those are the ten digits; what they are was
 read off a rendering of the cluster means, which is the one step a person did.
@@ -690,84 +690,107 @@ Grouping them into numbers took two corrections worth keeping:
     to the next is 2.7 pt inside a number and 6.4 pt between two, which needs
     no tuning at all.
 
-**521 of 524, or 99.4%.** The check is `exhibitors.ts` — 562 booth numbers from
+**559 of 565, or 98.9%.** The check is `exhibitors.ts` — 726 booth numbers from
 a different Gen Con system, pulled on a different day, by a script that has
 never seen the PDF. Nothing in the pipeline was tuned against it.
 
 ### Placing them
 
-The map is on a strict 12 pt = 10 ft module, so it is to scale — and it is not
-a plan of the building. The halls run along the page in numbering order and
-that is not how they sit:
+The map is on a strict 12 pt = 10 ft module, so it is to scale — and it is a
+plan of the whole exhibit floor. That last part took two goes to get right.
 
-```
-on the printed map     [J/K] [I] [H] [G] [F]        one strip, five bands
-in the ICC's own plans [F/G] [H] [I] [J/K]          four columns, F over G
-```
+**The first answer was wrong, and confidently.** The hall letters `booths.ts`
+infers from the numbering do not match the building: Halls F and G come out
+side by side on the sheet and are stacked in the ICC's own plans. From that it
+followed that no single transform could exist, that one fitted over all 524
+stands landed 73% of them in the right hall and could not do better, and that
+the sheet must be six real blocks arranged for a page. So each hall's block was
+laid into its own outline separately — six rigid placements chained together at
+the walls — and the whole apparatus of seams, chains and a named 34 m anomaly
+existed to hold that together.
 
-One similarity transform over all 524 stands lands 73% of them in the right
-hall and cannot do better, because no such transform exists. **That was the
-wrong model, not the wrong data.** What the sheet holds is six real blocks
-arranged for a page, so `scripts/fit-booths.mjs` lays each hall's block into
-that hall's own outline separately, at the module's true scale, with only a
-quarter-turn and an offset free — six rigid placements rather than one.
+**What settles it is measuring the drawing rather than reading its labels.**
+The sheet draws the floor as one filled polygon. At the printed module that
+polygon is 282.2 m across; the six halls together are 282.5 m. Laid down as one
+rigid piece it covers them with an IoU of 0.957, against 0.831 for the next way
+up, and every stand lands inside. What disagrees with the building is the hall
+letters, not the drawing — and during the convention the walls those letters
+name are not there at all.
 
-Three things pin it, and it takes all three:
+`scripts/fit-booths.mjs` is now one transform: eight ways up and an offset, at
+the module's true scale, which is never fitted. Three things agree on which:
 
-  1. **Containment.** Every stand inside the hall its number claims. Alone this
-     is worth nothing: it is satisfied perfectly by shrinking each block until
-     it fits anywhere, which is what a free scale does — every hall picked the
-     smallest scale offered. So the scale is fixed at the module and never
-     fitted.
-  2. **The seams.** Stands facing each other across an air wall have to land
-     next to each other, which ties six separately-placed blocks into one
-     floor. Fitted independently they are 87 to 119 m out from one another.
+  1. **The silhouette.** The carpet's outline against the halls', and that is a
+     shape rather than a rectangle — a 175 m chamfer down one side and a step
+     at one end.
+  2. **Containment.** Every stand inside the halls. Worth nothing alone: it is
+     satisfied by shrinking the sheet until it fits anywhere, which is what a
+     free scale does. The scale is fixed, so it is not free here.
   3. **The aisle structure**, which the fit never uses. A booth number is an
      aisle and a position along it, and the J/K wall cuts *across* the aisles —
-     so position must run north-south and aisle number east-west. This is what
-     settles the last ambiguity: the seams alone leave two arrangements 3 m
-     apart in cost, and on this they are 0.98 against 0.32.
+     so position must run north-south and aisle number east-west.
 
-**A mistake worth recording, because it changed the answer.** The seams were
-first written as pairs of *consecutive numbers* — 1401 with 1363. Those follow
-each other in the numbering and are nowhere near each other on the floor: one
-starts aisle 14, the other is 63 stands along aisle 13. Facing stands are
-adjoining aisles at the same position — 2727 opposite 2627. With the pairs
-corrected the fit chose a different arrangement, so the first answer was luck.
+And the five **EXHIBIT HALL ENTRANCE** markers are checked, not fitted: carried
+through the transform they land 0.1 to 2.7 m from a hall wall, which is where a
+hole in a wall belongs. `walkable.ts` has never seen the PDF.
 
 **Where it landed.**
 
 ```
-stands inside their own hall     501/524   95.6%
+carpet over halls                IoU 0.957   next way up 0.831
+stands inside a hall             565/565     100%
 along an aisle, north-south      r = 1.000
 across the aisles, east-west     r = 0.980
-next-best arrangement            r = 0.324
+transposed, which it must not be r = 0.31
+entrances from a hall wall       0.1 – 2.7 m
+overlapping stands               0
 ```
 
-| wall | facing pairs | mean apart |
-|---|---|---|
-| F/G | 71 | 7.3 m |
-| G/H | 36 | **34.4 m** |
-| H/I | 40 | 11.0 m |
-| I/J | 21 | 6.8 m |
-| J/K | 14 | 7.7 m |
+### Two bugs that were making the map look wrong
 
-**One wall does not agree and is carried rather than averaged away.** Four come
-out at 7 to 11 m, which is what two stands facing across an air wall should be.
-G/H comes out at 34 and will not move — ten times the search finds the same
-answer — so something structural disagrees there: a hall outline, or the
-assumption that aisle 22 adjoins aisle 23 on the floor. `booth-place.ts` names
-it in its own header, and the guard in `fit-booths.mjs` tests the *median* wall
-rather than the total, because a total hides which of the two situations it is.
+The user's report was that the booths "look very off" and that none of them
+should overlap. Both causes were in the reader, not the fit.
 
-**What a stand's position is worth.** Within a hall it is the printed plan's
-own geometry at true scale: neighbouring stands are neighbours, an aisle is an
-aisle. Between halls it carries the fit's error. So a stand is in the right
-aisle of the right hall and within a stand or two along it — except near the
-G/H wall, where it may be tens of metres out. Enough to walk to, not a survey,
-and the map draws them as marks rather than as outlines for that reason.
+**The floor is an L, and the reader cut it with a horizontal line.** `y > 300`,
+commented "the grid is the upper three quarters; below it is the exhibitor
+index". The right-hand third of the floor comes down 140 points further than
+the left and the index fills the notch beside it, so that cut also threw away
+**205 stands**. It is now a point-in-polygon test against the carpet, which the
+sheet draws over the index's white background rather than under it.
+
+**A stand's outline is four separate strips, not a rectangle.** Only some of
+them come out of the content stream as one closed path, so "the rectangle
+nearest this number" found one rectangle for several numbers — 150 of them
+carried more than one, and **316 stands were written on top of each other**.
+Nothing looks for a rectangle now: every line on the sheet is rasterised, the
+digits left out of it, and each stand grows out from its number until it meets
+a line or another stand. They grow *together*, which is what makes overlapping
+impossible rather than unlikely — two stands can meet, they cannot pass.
+
+Sizes are then left as measured rather than rounded to whole booths. Rounding
+up is exactly how two stands sharing a wall end up inside each other; snapping
+to the 12-point module was tried and put seven overlaps back, because the
+numbers are printed near their stands' edges and the lattice cannot be phased
+from them. Left alone, 99.4% of the measured sides land within a tenth of a
+booth of whole — which makes the module something the reading *demonstrates*
+rather than something imposed on it.
+
+**And the reader now refuses to write a bad reading.** Widening the region
+changed what went into the clustering, which reordered the clusters, which put
+`DIGITS` out of order under them. That produced a file that was 26% right,
+still parsed, still had 565 plausible entries, and said nothing. Agreement with
+`exhibitors.ts` is checked before writing and anything under 95% throws. A
+`--digits` flag — documented for months and never implemented — now writes the
+cluster means out as a picture so the order can be read again.
+
+**What a stand's position is worth.** The geometry is the printed plan's own at
+true scale, rigidly placed: neighbouring stands are neighbours, an aisle is an
+aisle, no two stands overlap, and what error there is, is one registration
+error shared by the whole floor rather than something that accumulates across
+it. Enough to walk to, not a survey.
 
 **What would still improve it.** A plan of the exhibit floor in the building's
-own geometry would remove the fit entirely. Short of that, resolving the G/H
-disagreement — most likely by re-tracing Hall G or Hall H from the campus
-tiles — would close the one wall that does not fit.
+own geometry would remove the fit entirely. Short of that, the six numbers
+`exhibitors.ts` does not recognise are the remaining reading failures — three
+of them four-digit numbers in the 2000s that came out three digits — and each
+one is a stand in the wrong place.

@@ -171,16 +171,21 @@ describe('searching for a publisher rather than a room', () => {
   });
 
   it('says how big a stand is, since the printed map can be believed about that', () => {
-    // The map's positions are a page layout, but its *module* is real: 12
-    // points is a ten-foot booth throughout. So a stand's size survives even
-    // though its place on the sheet does not, and the size is the difference
-    // between a table and ninety feet of frontage.
+    // The map's module is real: 12 points is a ten-foot booth throughout, so a
+    // stand's size comes straight off the sheet, and the size is the
+    // difference between a table and ninety feet of frontage.
     expect(hitLabel(search('1229', NO_EVENTS)[0]).detail).toContain('20×20 ft');
+    expect(hitLabel(search('1337', NO_EVENTS)[0]).detail).toContain('10×20 ft');
     // A single booth says nothing: it is the default and would be noise on
     // three quarters of the hall.
+    //
+    // 2667 used to be the example here, as a 10x20. It is not one — it is one
+    // booth, with 2665 and 2669 a module either side of it — and it read as a
+    // double only because several numbers were sharing one rectangle. This
+    // test was asserting that bug.
     const single = search('2667', NO_EVENTS)[0];
     expect(single.exhibitor?.booth).toBe('2667');
-    expect(hitLabel(single).detail).toContain('10×20 ft');
+    expect(hitLabel(single).detail).not.toContain('ft');
   });
 
   it('leads with the booth and follows with the hall, not the other way round', () => {

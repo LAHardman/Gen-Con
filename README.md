@@ -368,8 +368,16 @@ named for. `NOT_A_BUILDING` in `venues.ts` is what makes it say that.
 halls.** No source names one. The schedule does it twice in 27,467 events and
 never otherwise; the map API's coordinates sit on a star field rather than a
 plan; and Gen Con's own printed exhibit-hall map letters no hall on it. It has no
-text on it at all — its numbers are outlines — but they have since been read
-and the stands placed: see §9 of `docs/next-steps.md`.
+text on it at all — its numbers are outlines — but 565 of them have since been
+read and every one placed, as one rigid piece: see §9 of `docs/next-steps.md`.
+
+The letters are worth being careful about, because the drawing and the
+numbering disagree and the drawing is right. Halls F and G come out side by
+side on the sheet and are stacked in the ICC's own plans, and a good deal of
+machinery was once built on the assumption that this made the sheet a page
+layout rather than a plan. It is a plan: its floor outline is 282.2 m across
+against the halls' 282.5 m. During the convention the walls those letters name
+are taken out anyway, which is why the map draws the booths and not the halls.
 
 What closed it is five divides — the booth numbers either side of each air
 wall, from somebody who has walked the hall. `src/data/booths.ts` holds them,

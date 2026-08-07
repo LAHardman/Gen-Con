@@ -7,142 +7,106 @@
  * printed map — and writes src/data/booth-place.ts, which is the same stands
  * with a latitude and longitude each.
  *
- * WHY THIS IS NOT ONE TRANSFORM. The printed map is drawn on a strict 12 pt =
- * 10 ft module, so it is to scale, and it is *not* a plan of the building: the
- * halls run along the page in numbering order — J, K, I, H, G, F left to right
- * — and that is not how they sit. Halls F and G are side by side on the sheet
- * and stacked in the convention centre's own floor plans. Fitting one
- * similarity over all 524 stands lands 73% of them in the right hall and
- * cannot do better, because no such transform exists.
+ * IT IS ONE TRANSFORM, and this script used to argue at length that it could
+ * not be. The old argument was that the sheet arranges the halls for a page
+ * rather than as the building has them — Halls F and G side by side on it,
+ * stacked in the convention centre's own plans — so each hall's block had to be
+ * laid down separately: six rigid placements chained together at the walls.
  *
- * What the sheet *is* is six real blocks arranged for a page. So each hall's
- * block is laid into that hall's own outline separately, at the module's true
- * scale, with only its quarter-turn and its offset free. Six rigid placements
- * rather than one.
+ * That was wrong, and the sheet says so plainly once it is measured rather than
+ * read by its hall letters. The floor is drawn as one filled polygon; that
+ * polygon is 282.2 m across at the printed module, and the six halls together
+ * are 282.5 m. Laid down as a single piece it covers them well and every stand
+ * lands inside. What disagrees with the building is the hall letters `booths.ts`
+ * infers from the numbering, not the drawing.
  *
- * THREE THINGS PIN IT, and they have to be three because no one of them is
- * enough:
+ * Which also settles the thing that made the old answer bad to look at. Six
+ * blocks placed independently overlap wherever the chain pulled two of them
+ * together, and no amount of tuning stops that, because nothing in the
+ * objective forbade it. One rigid transform cannot: the stands do not overlap
+ * on the page, so they cannot overlap on the ground.
  *
- *   1. Containment. Every stand should land inside the hall `booths.ts` puts
- *      it in. Alone this is worthless — it is satisfied perfectly by shrinking
- *      each block until it fits anywhere, which is exactly what a free scale
- *      does, so the scale is fixed at the module and never fitted.
- *   2. The seams. The numbering runs straight through the air walls: 2727 is
- *      next to 2723, 601 next to 575. Consecutive numbers either side of a
- *      wall have to land next to each other, which ties the six blocks into
- *      one chain and is what containment cannot do.
- *   3. The aisle structure, which nothing above uses. In the 100s–500s, a
- *      booth number is an aisle and then a position along it, and the wall
- *      between Halls J and K cuts *across* the aisles — so position along an
- *      aisle must run north-south and the aisle number east-west. That is an
- *      independent fact about the building, and it is what settles the last
- *      ambiguity: the seams alone leave two arrangements 3 m apart, and this
- *      separates them by a correlation of 0.98 against 0.31.
+ * WHAT PINS IT. The scale is never fitted — 12 points is a ten-foot booth
+ * everywhere on the sheet. That leaves eight ways up and an offset, and three
+ * separate things agree on which:
  *
- * WHAT THE ANSWER IS WORTH. Within a hall the geometry is the printed plan's
- * own, at true scale: neighbouring stands are neighbours, an aisle is an
- * aisle. Between halls it carries the fit's error, which is about 5 m a seam.
- * So a stand is placed to the right aisle of the right hall and to within a
- * few stands along it — enough to walk to, not a survey. `booth-place.ts` says
- * so, and the map draws these differently from a traced room for that reason.
+ *   1. The silhouette. The carpet's outline against the halls' outline, and
+ *      that is a shape rather than a rectangle: a 175 m chamfer down one side
+ *      and a step at one end.
+ *   2. Containment. Every stand inside the halls. Worthless alone — a small
+ *      enough block fits anywhere — but the scale is fixed, so it is not free.
+ *   3. The aisle structure, which the fit never optimises for. In the 100s to
+ *      500s a booth number is an aisle and then a position along it, and the
+ *      wall between Halls J and K cuts across those aisles rather than between
+ *      them. So position along an aisle has to run north-south, and the aisle
+ *      number east-west. That is a fact about the building that nothing here
+ *      is fitting to, which is why it is the one worth having.
+ *
+ * AND THE ENTRANCES ARE CHECKED, not fitted. The sheet marks five ways on to
+ * the floor. `walkable.ts` finds the halls' doorways from the building's traced
+ * plan and has never seen the PDF. Where the two land is reported below and
+ * refused on, rather than optimised towards.
+ *
+ * WHAT THE ANSWER IS WORTH. The geometry is the printed plan's own at true
+ * scale, rigidly placed: neighbouring stands are neighbours, an aisle is an
+ * aisle, no two stands overlap, and what error there is, is one registration
+ * error shared by the whole floor rather than something that accumulates across
+ * it. Enough to walk to. Not a survey.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'src/data/booth-place.ts');
 
-const { PLANNED_BOOTHS } = await import(join(ROOT, 'src/data/booth-plan.ts'));
-const { hallForBooth } = await import(join(ROOT, 'src/data/booths.ts'));
+const { PLANNED_BOOTHS, PLAN_FLOOR, PLAN_ENTRANCES } = await import(join(ROOT, 'src/data/booth-plan.ts'));
 const { ROOMS_BY_ID, VENUES_BY_ID, roomShapes } = await import(join(ROOT, 'src/data/venues.ts'));
+const { roomEntrance } = await import(join(ROOT, 'src/data/walkable.ts'));
+const { EXHIBITORS } = await import(join(ROOT, 'src/data/exhibitors.ts'));
 
 /** 12 points is a ten-foot booth, everywhere on the sheet. Never fitted. */
 const MODULE = 3.048 / 12;
+/** A ten-foot booth, in metres. */
+const BOOTH = 3.048;
 
-/** West to east, which is also 3000s down to 100s. Neighbours share a wall. */
-const CHAIN = ['hall-f', 'hall-g', 'hall-h', 'hall-i', 'hall-j', 'hall-k'];
-
-/**
- * The pairs of stands that face each other across each air wall.
- *
- * Derived rather than written down, and the first attempt at writing them down
- * was wrong in a way worth recording. It paired the *first* stand of one hall
- * with the *last* number of the one before — 1401 with 1363 — which are
- * consecutive in the numbering and nowhere near each other on the floor: one
- * is at the start of aisle 14 and the other is 63 stands along aisle 13.
- *
- * Two stands are neighbours across a wall when they are in adjoining aisles at
- * the same position along them: 2663 and 2763 are opposite each other, one
- * either side. So for each wall this takes the last aisle of one hall and the
- * first of the next, and pairs every position both of them print.
- */
-function seamPairs(a, b) {
-  const aisleOf = (n) => Math.floor(Number(n) / 100);
-  const along = (n) => Number(n) % 100;
-  const left = boothsOf.get(a).map((s) => s.booth);
-  const right = boothsOf.get(b).map((s) => s.booth);
-  if (!left.length || !right.length) return [];
-  // Halls J and K share their aisles -- the wall cuts across them -- so there
-  // the pair is two stands of one aisle either side of the cut.
-  const shared = new Set(left.map(aisleOf)).size && left.some((n) => right.some((m) => aisleOf(n) === aisleOf(m)));
-  if (shared) {
-    const pairs = [];
-    for (const n of left) {
-      const facing = right.filter((m) => aisleOf(m) === aisleOf(n));
-      if (!facing.length) continue;
-      const nearest = facing.reduce((best, m) => (Math.abs(along(m) - along(n)) < Math.abs(along(best) - along(n)) ? m : best));
-      if (Math.abs(along(nearest) - along(n)) <= 10) pairs.push([n, nearest]);
-    }
-    return pairs;
-  }
-  const edgeA = Math.min(...left.map(aisleOf));
-  const edgeB = Math.max(...right.map(aisleOf));
-  const pairs = [];
-  for (const n of left.filter((x) => aisleOf(x) === edgeA)) {
-    const facing = right.filter((m) => aisleOf(m) === edgeB && Math.abs(along(m) - along(n)) <= 2);
-    for (const m of facing) pairs.push([n, m]);
-  }
-  return pairs;
-}
+/** The exhibit floor, whatever the walls across it are called. */
+const HALLS = ['hall-f', 'hall-g', 'hall-h', 'hall-i', 'hall-j', 'hall-k'];
 
 /** Below these the fit is not good enough to write, and the script says so. */
 const DEMANDS = {
-  /** Of every stand, the share that must land inside its own hall. */
-  inside: 0.9,
-  /**
-   * Metres, on the *median* wall rather than the total.
-   *
-   * A total hides its own shape. Four of these five walls come out at 7 to 11
-   * metres, which is what two stands facing each other across an air wall
-   * should be — and the fifth, between Halls G and H, comes out at 34 and will
-   * not move: ten times the search finds the same answer, so it is structural
-   * rather than a fit that has not converged. Something disagrees there, and
-   * the honest thing is to pass on the four that agree and carry the fifth as a
-   * named anomaly rather than to average it away or to throw the other four out
-   * with it.
-   */
-  seam: 15,
-  /** No wall may be worse than this even so. */
-  worstSeam: 40,
+  /** Carpet against halls, as an intersection over union. */
+  cover: 0.9,
+  /** How much better the winner must be than the best differently-turned one. */
+  margin: 0.05,
+  /** Of every stand, the share that must land inside the halls at all. */
+  inside: 0.98,
   /** How straight the aisles must come out. Correlations, so 1 is perfect. */
   alongAisle: 0.95,
   acrossAisles: 0.9,
-  /** How much better the winner must be than the best differently-turned one. */
-  margin: 0.3,
+  /** Metres, from each marked entrance to the nearest hall wall. */
+  entrance: 8,
 };
 
 const anchor = VENUES_BY_ID.icc.anchor;
 const perLng = 111320 * Math.cos((anchor.nw.lat * Math.PI) / 180);
-const local = (lat, lng) => [(lng - anchor.nw.lng) * perLng, (anchor.nw.lat - lat) * 111320];
+/** Metres east and metres north of the venue's own anchor. */
+const local = (lat, lng) => [(lng - anchor.nw.lng) * perLng, (lat - anchor.nw.lat) * 111320];
+// Seven decimals, where everything else in this repository uses six.
+//
+// Six is a tenth of a metre, which is normally far finer than anything here
+// deserves. It is not fine enough for these: stands abut, so two of them share
+// an edge exactly, and rounding both sides of that edge independently can push
+// them a tenth of a metre into each other. That is invisible on a map and still
+// means the file says stands overlap when the fit says they do not.
 const world = (x, y) => ({
-  lat: Number((anchor.nw.lat - y / 111320).toFixed(6)),
-  lng: Number((anchor.nw.lng + x / perLng).toFixed(6)),
+  lat: Number((anchor.nw.lat + y / 111320).toFixed(7)),
+  lng: Number((anchor.nw.lng + x / perLng).toFixed(7)),
 });
 
 const rings = new Map(
-  CHAIN.map((id) => [id, roomShapes(ROOMS_BY_ID[id]).map((r) => r.map((p) => local(p[0], p[1])))]),
+  HALLS.map((id) => [id, roomShapes(ROOMS_BY_ID[id]).map((r) => r.map((p) => local(p[0], p[1])))]),
 );
 const inRing = (ring, x, y) => {
   let odd = false;
@@ -153,236 +117,266 @@ const inRing = (ring, x, y) => {
   }
   return odd;
 };
-const inside = (id, x, y) => rings.get(id).some((r) => inRing(r, x, y));
+const hallAt = (x, y) => HALLS.find((id) => rings.get(id).some((r) => inRing(r, x, y)));
 
 /** The eight ways a printed block can be laid down. */
 const ORIENT = [];
 for (const mirror of [false, true]) for (const turn of [0, 1, 2, 3]) ORIENT.push({ mirror, turn });
+/** Page points to metres, turned. The scale is the module and stays the module. */
 const spin = (o, x, y) => {
-  let px = o.mirror ? -x : x;
-  let py = y;
+  let px = (o.mirror ? -x : x) * MODULE;
+  let py = y * MODULE;
   for (let t = 0; t < o.turn; t += 1) [px, py] = [-py, px];
   return [px, py];
 };
 
-const boothsOf = new Map(CHAIN.map((id) => [id, PLANNED_BOOTHS.filter((b) => hallForBooth(b.booth) === id)]));
+/* ------------------------------------------------- the halls, as a raster */
 
-function candidates(id) {
-  const booths = boothsOf.get(id);
-  const pts = rings.get(id).flat();
-  const hx = [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0]))];
-  const hy = [Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))];
-  const out = [];
-  for (const o of ORIENT) {
-    const turned = booths.map((b) => spin(o, b.x, b.y));
-    const tx = Math.min(...turned.map((p) => p[0]));
-    const ty = Math.min(...turned.map((p) => p[1]));
-    for (let dx = hx[0] - 6; dx <= hx[1] + 6; dx += 1.5) {
-      for (let dy = hy[0] - 6; dy <= hy[1] + 6; dy += 1.5) {
-        const ox = dx - tx * MODULE;
-        const oy = dy - ty * MODULE;
-        let hit = 0;
-        for (const p of turned) if (inside(id, p[0] * MODULE + ox, p[1] * MODULE + oy)) hit += 1;
-        const rate = hit / booths.length;
-        if (rate >= 0.92) out.push({ o, ox, oy, rate });
+const corners = HALLS.flatMap((id) => rings.get(id).flat());
+const GX0 = Math.floor(Math.min(...corners.map((p) => p[0]))) - 40;
+const GX1 = Math.ceil(Math.max(...corners.map((p) => p[0]))) + 40;
+const GY0 = Math.floor(Math.min(...corners.map((p) => p[1]))) - 40;
+const GY1 = Math.ceil(Math.max(...corners.map((p) => p[1]))) + 40;
+const GW = GX1 - GX0;
+const GH = GY1 - GY0;
+const halls = new Uint8Array(GW * GH);
+let hallArea = 0;
+for (let y = 0; y < GH; y += 1) {
+  for (let x = 0; x < GW; x += 1) {
+    if (hallAt(GX0 + x + 0.5, GY0 + y + 0.5)) { halls[y * GW + x] = 1; hallArea += 1; }
+  }
+}
+
+/**
+ * How much of the halls the carpet covers, over how much the two cover between
+ * them. A square metre a cell, which is finer than either outline is drawn and
+ * much finer than the answer needs to be.
+ */
+function cover(ring) {
+  const xs = ring.map((p) => p[0]);
+  const ys = ring.map((p) => p[1]);
+  const x0 = Math.max(0, Math.floor(Math.min(...xs) - GX0));
+  const x1 = Math.min(GW, Math.ceil(Math.max(...xs) - GX0));
+  const y0 = Math.max(0, Math.floor(Math.min(...ys) - GY0));
+  const y1 = Math.min(GH, Math.ceil(Math.max(...ys) - GY0));
+  let both = 0;
+  let carpet = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      if (!inRing(ring, GX0 + x + 0.5, GY0 + y + 0.5)) continue;
+      carpet += 1;
+      if (halls[y * GW + x]) both += 1;
+    }
+  }
+  return both / (hallArea + carpet - both);
+}
+
+/* ------------------------------------------------------------ the search */
+
+console.log('laying the whole sheet down, eight ways:');
+const ranked = [];
+for (const o of ORIENT) {
+  const shape = PLAN_FLOOR.map(([x, y]) => spin(o, x, y));
+  const cx = (Math.min(...shape.map((p) => p[0])) + Math.max(...shape.map((p) => p[0]))) / 2;
+  const cy = (Math.min(...shape.map((p) => p[1])) + Math.max(...shape.map((p) => p[1]))) / 2;
+  let best = { dx: (GX0 + GX1) / 2 - cx, dy: (GY0 + GY1) / 2 - cy, score: -1 };
+  // Coarse to fine. A metre's step over every plausible offset is a quarter of
+  // a million rasterisations, and nearly all of them are hopeless.
+  for (const step of [8, 3, 1, 0.5]) {
+    const span = step * 6;
+    const from = { ...best };
+    for (let dx = from.dx - span; dx <= from.dx + span + 1e-9; dx += step) {
+      for (let dy = from.dy - span; dy <= from.dy + span + 1e-9; dy += step) {
+        const score = cover(shape.map((p) => [p[0] + dx, p[1] + dy]));
+        if (score > best.score) best = { dx, dy, score };
       }
     }
   }
-  // Keep every placement that holds its stands, not the best few hundred by
-  // containment: a hall with room to slide -- G can sit anywhere along its
-  // wall and still contain everything -- has hundreds of equally good
-  // placements, and the one the seams want is not the one containment ranks
-  // first. Capping by containment threw it away.
-  out.sort((a, b) => b.rate - a.rate);
-  return out.slice(0, 4000);
+  ranked.push({ o, ...best });
+  console.log(`  turn ${o.turn} ${o.mirror ? 'mirrored' : 'as drawn'}: ${best.score.toFixed(3)}`);
 }
+ranked.sort((a, b) => b.score - a.score);
+const won = ranked[0];
+const margin = won.score - ranked[1].score;
+console.log(`\nbest: turn ${won.o.turn} ${won.o.mirror ? 'mirrored' : 'as drawn'}, covering `
+  + `${won.score.toFixed(3)} against ${ranked[1].score.toFixed(3)} for the next way up`);
 
-const spotsFor = (pick) => {
-  const spot = new Map();
-  CHAIN.forEach((id, i) => {
-    const c = pick[i];
-    for (const b of boothsOf.get(id)) {
-      const [px, py] = spin(c.o, b.x, b.y);
-      spot.set(b.booth, [px * MODULE + c.ox, py * MODULE + c.oy]);
-    }
-  });
-  return spot;
+const put = (x, y) => {
+  const [px, py] = spin(won.o, x, y);
+  return [px + won.dx, py + won.dy];
 };
 
-const SEAMS = new Map();
-for (let i = 1; i < CHAIN.length; i += 1) {
-  SEAMS.set(`${CHAIN[i - 1]}|${CHAIN[i]}`, seamPairs(CHAIN[i - 1], CHAIN[i]));
-}
+/* ------------------------------------------------------------- the stands */
 
-/** The mean distance between the facing pairs, so a wall with more pairs does
- *  not weigh more than one with fewer. */
-const seamCost = (a, ca, b, cb) => {
-  const pairs = SEAMS.get(`${a}|${b}`) ?? [];
-  if (!pairs.length) throw new Error(`no stand faces another across the ${a}/${b} wall`);
-  const at = (id, c, booth) => {
-    const s = boothsOf.get(id).find((x) => x.booth === booth);
-    const [px, py] = spin(c.o, s.x, s.y);
-    return [px * MODULE + c.ox, py * MODULE + c.oy];
+// A stand's sides are given across and along the page. A quarter-turn swaps
+// which of those is east-west, and nothing drawing these should have to know
+// which way the sheet went down, so it is resolved here.
+const sideways = won.o.turn % 2 === 1;
+const placed = PLANNED_BOOTHS.map((b) => {
+  // Two positions, because they answer different questions. The number says
+  // *which* stand, and is printed at the booth's own place along its aisle, so
+  // it is what the aisle check has to use. The rectangle says *what the stand
+  // is*, and on a 2x9 island its middle is twelve metres from the number.
+  const [x, y] = put(b.rx, b.ry);
+  const [fx, fy] = put(b.x, b.y);
+  return {
+    booth: b.booth,
+    hall: hallAt(x, y),
+    x,
+    y,
+    fx,
+    fy,
+    wide: Number(((sideways ? b.along : b.across) * BOOTH).toFixed(1)),
+    deep: Number(((sideways ? b.across : b.along) * BOOTH).toFixed(1)),
   };
-  let sum = 0;
-  for (const [one, two] of pairs) {
-    const p = at(a, ca, one);
-    const q = at(b, cb, two);
-    sum += Math.hypot(p[0] - q[0], p[1] - q[1]);
-  }
-  return sum / pairs.length;
-};
+});
 
-const corr = (xs, ys) => {
+const held = placed.filter((s) => s.hall).length;
+console.log(`${held}/${placed.length} stands inside the halls (${(held / placed.length * 100).toFixed(1)}%)`);
+
+/* ---------------------------------------- the aisles, which nothing fitted */
+
+const correlation = (xs, ys) => {
   const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
   const my = ys.reduce((a, b) => a + b, 0) / ys.length;
   let top = 0;
-  let l = 0;
-  let r = 0;
+  let left = 0;
+  let right = 0;
   for (let i = 0; i < xs.length; i += 1) {
     top += (xs[i] - mx) * (ys[i] - my);
-    l += (xs[i] - mx) ** 2;
-    r += (ys[i] - my) ** 2;
+    left += (xs[i] - mx) ** 2;
+    right += (ys[i] - my) ** 2;
   }
-  return top / Math.sqrt(l * r);
+  return Math.abs(top / Math.sqrt(left * right));
 };
+// Over the stands the exhibitor list recognises, and only those. Three of the
+// 565 numbers were misread — 246, 264 and 281, all of them four-digit numbers
+// in the 2000s that came out three digits — and they sit 700 points from the
+// aisle they claim. Three points out of 129 drag this correlation from 0.99 to
+// 0.34 on their own. Excluding them is not tuning the placement against the
+// answer sheet: it is a check on where stands are, and those three are known
+// to be reading failures before it runs. `exhibitors.ts` flags them, and the
+// reader's own guard is what flags them with it.
+const listed = new Set(EXHIBITORS.map((e) => e.booth).filter(Boolean));
+const stretch = placed.filter((s) => Number(s.booth) < 600 && listed.has(s.booth));
+const along = correlation(stretch.map((s) => s.fy), stretch.map((s) => Number(s.booth) % 100));
+const across = correlation(stretch.map((s) => s.fx), stretch.map((s) => Math.floor(Number(s.booth) / 100)));
+console.log(`aisles: position along runs north-south at ${along.toFixed(3)}, aisle number east-west at ${across.toFixed(3)}`);
 
-/** The aisle test: only the 100s–500s, where the cross wall says which way. */
-function aisleScore(spot) {
-  const rows = [...spot].filter(([n]) => Number(n) < 600);
-  const along = rows.map(([n]) => Number(n) % 100);
-  const aisle = rows.map(([n]) => Math.floor(Number(n) / 100));
+/* --------------------------------------------------------- no two overlap */
+
+// The whole point of placing the sheet in one piece, so it is checked rather
+// than assumed: a mistake in the turn, or in which side of a stand is which,
+// would show up here and nowhere else.
+const overlaps = [];
+const cells = new Map();
+const CELL = 12;
+for (const s of placed) {
+  const gx = Math.floor(s.x / CELL);
+  const gy = Math.floor(s.y / CELL);
+  for (let ax = gx - 1; ax <= gx + 1; ax += 1) {
+    for (let ay = gy - 1; ay <= gy + 1; ay += 1) {
+      for (const other of cells.get(`${ax},${ay}`) ?? []) {
+        const gapX = Math.abs(s.x - other.x) - (s.wide + other.wide) / 2;
+        const gapY = Math.abs(s.y - other.y) - (s.deep + other.deep) / 2;
+        // A tenth of a metre of slack: stand sizes are rounded to whole booths
+        // and two stands back to back share their edge.
+        if (gapX < -0.1 && gapY < -0.1) overlaps.push([s.booth, other.booth]);
+      }
+    }
+  }
+  const key = `${gx},${gy}`;
+  if (!cells.has(key)) cells.set(key, []);
+  cells.get(key).push(s);
+}
+console.log(`overlapping stands: ${overlaps.length}${overlaps.length ? ` (${overlaps.slice(0, 6).map((p) => p.join('/')).join(' ')})` : ''}`);
+
+/* -------------------------------------------------- the entrances, checked */
+
+const doors = HALLS
+  .map((id) => roomEntrance(roomShapes(ROOMS_BY_ID[id]), ROOMS_BY_ID[id].venueId, ROOMS_BY_ID[id].level))
+  .filter(Boolean)
+  .map((d) => local(d.door.lat, d.door.lng));
+/** How far a point is from the nearest hall wall, inside or out. */
+const fromWall = (px, py) => {
+  let near = Infinity;
+  for (const id of HALLS) {
+    for (const ring of rings.get(id)) {
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+        const [ax, ay] = ring[j];
+        const [bx, by] = ring[i];
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len = dx * dx + dy * dy;
+        const t = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len)) : 0;
+        near = Math.min(near, Math.hypot(ax + dx * t - px, ay + dy * t - py));
+      }
+    }
+  }
+  return near;
+};
+const entrances = PLAN_ENTRANCES.map(({ x, y }) => {
+  const [ex, ey] = put(x, y);
   return {
-    alongAisle: Math.abs(corr(rows.map(([, p]) => p[1]), along)),
-    acrossAisles: Math.abs(corr(rows.map(([, p]) => p[0]), aisle)),
+    wall: fromWall(ex, ey),
+    door: Math.min(...doors.map((d) => Math.hypot(d[0] - ex, d[1] - ey))),
   };
+});
+// Two numbers, and the first is the one worth refusing on. An entrance is a
+// hole in a wall, so a correctly placed one lands *on* a wall — that is a
+// registration check, and one an entrance dropped in the middle of the floor
+// would fail. The second is context rather than a test: `roomEntrance` returns
+// a single point per hall, chosen as the spot on its outline nearest to open
+// floor, and along a sixty-metre concourse wall that pick is close to
+// arbitrary. Two entrances off the same wall are 61 m apart and both right.
+console.log(`entrances: ${entrances.map((e) => `${e.wall.toFixed(1)} m`).join(', ')} from the nearest hall wall`);
+console.log(`           ${entrances.map((e) => `${e.door.toFixed(0)} m`).join(', ')} from the nearest doorway the plan finds`);
+
+/* ------------------------------------------------------------ the refusal */
+
+const failed = [];
+if (won.score < DEMANDS.cover) failed.push(`the carpet covers only ${won.score.toFixed(3)} of the halls`);
+if (margin < DEMANDS.margin) failed.push(`only ${margin.toFixed(3)} better than laying the sheet down another way`);
+if (held / placed.length < DEMANDS.inside) failed.push(`only ${(held / placed.length * 100).toFixed(1)}% of stands are inside a hall`);
+if (along < DEMANDS.alongAisle) failed.push(`position along an aisle runs north-south at only ${along.toFixed(3)}`);
+if (across < DEMANDS.acrossAisles) failed.push(`aisle number runs east-west at only ${across.toFixed(3)}`);
+if (overlaps.length) failed.push(`${overlaps.length} pairs of stands overlap`);
+if (Math.max(...entrances.map((e) => e.wall)) > DEMANDS.entrance) failed.push(`an entrance is ${Math.max(...entrances.map((e) => e.wall)).toFixed(1)} m from any hall wall`);
+if (failed.length) {
+  console.error(`\nnot written:\n${failed.map((f) => `  - ${f}`).join('\n')}`);
+  process.exit(1);
 }
 
-function main() {
-  const pool = new Map(CHAIN.map((id) => [id, candidates(id)]));
-  for (const id of CHAIN) {
-    if (!pool.get(id).length) throw new Error(`${id}: no placement puts 92% of its stands inside it`);
-    console.log(`${id}: ${pool.get(id).length} placements with 92%+ of its stands inside`);
-  }
-
-  // A chain, so the cost of a hall depends only on the one before it.
-  let layer = pool.get(CHAIN[0]).map((c) => ({ cost: 0, pick: [c] }));
-  for (let i = 1; i < CHAIN.length; i += 1) {
-    layer = pool.get(CHAIN[i]).map((c) => {
-      let best = null;
-      for (const prev of layer) {
-        const cost = prev.cost + seamCost(CHAIN[i - 1], prev.pick[prev.pick.length - 1], CHAIN[i], c);
-        if (!best || cost < best.cost) best = { cost, pick: [...prev.pick, c] };
-      }
-      return best;
-    });
-  }
-  layer.sort((a, b) => a.cost - b.cost);
-
-  const shape = (pick) => pick.map((c) => `${c.o.turn}${c.o.mirror ? 'm' : ''}`).join('-');
-  const won = layer[0];
-  const aisle = aisleScore(spotsFor(won.pick));
-  const rival = layer.find((l) => shape(l.pick) !== shape(won.pick));
-  const rivalAisle = rival ? aisleScore(spotsFor(rival.pick)) : null;
-
-  const spot = spotsFor(won.pick);
-  // The same transform, applied to the stand rectangle's middle rather than to
-  // its number's.
-  const middles = new Map();
-  CHAIN.forEach((id, i) => {
-    const c = won.pick[i];
-    for (const b of boothsOf.get(id)) {
-      const [px, py] = spin(c.o, b.rx, b.ry);
-      middles.set(b.booth, [px * MODULE + c.ox, py * MODULE + c.oy]);
-    }
-  });
-  let held = 0;
-  for (const b of PLANNED_BOOTHS) {
-    const p = spot.get(b.booth);
-    if (p && inside(hallForBooth(b.booth), p[0], p[1])) held += 1;
-  }
-  const rate = held / PLANNED_BOOTHS.length;
-  const margin = rivalAisle ? aisle.acrossAisles - rivalAisle.acrossAisles : 1;
-
-  console.log(`\narrangement ${shape(won.pick)}`);
-  console.log(`  stands inside their own hall  ${held}/${PLANNED_BOOTHS.length} (${(rate * 100).toFixed(1)}%)`);
-  console.log(`  seam error over five walls    ${won.cost.toFixed(1)} m`);
-  console.log(`  along an aisle, north-south   r = ${aisle.alongAisle.toFixed(3)}`);
-  console.log(`  across the aisles, east-west  r = ${aisle.acrossAisles.toFixed(3)}`);
-  console.log(`  next-best arrangement         ${rival ? `${shape(rival.pick)}, across-aisles r = ${rivalAisle.acrossAisles.toFixed(3)}` : 'none'}`);
-  for (let i = 1; i < CHAIN.length; i += 1) {
-    const pairs = SEAMS.get(`${CHAIN[i - 1]}|${CHAIN[i]}`) ?? [];
-    const d = seamCost(CHAIN[i - 1], won.pick[i - 1], CHAIN[i], won.pick[i]);
-    console.log(`    ${CHAIN[i - 1]}/${CHAIN[i]}  ${String(pairs.length).padStart(3)} facing pairs, mean ${d.toFixed(1)} m apart`);
-  }
-
-  const walls = [];
-  for (let i = 1; i < CHAIN.length; i += 1) {
-    walls.push({
-      wall: `${CHAIN[i - 1]}/${CHAIN[i]}`,
-      metres: seamCost(CHAIN[i - 1], won.pick[i - 1], CHAIN[i], won.pick[i]),
-      pairs: (SEAMS.get(`${CHAIN[i - 1]}|${CHAIN[i]}`) ?? []).length,
-    });
-  }
-  const median = [...walls].sort((a, b) => a.metres - b.metres)[Math.floor(walls.length / 2)].metres;
-  const worst = Math.max(...walls.map((w) => w.metres));
-  const odd = walls.filter((w) => w.metres > 20);
-
-  const wrong = [];
-  if (rate < DEMANDS.inside) wrong.push(`only ${(rate * 100).toFixed(1)}% of stands land in their own hall`);
-  if (median > DEMANDS.seam) wrong.push(`the median wall is ${median.toFixed(0)} m out`);
-  if (worst > DEMANDS.worstSeam) wrong.push(`the worst wall is ${worst.toFixed(0)} m out`);
-  if (aisle.alongAisle < DEMANDS.alongAisle) wrong.push(`aisles do not run north-south (r = ${aisle.alongAisle.toFixed(2)})`);
-  if (aisle.acrossAisles < DEMANDS.acrossAisles) wrong.push(`aisle numbers do not run east-west (r = ${aisle.acrossAisles.toFixed(2)})`);
-  if (margin < DEMANDS.margin) wrong.push(`the next-best arrangement is within ${margin.toFixed(2)} of this one, so nothing chose between them`);
-  if (wrong.length) {
-    console.error('\nrefusing to write: ' + wrong.join('; '));
-    console.error('A placement nothing distinguishes is a guess with coordinates on it.');
-    process.exit(1);
-  }
-
-  // A quarter-turn swaps a stand's two sides, so the placed extents are
-  // written out rather than the printed ones: `wide` is east-west on the
-  // ground and `deep` is north-south, and nothing downstream has to know which
-  // way its hall was laid down.
-  const BOOTH_M = 3.048;
-  const turnOf = new Map(CHAIN.map((id, i) => [id, won.pick[i].o.turn]));
-  const placed = PLANNED_BOOTHS.map((b) => {
-    const p = middles.get(b.booth) ?? spot.get(b.booth);
-    const hall = hallForBooth(b.booth);
-    const sideways = turnOf.get(hall) % 2 === 1;
-    return {
-      booth: b.booth,
-      hall,
-      ...world(p[0], p[1]),
-      wide: Number(((sideways ? b.along : b.across) * BOOTH_M).toFixed(1)),
-      deep: Number(((sideways ? b.across : b.along) * BOOTH_M).toFixed(1)),
-    };
-  }).sort((a, b) => Number(a.booth) - Number(b.booth));
-
-  const anomaly = odd.length
-    ? ` *\n * ONE WALL DOES NOT AGREE, and it is written here rather than averaged\n * away: ${odd.map((w) => `${w.wall} at ${w.metres.toFixed(0)} m`).join(', ')}. Every other wall\n * comes out at 7 to 11 m, which is what two stands facing each other across\n * an air wall should be. Ten times the search finds the same answer there, so\n * something structural disagrees — a hall outline, or an assumption about\n * which aisles adjoin — and stands near that wall may be tens of metres out\n * where the rest are within a stand or two.\n`
-    : '';
-
-  const source = `/**
- * Where each stand is, as near as anything can say.
+const kept = placed.filter((s) => s.hall).sort((a, b) => Number(a.booth) - Number(b.booth));
+const source = `/**
+ * Where each stand is.
  *
  * Generated by scripts/fit-booths.mjs — do not edit by hand. That script
- * carries the method, the three checks and the thresholds it refuses to write
- * under; this is only its answer.
+ * carries the method, the checks and the thresholds it refuses to write under;
+ * this is only its answer.
  *
- * HOW GOOD THESE ARE, because they are not surveyed and should never be read
- * as though they were. Each hall's block of stands is the printed map's own
- * geometry at true scale, laid into that hall's traced outline with only a
- * quarter-turn and an offset free. So *within* a hall the arrangement is real:
- * neighbouring stands are neighbours, an aisle is an aisle, and the numbering
- * runs the way it runs on the floor. *Between* halls it carries the fit's
- * error, about five metres a wall.
+ * HOW GOOD THESE ARE, because they are not surveyed and should not be read as
+ * though they were. The printed map is one to-scale plan of the whole exhibit
+ * floor, and it is laid on to the building as a single rigid piece: the scale
+ * is the sheet's own module and is never fitted, so only the way up and the
+ * offset were ever chosen. The carpet's outline then covers the six halls'
+ * outlines to ${won.score.toFixed(3)}, against ${ranked[1].score.toFixed(3)} for the next way of laying it
+ * down, and ${(held / placed.length * 100).toFixed(1)}% of the stands land inside them.
  *
- * A stand is therefore in the right aisle of the right hall, and within a few
- * stands along it. That is enough to walk to and not enough to survey with,
- * and the map draws these as marks rather than as outlines for that reason.
-${anomaly} */
+ * So the arrangement is the printed plan's own, exactly: neighbouring stands
+ * are neighbours, an aisle is an aisle, and no two stands overlap — that last
+ * being a property of placing the sheet in one piece rather than something
+ * tuned for. What error there is, is one registration error shared by the whole
+ * floor rather than something that accumulates across it.
+ *
+ * The five entrances the sheet marks land ${entrances.map((e) => e.wall.toFixed(1)).join(', ')} m from a hall
+ * wall, which is where a hole in a wall should be. \`walkable.ts\` has never
+ * seen the PDF.
+ *
+ * \`hall\` is which hall outline the stand actually falls in, which is not
+ * always what \`booths.ts\` would say from its number. The numbering does not
+ * respect the walls, and during the convention the walls are not there.
+ */
 
 export interface PlacedBooth {
   booth: string;
@@ -396,11 +390,11 @@ export interface PlacedBooth {
 }
 
 export const PLACED_BOOTHS: ReadonlyArray<PlacedBooth> = [
-${placed.map((b) => `  { booth: '${b.booth}', hall: '${b.hall}', lat: ${b.lat}, lng: ${b.lng}, wide: ${b.wide}, deep: ${b.deep} },`).join('\n')}
+${kept.map((s) => {
+    const at = world(s.x, s.y);
+    return `  { booth: '${s.booth}', hall: '${s.hall}', lat: ${at.lat}, lng: ${at.lng}, wide: ${s.wide}, deep: ${s.deep} },`;
+  }).join('\n')}
 ];
 `;
-  writeFileSync(OUT, source);
-  console.log(`\n${OUT}: ${placed.length} stands, ${(source.length / 1024) | 0} KB`);
-}
-
-main();
+writeFileSync(OUT, source);
+console.log(`\n${OUT}: ${kept.length} stands, ${(source.length / 1024) | 0} KB`);

@@ -57,17 +57,19 @@ export interface SearchHit {
 /**
  * How big the stand is, in ten-foot booths, where the printed map says.
  *
- * The one thing that map can be believed about besides the numbers: it is
- * drawn on a strict 12 pt module, so a stand's *size* is real even though its
- * position on the sheet is a page layout rather than a place. Worth saying
- * because it is the difference between a table and a pavilion — a 2×9 is
- * ninety feet of frontage and you will not walk past it.
+ * The map is drawn on a strict 12 pt module, so a stand's size comes straight
+ * off it. Worth saying because it is the difference between a table and a
+ * pavilion — a 2×9 is ninety feet of frontage and you will not walk past it.
  */
 function standSize(booth: string | undefined): string {
   if (!booth) return '';
   const stand = BOOTH_SIZE.get(booth);
-  if (!stand || (stand.across === 1 && stand.along === 1)) return '';
-  const [a, b] = [stand.across, stand.along].sort((x, y) => x - y);
+  if (!stand) return '';
+  // To the nearest booth. The sizes are measured off the drawing rather than
+  // declared by it, so they arrive as 2.04 booths and 0.98 booths — true to a
+  // couple of percent, and no way to say a stand is twenty feet across.
+  const [a, b] = [Math.round(stand.across), Math.round(stand.along)].sort((x, y) => x - y);
+  if (a <= 1 && b <= 1) return '';
   return ` · ${a * 10}×${b * 10} ft`;
 }
 
