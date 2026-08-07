@@ -304,7 +304,14 @@ describe('the doorways, over the real campus', () => {
           other.id !== room.id &&
           other.venueId === room.venueId &&
           other.level === room.level &&
-          !other.fillsVenue,
+          !other.fillsVenue &&
+          // One exception, and it is the building. The exhibit halls are a
+          // single floor with air walls across it — the booth numbers run
+          // straight through from the 100s to the 3000s without restarting at
+          // a hall boundary — so crossing from one into the next is walking,
+          // not trespassing. Exhibit Hall G needs it: nothing draws a corridor
+          // on any of its four sides.
+          !(room.category === 'exhibit' && other.category === 'exhibit'),
       ).flatMap(outline);
 
       const span = between(from, cell);
@@ -322,17 +329,49 @@ describe('the doorways, over the real campus', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('finds one for all but nine rooms, and names the nine', () => {
+  it('lets a hall open through a hall, and nothing else open through anything', () => {
+    // The exception, asserted rather than left as a hole in the test above —
+    // otherwise loosening it further would go unnoticed, which is the only way
+    // that rule can hurt anybody.
+    //
+    // Hall G is the room it exists for and the only one on this campus. It is
+    // boxed in by Hall F to the north, Hall H to the east and the outer wall on
+    // the other two sides, and the plan draws no circulation against any of
+    // them: its nearest walkable square is 30 m away with Hall H in between.
+    // Without this it fell back to its own centre, 40 m inside a hall 80 m
+    // across, and the route to it ended in the wrong place with no sign of it.
+    const g = ROOMS_BY_ID['hall-g'];
+    const door = roomDoor(g)!;
+    expect(door).toBeTruthy();
+    expect(within(outline(ROOMS_BY_ID['hall-g'])[0], door.lat, door.lng)).toBe(false);
+
+    // The doorway is on Hall G's own boundary, not somewhere in Hall H: it is
+    // the wall you walk through, and the walk across H is the route's, not the
+    // door's.
+    const edge = Math.min(
+      ...outline(g)[0].map(([lat, lng]) => distanceMetres(door, { lat, lng })),
+    );
+    expect(edge).toBeLessThan(30);
+
+    // And no non-exhibit room anywhere is allowed the same latitude: every
+    // other doorway on the campus is already covered by the test above, which
+    // still holds them to three metres.
+    const halls = ROOMS.filter((room) => room.category === 'exhibit' && roomDoor(room));
+    expect(halls.length).toBeGreaterThan(8);
+  });
+
+  it('finds one for all but six rooms, and names the six', () => {
     // Counted and named rather than counted alone, because the way this gets
     // worse is that a room quietly falls back to its centre — which for a hall
     // the size of Exhibit Hall A is eighty metres from any door, and looks like
     // a route.
     //
     // Three of these are single-room venues Gen Con does not colour on its own
-    // campus sheets, so nothing draws a corridor for them to open onto. Four
-    // are rooms whose schematic rectangle sits further from the drawn
-    // circulation than any honest search reaches — Lucas Oil's two are 64 m and
-    // 112 m out.
+    // campus sheets, so nothing draws a corridor for them to open onto. One is
+    // a room whose schematic rectangle sits further from the drawn circulation
+    // than any honest search reaches. (Lucas Oil's two were here until their
+    // rectangles were read off the campus sheet the right way up; Hall G until
+    // a hall was allowed to open through a hall.)
     //
     // The last two are fine as they are, and for the same reason. Neither is a
     // room with a way in and out of a building: one is a street, the other the
@@ -344,11 +383,8 @@ describe('the doorways, over the real campus', () => {
       'block-party-street',
       'circle-centre-mall',
       'escape-room-venue',
-      'hall-g',
       'indiana-rep-stage',
       'jw-rooms-206-207',
-      'lucas-oil-exhibit-halls',
-      'lucas-oil-meeting-rooms',
       'makers-market',
     ]);
   });

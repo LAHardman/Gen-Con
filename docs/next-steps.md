@@ -200,9 +200,9 @@ version of that test — one room per floor — caught only two of them.
 
 ---
 
-## 3. Seven rooms have no doorway — was twenty-nine, then fourteen
+## 3. One room has no doorway — was twenty-nine, then fourteen, then seven
 
-**Measured.** `roomDoor` finds nothing for 7 of 146 rooms, which then use their
+**Measured.** `roomDoor` finds nothing for 6 of 149 rooms, which then use their
 centre — the inaccuracy the doorway work existed to remove:
 
 ```
@@ -210,10 +210,11 @@ circle-centre-mall, escape-room-venue, indiana-rep-stage   single-room venues
                                                            Gen Con does not
                                                            colour, so no
                                                            corridor is drawn
-hall-g                     30 m from the nearest drawn circulation
-jw-rooms-206-207           36 m
-lucas-oil-exhibit-halls    112 m
-lucas-oil-meeting-rooms    64 m
+block-party-street, makers-market                          a street and a
+                                                           corridor: no inside,
+                                                           and their centre is
+                                                           where you are going
+jw-rooms-206-207           36 m from the nearest drawn circulation
 ```
 
 **What closed the last seven, and it was not a bigger number.** The search
@@ -244,10 +245,21 @@ separates a shared edge from walking the length of a room.
  25 m, crossing test            7                       14
 ```
 
-Both remaining numbers are unblocked by anything in the code. The three
-single-room venues need a plan Gen Con does not publish; the other four need
-better rectangles — Lucas Oil's two sit 64 m and 112 m from the floor that is
-drawn, which no honest search will cross.
+**Three of the four that were left have since gone, and each was a different
+fault.** Lucas Oil's two were a *half-turn out* — read off a sheet Gen Con
+draws with south at the top, without turning it — so both sat in the stadium's
+south corner where the sheet puts them in the north-east one. Exhibit Hall G
+was neither a rectangle fault nor a threshold one: its outline is right and
+nothing draws a corridor against any of its four walls, so its way out is
+across Hall H, and the rule is now that an exhibit hall may open through
+another exhibit hall. The halls are one floor with air walls across them; the
+booth numbers say so by running straight through from the 100s to the 3000s.
+`REACH` went 25 → 35 to reach across it, which over the whole campus gains that
+one doorway and moves no other by half a metre.
+
+The last one, `jw-rooms-206-207`, is 36 m from the JW's drawn 2nd-floor
+circulation and needs a better rectangle. The three single-room venues need a
+plan Gen Con does not publish.
 
 ---
 
@@ -504,7 +516,7 @@ halls, which is the one case where a coin toss is not a coin toss.
 **What it bought.**
 
 ```
-events resolving to no room     130 → 51   of 27,467
+events resolving to no room     130 → 50   of 27,467
 stand locations placed on the map  47 → 621  of 846
 exhibit-hall stands placed          0 → 573  of 573
 ```
@@ -567,8 +579,9 @@ Three things about it, so nobody opens it hoping for more:
     geometric fit is now attemptable — though it still needs the two thousand
     small numbers OCR'd first.
 
-**Every stand is placed — 846 of 846.** The last six areas took six separate
-answers, and none of them was in any file:
+**Every stand is placed — 846 of 846**, and 50 events of 27,467 still resolve
+to no room. The last six stand areas took six separate answers, and none of
+them was in any file:
 
   - **Community Row** — Sagamore Ballroom hallway, ICC Level 2. Its four
     Educator Row tables are the same run: the stand list numbers Community Row
@@ -605,12 +618,30 @@ have no walkable floor either, but for a reason that needs no fixing: a street
 and a corridor have no inside to search over, and falling back to the centre of
 either is where somebody walking there is going.
 
-**Four rooms with no doorway — waiting on better rectangles.** `hall-g` and
-`jw-rooms-206-207` sit 30 m and 36 m from the drawn circulation; Lucas Oil's
-exhibit halls and meeting rooms sit 64 m and 112 m from it. Those last two are
-not a threshold problem at any honest reach — the rectangles are schematic and
-in the wrong place relative to the sheet the floor was traced from. Tracing
-them from the campus tiles, as the halls were, is the fix.
+**One room with no doorway — was four.** `jw-rooms-206-207`, 36 m from the JW's
+drawn 2nd-floor circulation. The other three are done, and they were three
+different faults wearing the same symptom:
+
+  - **Lucas Oil's exhibit halls and meeting rooms** were a *half-turn out*.
+    Their rectangles put both in the stadium's south corner; the sheet puts
+    Halls 1–2 and Meeting Rooms 1–12 in the north-east one. That is what
+    happens when a rectangle is read off a plan Gen Con draws with south at the
+    top and nobody turns it round — the room lands in the building, in a
+    plausible place, 180° from where it is. Re-read off
+    `plans/campus/level-0.png` the right way up, fitted so both stay inside the
+    surveyed footprint and clear of the field's traced outline, and both now
+    have doors.
+  - **Exhibit Hall G** was neither a rectangle fault nor a threshold one. Its
+    outline is the architect's and correct: it is enclosed by Hall F to the
+    north, Hall H to the east and the outer wall on the other two sides, and
+    the plan draws no circulation against any of them. Its nearest walkable
+    square is 30.5 m away with 23.5 m of Hall H in between, and the crossing
+    test was refusing it — rightly, by the rule it had. The rule is now that an
+    exhibit hall may open through another exhibit hall, which is the building:
+    the halls are one floor with air walls across it, and the booth numbers run
+    straight through from the 100s to the 3000s without restarting at a hall
+    boundary. `REACH` went 25 → 35 to reach across; measured over every room on
+    the campus that gains Hall G's doorway and moves no other by half a metre.
 
 **Five buildings inferring every floor change — waiting on a source that draws
 their shafts.** The Crowne Plaza, the Hilton, the Omni, the Embassy Suites and

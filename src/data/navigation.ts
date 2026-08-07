@@ -85,14 +85,31 @@ export function roomDoor(room: Room): LatLng | null {
   return DOORS.get(room.id) ?? null;
 }
 
-/** Is this point inside a *different* room on the same floor? */
+/**
+ * Is this point inside a *different* room you would not be walking through?
+ *
+ * One exception, and it is the building rather than a fudge. The exhibit halls
+ * are a single floor with air walls across it: the booth numbering runs
+ * straight through from the 100s to the 3000s without restarting at a hall
+ * boundary, which is the whole premise of `booths.ts`, and you cross from one
+ * hall to the next by walking. So an exhibit hall's way out may lead through
+ * another exhibit hall, where any other room's may not.
+ *
+ * Exhibit Hall G is the room that needs it and the only one on this campus.
+ * The plan draws no corridor along any of its walls — it is enclosed by Hall F
+ * to the north, Hall H to the east and the outer wall on two sides — so its
+ * nearest circulation is 30 m away across Hall H, and refusing that left it
+ * falling back to its own centre, 40 m inside a hall the size of a street.
+ */
 function throughAnotherRoom(room: Room) {
+  const halls = room.category === 'exhibit';
   const others = ROOMS.filter(
     (other) =>
       other.id !== room.id &&
       other.venueId === room.venueId &&
       other.level === room.level &&
-      !other.fillsVenue,
+      !other.fillsVenue &&
+      !(halls && other.category === 'exhibit'),
   ).flatMap((other) => roomRings(other) as ReadonlyArray<ReadonlyArray<readonly [number, number]>>);
 
   return ({ lat, lng }: LatLng) => others.some((ring) => within(ring, lat, lng));

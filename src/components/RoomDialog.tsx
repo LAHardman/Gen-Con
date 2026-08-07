@@ -265,7 +265,7 @@ export function RoomDialog({
 
         <p className="dialog__note">
           {NOT_A_BUILDING.has(room.venueId)
-            ? 'This is a street closed to traffic, not a building. The kerbs either side of it are surveyed, but how much of the street the closure covers is not published — the block drawn is the one the party is named for. Check the official Gen Con program for exact locations.'
+            ? 'This is a street closed to traffic, not a building — drawn kerb to kerb from the surveyed street, over the block that closes. It has no floor plan because it has no floor. Check the official Gen Con program for exact locations.'
             : room.venueId === 'icc'
             ? 'Room outlines are traced from the convention centre’s official floor plans, which the map draws underneath. Check the official Gen Con program for exact room assignments.'
             : TRACED_FOOTPRINT.has(room.venueId)

@@ -409,8 +409,15 @@ function smooth(floor: Floor, cells: Array<{ cx: number; cy: number }>): Point[]
  * corridor that happens to be near but is on the far side of somebody else's
  * room. That is now tested for directly rather than guarded against with a
  * number.
+ *
+ * 25 to 35 for Exhibit Hall G, whose nearest circulation is 30.5 m away across
+ * Hall H — see `throughAnotherRoom` for why crossing a hall is allowed and
+ * crossing anything else is not. Measured over every room on the campus, the
+ * change gains that one doorway and moves no other by so much as half a metre,
+ * which is what the paragraph above predicts: past the first few metres the
+ * number stops deciding anything and the crossing test decides it all.
  */
-const REACH = 25;
+const REACH = 35;
 
 /**
  * Where you go into a room from the corridor outside it.

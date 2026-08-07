@@ -386,7 +386,7 @@ aisle it stands rather than on which aisle it is. It was given as the two
 places it crosses — between 331 and 339, and between 429 and 439 — and booth
 174, the one the schedule calls Hall J, is what fixes which side is which.
 
-That took events resolving to no room from **130 to 51** of 27,467, and stands
+That took events resolving to no room from **130 to 50** of 27,467, and stands
 placed on the map from **47 to 621** of 846 — every one of the 573 in the
 exhibit hall. Searching "Kenzer" now finds Exhibit Hall I. Placing Community
 Row, the Makers Market, the Block Party and Hall I's three blocks of tables

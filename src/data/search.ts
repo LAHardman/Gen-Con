@@ -117,9 +117,8 @@ export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
  *   Block Party     South Street, closed to traffic Wednesday to Sunday. Its
  *                   own "venue", because a closed street is not in any
  *                   building.
- *   Field           the stadium field. This one is a reading rather than a
- *                   telling: four publishers with a demo space each, an area
- *                   that is one word, and exactly one Field on the campus.
+ *   Field           the stadium field, boarded over. Four publishers with a
+ *                   demo space each, filed under an area of one word.
  *
  * And three that are all inside Exhibit Hall I, which the printed plan draws
  * as one block of tables between the 600s and the 1100s. That plan letters no

@@ -207,6 +207,17 @@ describe('finding the room inside the building', () => {
     expect(venueIdForEvent(at('ICC', 'Georgia Street Entrance'))).toBe('icc');
   });
 
+  it('reads a room the schedule spells wrong', () => {
+    // `Union Station : Eerie`, on one event of 27,467. Every room along that
+    // concourse is named for a railroad — Monon, Nickel Plate, Wabash, B & O —
+    // and there is no Eerie Railroad, so it is the Erie with a letter too many
+    // at the source. Carried as an alias rather than corrected in the importer,
+    // because the importer writes what Gen Con publishes and this is the layer
+    // that knows what the rooms are called.
+    expect(roomIdForEvent(at('Union Station', 'Eerie'))).toBe('union-erie');
+    expect(roomIdForEvent(at('Union Station', 'Erie'))).toBe('union-erie');
+  });
+
   it('reads the table field as well as the room', () => {
     // Some events name the space only in `Table`, and the two are searched
     // together rather than the room alone.

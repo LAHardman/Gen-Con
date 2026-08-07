@@ -406,34 +406,52 @@ export const VENUES: Venue[] = [
     shortName: 'Block Party',
     aliases: ['Block Party', 'South Street'],
     anchor: {
-      nw: { lat: 39.761704, lng: -86.165407 },
-      widthMetres: 279,
-      heightMetres: 30,
+      nw: { lat: 39.761709, lng: -86.1655545 },
+      widthMetres: 310,
+      heightMetres: 31,
     },
     // The one "venue" here that is not a building: it is a street, closed.
     //
     // So there is no footprint to take, and this ring is written out rather
     // than pulled from `footprints.ts`, which is documented as surveyed
     // buildings and should stay that way. What it *is* taken from is still
-    // OpenStreetMap: West South Street's two flanking pavements, which OSM maps
-    // as ways of their own along this block —
+    // OpenStreetMap, and all of it —
     //
-    //   north kerb  way/1229666665   south kerb  way/667563570
+    //   the block   way/437505529, West South Street from the South Missouri
+    //               junction (39.7616196/-86.1655545) to the South Capitol one
+    //               (39.7615377/-86.1619372). One way, node to node, and
+    //               exactly the stretch that is closed.
+    //   north kerb  way/1229666665
+    //   south kerb  way/667563570
     //
-    // so the four corners below are their ends, and the shape is the real
-    // kerb-to-kerb width of the real street. © OpenStreetMap contributors, ODbL.
+    // The ring is the two kerbs, nose to tail, so the edges bend where the real
+    // kerbs bend. Both pavements are mapped a little short of the junctions —
+    // they stop where the crossings begin — so each end is carried the last
+    // 13 m and 19 m along its own final segment to meet the cross street.
+    // 310 m by 31 m. © OpenStreetMap contributors, ODbL.
     //
-    // What is *not* known is how much of the street Gen Con closes. This block
-    // is the one the party is named for and the one both buildings face: the
-    // convention centre's pedestrian connector comes down to the ground at its
-    // north-east corner, 39.761706/-86.162154, which is the "Pedestrian
-    // Connector" drawn at the edge of Gen Con's own Block Party map. Whether
-    // the closure runs a little past either end of it, nothing published says.
+    // The convention centre's pedestrian connector comes down to the ground
+    // inside this block, at 39.761706/-86.162154, 18 m short of the Capitol
+    // end — which is the "Pedestrian Connector" drawn at the edge of Gen Con's
+    // own Block Party map, and the one independent check there is on any of it.
     footprint: [
+      [39.761709, -86.1655545],
       [39.761704, -86.165407],
-      [39.761641, -86.162145],
+      [39.761684, -86.164869],
+      [39.761691, -86.164769],
+      [39.761697, -86.164673],
+      [39.761677, -86.163836],
+      [39.761676, -86.163789],
+      [39.761674, -86.1637],
+      [39.761657, -86.162906],
+      [39.761641, -86.162339],
+      [39.761661, -86.162145],
+      [39.761682, -86.1619372],
+      [39.761434, -86.1619372],
       [39.761439, -86.162158],
+      [39.761494, -86.164489],
       [39.761516, -86.165316],
+      [39.761522, -86.1655545],
     ],
     grid: UNIT_GRID,
   },
@@ -476,13 +494,15 @@ export const PLANNED_LAYOUT = new Set([
 export const TRACED_FOOTPRINT = new Set(['le-meridien']);
 
 /**
- * "Venues" that are not buildings, and whose extent is therefore a judgement.
+ * "Venues" that are not buildings.
  *
- * The Block Party is a street with the traffic taken off it. Its outline is
- * real — the kerbs either side of it are mapped in OpenStreetMap and the ring
- * is their ends — but how much of the street is closed is not published
- * anywhere, so the block drawn is the block the party is named for and the one
- * both buildings face, not a surveyed boundary. The room pop-up says so.
+ * The Block Party is a street with the traffic taken off it, and every line of
+ * it is surveyed: the kerbs either side are mapped in OpenStreetMap, and the
+ * closure runs from the South Missouri junction to the South Capitol one,
+ * which is one OSM way from end to end. What it is *not* is a building, and a
+ * building is what everything else on this map is — it has no inside, no
+ * floor, no doors, and it is there four days a year. The room pop-up says that
+ * rather than offering a floor plan it does not have.
  */
 export const NOT_A_BUILDING = new Set(['block-party']);
 
@@ -867,7 +887,13 @@ export const ROOMS: Room[] = [
     category: 'exhibit',
     venueId: 'lucas-oil',
     level: 'Event level',
-    rect: { x: 34, y: 75, width: 30, height: 13 },
+    // North-east corner of the stadium, off the concourse the halls open onto.
+    // The old rectangle had this in the *south* corner and the meeting rooms
+    // with it — a half-turn out, which is what happens when a rectangle is read
+    // off a sheet Gen Con draws with south at the top and not turned round. It
+    // put both of them 64 m and 112 m from any drawn floor, so neither had a
+    // doorway. Read off `plans/campus/level-0.png` again, this time turned.
+    rect: { x: 59, y: 15, width: 22, height: 9 },
     aliases: ['Exhibit Hall 1', 'Exhibit Hall 2', 'Exhibit Hall 1--2'],
     description:
       'The stadium’s own exhibit halls, numbered rather than lettered like the convention centre’s. Scheduled play and overflow from the main hall.',
@@ -930,7 +956,9 @@ export const ROOMS: Room[] = [
     category: 'meeting',
     venueId: 'lucas-oil',
     level: 'Event level',
-    rect: { x: 66, y: 62, width: 16, height: 12 },
+    // Rooms 1 to 12, down the east side below Hall 2 — the same half-turn as
+    // the halls above, and the same fix.
+    rect: { x: 81, y: 25, width: 15, height: 20 },
     aliases: ['Meeting Room', 'Meeting Rooms'],
     description:
       'A dozen numbered breakout rooms off the concourse, running RPG and workshop slots away from the noise of the field.',
@@ -1530,7 +1558,11 @@ export const ROOMS: Room[] = [
     venueId: 'crowne-plaza',
     level: '1st floor',
     rect: { x: 69, y: 59, width: 8, height: 5 },
-    aliases: ['Erie'],
+    // "Eerie" is the schedule's own spelling, on the one event it puts in here.
+    // Every room along this concourse is named for a railroad — Monon, Nickel
+    // Plate, Wabash, B & O — so it is the Erie, misspelt at the source, and the
+    // alternative is one event that resolves to nothing.
+    aliases: ['Erie', 'Eerie'],
     description: 'East side of the concourse, one of the block of three above the Wabash pair.',
     highlights: ['East side', 'Named for a railroad', 'Single-table sessions'],
   },
@@ -2411,8 +2443,8 @@ export const ROOMS: Room[] = [
     fillsVenue: true,
     aliases: ['Block Party', 'South Street'],
     description:
-      'South Street closed to traffic from Wednesday to Sunday, between the convention centre and the stadium: food trucks, bars and somewhere to sit down outdoors. The stand list gives 30 numbered food trucks and 15 lettered booths along it; which pitch is which is not published, so the whole street is drawn rather than each stand placed.',
-    highlights: ['Food trucks & bars', 'Wednesday to Sunday', 'Outdoors — no shelter'],
+      'West South Street closed to traffic from Wednesday to Sunday, from South Missouri Street to South Capitol Avenue — 310 m between the convention centre and the stadium: food trucks, bars and somewhere to sit down outdoors. The stand list gives 30 numbered food trucks and 15 lettered booths along it; which pitch is which is not published, so the whole street is drawn rather than each stand placed.',
+    highlights: ['Food trucks & bars', 'Missouri to Capitol', 'Wednesday to Sunday'],
   },
 ];
 
