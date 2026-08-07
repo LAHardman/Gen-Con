@@ -108,9 +108,9 @@ describe('where the map and the stand list agree', () => {
       // rooms in blocks, so a room resolves to the block that contains it.
       ICC: ['rooms-120-128', 'rooms-130-145', 'rooms-231-245', 'sagamore-ballroom'],
       'Stadium : West Club Lounge': ['lucas-oil-west-club'],
-      // The exhibit hall names no hall in its words. Its booth numbers do —
-      // four of the eleven halls, which is as far as the divides reach.
-      'Exhibit Hall': ['hall-f', 'hall-g', 'hall-h', 'hall-i'],
+      // The exhibit hall names no hall in its words. Its booth numbers do,
+      // and they reach all six halls the grid runs through.
+      'Exhibit Hall': ['hall-f', 'hall-g', 'hall-h', 'hall-i', 'hall-j', 'hall-k'],
     });
     for (const ids of found.values()) for (const id of ids) expect(ROOMS_BY_ID[id], id).toBeDefined();
   });
@@ -121,21 +121,10 @@ describe('where the map and the stand list agree', () => {
     // schedule that confirm the table is not back to front.
     const hall = EXHIBITORS.filter((e) => e.area === 'Exhibit Hall');
     expect(hall.length).toBeGreaterThan(500);
-    const placed = hall.filter((stand) => roomIdForExhibitor(stand));
-    expect(placed.length).toBe(446);
+    // Every one of them, which is the point: the words place none.
+    expect(hall.filter((stand) => roomIdForExhibitor(stand))).toHaveLength(hall.length);
     expect(roomIdForExhibitor(hall.find((e) => e.booth === '1637')!)).toBe('hall-h');
-  });
-
-  it('leaves the stretch nobody has divided unplaced, rather than picking a hall', () => {
-    // The honest half. The first stretch of the grid is Hall J *and* Hall K and
-    // nothing says where one ends, so its 127 stands get no hall — a coin toss
-    // would send half of them to the wrong end of a building 400 m long, and
-    // would look exactly like knowing.
-    const unplaced = EXHIBITORS.filter(
-      (stand) => stand.area === 'Exhibit Hall' && !roomIdForExhibitor(stand),
-    );
-    expect(unplaced).toHaveLength(127);
-    for (const stand of unplaced) expect(Number(stand.booth)).toBeLessThan(600);
+    expect(roomIdForExhibitor(hall.find((e) => e.booth === '174')!)).toBe('hall-j');
   });
 });
 
@@ -167,13 +156,14 @@ describe('searching for a publisher rather than a room', () => {
     expect(ids('kenzer')).toEqual(['hall-i']);
   });
 
-  it('still offers nothing for a stand nobody has placed', () => {
-    // A stand in the stretch that is Hall J or Hall K. No answer beats a coin
-    // toss between two halls at opposite ends of the same wall.
-    const unplaced = EXHIBITORS.find(
-      (e) => e.area === 'Exhibit Hall' && Number(e.booth) < 600 && e.name.length > 6,
+  it('offers nothing for a stand that is not in the exhibit hall at all', () => {
+    // The Art Show, the Block Party, Makers Market: real places with no room
+    // on the map, so their stands reach nothing rather than reaching whatever
+    // is nearest.
+    const elsewhere = EXHIBITORS.find(
+      (e) => e.area === 'Art Show' && !roomIdForExhibitor(e) && e.name.length > 8,
     )!;
-    expect(unplaced).toBeDefined();
-    expect(search(unplaced.name.slice(0, 6).toLowerCase(), NO_EVENTS)).toEqual([]);
+    expect(elsewhere).toBeDefined();
+    expect(search(elsewhere.name.slice(0, 8).toLowerCase(), NO_EVENTS)).toEqual([]);
   });
 });

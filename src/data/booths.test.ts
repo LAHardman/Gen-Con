@@ -20,26 +20,25 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { HALL_DIVIDES, boothIn, hallForBooth } from './booths';
+import { ACROSS_THE_AISLES, HALL_DIVIDES, boothIn, hallForBooth } from './booths';
 import { EXHIBITORS } from './exhibitors';
 import { ROOMS_BY_ID } from './venues';
 
 describe('the divides themselves', () => {
   it('agrees with the two halls the schedule names', () => {
-    // The whole guarantee. Read the other way round — I below the 500s rather
-    // than above — booth 174 lands in Hall I, and the schedule says J.
+    // The whole guarantee, and both halves of it. Read the between-aisle walls
+    // the other way round — I below the 500s rather than above — and booth 174
+    // lands in Hall I. Read the cross wall the other way round and it lands in
+    // Hall K. The schedule says J, and it is the only thing that says which of
+    // J and K is the far side.
     expect(hallForBooth(2667)).toBe('hall-g');
-    // 174 is in the stretch that is J or K, so it has no hall here; what
-    // matters is that it is *not* one of the halls the divides do place, which
-    // is what a reversed table would make it.
-    expect(hallForBooth(174)).toBeNull();
-    expect(['hall-i', 'hall-h', 'hall-g', 'hall-f']).not.toContain(hallForBooth(174));
+    expect(hallForBooth(174)).toBe('hall-j');
   });
 
   it('puts each wall between the two booths it was given as', () => {
     // Each divide, from both sides. A fencepost here moves a whole aisle into
     // the next hall and nothing else notices.
-    expect([hallForBooth(599), hallForBooth(600)]).toEqual([null, 'hall-i']);
+    expect([hallForBooth(599), hallForBooth(600)]).toEqual(['hall-j', 'hall-i']);
     expect([hallForBooth(1399), hallForBooth(1400)]).toEqual(['hall-i', 'hall-h']);
     expect([hallForBooth(2299), hallForBooth(2300)]).toEqual(['hall-h', 'hall-g']);
     // The only wall that falls inside an aisle rather than between two.
@@ -55,16 +54,30 @@ describe('the divides themselves', () => {
     expect([2727, 2900, 3062].map(hallForBooth)).toEqual(Array(3).fill('hall-f'));
   });
 
-  it('says nothing where the sources say nothing', () => {
-    // 127 of the 573 stands are in the stretch that is J *or* K, and which is
-    // not stated. A coin toss would send half of them to a hall a hundred
-    // metres from their stand, and would look exactly like knowing.
-    expect([100, 174, 350, 599].map(hallForBooth)).toEqual(Array(4).fill(null));
-    const unplaced = EXHIBITORS.filter(
-      (stand) => stand.area === 'Exhibit Hall' && stand.booth && !hallForBooth(stand.booth),
+  it('cuts the first stretch across its aisles rather than between them', () => {
+    // The wall between J and K is a different shape from the other four: the
+    // two halls are stacked at the same end of the building, so it crosses
+    // every aisle from the 100s to the 500s and a booth's hall depends on how
+    // far along its aisle it stands.
+    //
+    // The two places it was given as, from both sides:
+    expect([hallForBooth(339), hallForBooth(331)]).toEqual(['hall-j', 'hall-k']);
+    expect([hallForBooth(439), hallForBooth(429)]).toEqual(['hall-j', 'hall-k']);
+    // ...and the same line holding across every other aisle in the stretch.
+    expect([132, 234, 533, 175, 275, 575].map(hallForBooth)).toEqual(Array(6).fill('hall-j'));
+    expect([100, 203, 315, 403, 501].map(hallForBooth)).toEqual(Array(5).fill('hall-k'));
+  });
+
+  it('leaves no stand in the first stretch unplaced', () => {
+    const stretch = EXHIBITORS.filter(
+      (stand) => stand.area === 'Exhibit Hall' && Number(stand.booth) < 600,
     );
-    expect(unplaced.length).toBe(127);
-    for (const stand of unplaced) expect(Number(stand.booth)).toBeLessThan(600);
+    expect(stretch).toHaveLength(127);
+    for (const stand of stretch) {
+      expect(['hall-j', 'hall-k'], `${stand.name} at ${stand.booth}`).toContain(
+        hallForBooth(stand.booth),
+      );
+    }
   });
 
   it('names a real room for every hall it places', () => {
@@ -74,10 +87,17 @@ describe('the divides themselves', () => {
       if (hall) expect(ROOMS_BY_ID[hall], hall).toBeDefined();
     }
     expect(HALL_DIVIDES.filter(({ hall }) => hall)).toHaveLength(4);
+    expect(ROOMS_BY_ID[ACROSS_THE_AISLES.beyond]).toBeDefined();
+    expect(ROOMS_BY_ID[ACROSS_THE_AISLES.before]).toBeDefined();
   });
 
-  it('places every stand in the hall or in no hall, never off the end', () => {
-    const halls = new Set(HALL_DIVIDES.map(({ hall }) => hall));
+  it('places every stand in a hall, never off the end', () => {
+    const halls = new Set<string | null>([
+      ...HALL_DIVIDES.map(({ hall }) => hall),
+      ACROSS_THE_AISLES.beyond,
+      ACROSS_THE_AISLES.before,
+    ]);
+    halls.delete(null);
     for (const stand of EXHIBITORS) {
       if (stand.area !== 'Exhibit Hall' || !stand.booth) continue;
       expect(halls, `${stand.name} at ${stand.booth}`).toContain(hallForBooth(stand.booth));
