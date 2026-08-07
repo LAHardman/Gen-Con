@@ -166,7 +166,21 @@ describe('searching for a publisher rather than a room', () => {
     const [first] = search('1229', NO_EVENTS);
     expect(first.exhibitor?.name).toBe('Kenzer and Company');
     expect(first.room!.id).toBe('hall-i');
-    expect(hitLabel(first)).toEqual({ title: 'Kenzer and Company', detail: 'Booth 1229 · Hall I' });
+    expect(hitLabel(first).title).toBe('Kenzer and Company');
+    expect(hitLabel(first).detail).toBe('Booth 1229 · Hall I · 20×20 ft');
+  });
+
+  it('says how big a stand is, since the printed map can be believed about that', () => {
+    // The map's positions are a page layout, but its *module* is real: 12
+    // points is a ten-foot booth throughout. So a stand's size survives even
+    // though its place on the sheet does not, and the size is the difference
+    // between a table and ninety feet of frontage.
+    expect(hitLabel(search('1229', NO_EVENTS)[0]).detail).toContain('20×20 ft');
+    // A single booth says nothing: it is the default and would be noise on
+    // three quarters of the hall.
+    const single = search('2667', NO_EVENTS)[0];
+    expect(single.exhibitor?.booth).toBe('2667');
+    expect(hitLabel(single).detail).toContain('10×20 ft');
   });
 
   it('leads with the booth and follows with the hall, not the other way round', () => {

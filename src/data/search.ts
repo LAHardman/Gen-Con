@@ -19,6 +19,7 @@ import { ROOMS, VENUES_BY_ID, type Room } from './venues';
 import { roomIdForEvent, type ConEvent, type EventIndex } from './events';
 import { EXHIBITORS, type Exhibitor } from './exhibitors';
 import { hallForBooth } from './booths';
+import { PLANNED_BOOTHS } from './booth-plan';
 import { ADDRESSES } from './addresses';
 import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
 import { pinPlace, roomPlace, type NavPlace } from './navigation';
@@ -53,6 +54,25 @@ export interface SearchHit {
   score: number;
 }
 
+/**
+ * How big the stand is, in ten-foot booths, where the printed map says.
+ *
+ * The one thing that map can be believed about besides the numbers: it is
+ * drawn on a strict 12 pt module, so a stand's *size* is real even though its
+ * position on the sheet is a page layout rather than a place. Worth saying
+ * because it is the difference between a table and a pavilion — a 2×9 is
+ * ninety feet of frontage and you will not walk past it.
+ */
+function standSize(booth: string | undefined): string {
+  if (!booth) return '';
+  const stand = BOOTH_SIZE.get(booth);
+  if (!stand || (stand.across === 1 && stand.along === 1)) return '';
+  const [a, b] = [stand.across, stand.along].sort((x, y) => x - y);
+  return ` · ${a * 10}×${b * 10} ft`;
+}
+
+const BOOTH_SIZE = new Map(PLANNED_BOOTHS.map((stand) => [stand.booth, stand]));
+
 /** Where a hit takes you — the one thing every consumer actually wants. */
 export function hitPlace(hit: SearchHit): NavPlace {
   return hit.pin ? pinPlace(hit.pin) : roomPlace(hit.room!);
@@ -82,7 +102,7 @@ export function hitLabel(hit: SearchHit): { title: string; detail: string } {
     // number — `ICC : Hall E` / `Asmodee` — so repeating it would read
     // "Asmodee · Asmodee · Hall E".
     const spot = hit.exhibitor.spot === hit.exhibitor.name ? '' : `${hit.exhibitor.spot} · `;
-    return { title: hit.exhibitor.name, detail: `${spot}${where}` };
+    return { title: hit.exhibitor.name, detail: `${spot}${where}${standSize(hit.exhibitor.booth)}` };
   }
   return {
     title: hit.room!.name,

@@ -553,8 +553,8 @@ The printed map is not that source and it is worth writing down why, because
 §7 predicted it would be. It was fetched by hand — `files.gencon.com` is
 refused by this environment's egress policy, the gateway answering 403 to the
 CONNECT before any request is made — and read. **It letters no hall.** It is
-one page, a two-page programme spread: the upper three quarters a true plan of
-the booth grid drawn to scale, the lower quarter the exhibitor index, which is
+one page, a two-page programme spread: the upper three quarters the booth grid,
+the lower quarter the exhibitor index, which is
 the same information `exhibitors.ts` already holds, plus a "Sponsor Locations
 Outside Exhibit Hall" block giving hall letters for about thirty *demo spaces*,
 which is the same information again.
@@ -562,8 +562,8 @@ which is the same information again.
 Three things about it, so nobody opens it hoping for more:
 
   - **The booth numbers on the plan are vector art, not text.** Its text layer
-    holds 1,914 items and every one is the index or one of a dozen big labels,
-    so reading the grid means OCR of two thousand small numbers.
+    holds 1,914 items and every one is the index or one of a dozen big labels.
+    They have since been read anyway — see §9 — by clustering the outlines.
   - **The only lettered regions are the Art Show, Authors Avenue, Entrepreneurs
     Avenue and the Family Fun Pavilion**, plus the Exhibitor Services Desk and
     five entrance arrows.
@@ -575,9 +575,11 @@ Three things about it, so nobody opens it hoping for more:
     plan. What was wrong was the *name*: the Family Fun Pavilion is the bottom
     right corner of Hall H, which is centre-right, which is exactly where the
     plan draws it. J and K are adjacent after all, stacked rather than side by
-    side. Nothing on the plan contradicts `venues.ts`'s geometry any more, so a
-    geometric fit is now attemptable — though it still needs the two thousand
-    small numbers OCR'd first.
+    side.
+
+    That much held. The wider conclusion — "nothing on the plan contradicts
+    `venues.ts`'s geometry any more, so a geometric fit is now attemptable" —
+    did not, and §9 is what disproved it.
 
 **Every stand is placed — 846 of 846**, and 50 events of 27,467 still resolve
 to no room. The last six stand areas took six separate answers, and none of
@@ -657,3 +659,71 @@ badly enough to pay for it; the routes already say the stairs are inferred.
 **The forecourt hop.** Still 25–90 m of straight line between a door and the
 nearest surveyed footway, at every building. OpenStreetMap `entrance=` nodes
 would shorten it where they exist. It is the smallest of these.
+
+---
+
+## 9. Reading the booth map, and why the booths are still not drawn
+
+**What was wanted.** The exhibit hall drawn as booths rather than as six halls,
+since the booth number is on every sign in the building and the hall letter is
+on none of them. That needs a coordinate per booth, and no source has one.
+
+**What was tried.** `scripts/read-booth-map.mjs` reads Gen Con's printed
+exhibit-hall map, which has no text on it. The grid is 4,612 filled paths: 405
+stand rectangles and about 1,900 digit outlines. The digits are scan-filled
+into coverage rasters, clustered by mean absolute difference, and ten clusters
+come out far larger than the rest — 330 down to 82. Those are the ten digits;
+what they are was read off a rendering of the cluster means, which is the one
+step in the pipeline a person did.
+
+Grouping them into numbers took two corrections worth keeping:
+
+  - **Lines by proximity, not by rounding.** Glyph baselines on one line differ
+    by a hundredth of a point — "1" is not the same height as "4" — so sorting
+    on the raw value interleaves the digits of a number. Rounding to a grid
+    fixes that and breaks any line that straddles a boundary, which lost 89
+    numbers.
+  - **Advance, not gap.** "1" is 1.2 pt narrower than every other digit, so the
+    *gap* after a 1 is the same size as the gap between two numbers and no
+    threshold on it can separate them. The distance from one glyph's left edge
+    to the next is 2.7 pt inside a number and 6.4 pt between two, which needs
+    no tuning at all.
+
+**How well it worked: 521 of 524, or 99.4%.** The check is `exhibitors.ts` —
+562 booth numbers from a different Gen Con system, pulled on a different day,
+by a script that has never seen the PDF. Nothing in the pipeline was tuned
+against it. The three that are not in it are valid-looking numbers for stands
+nobody had taken; the 41 in the list and not on the map are stands let after it
+was printed, or numbered inside a block the map labels once.
+
+**Why the booths are still not drawn, which is the point of this section.**
+The map is drawn on a strict 12 pt = 10 ft module, so it is to scale. It is not
+a plan of the building. The halls are laid along the page in numbering order —
+J, K, I, H, G, F from left to right — and that is not how they sit:
+
+```
+on the printed map     [J/K] [I] [H] [G] [F]        one strip, five bands
+in the ICC's own plans [F/G] [H] [I] [J/K]          four columns, F over G
+```
+
+Halls F and G are side by side on Gen Con's map and stacked in the convention
+centre's own floor plans, which is where `venues.ts` gets them. Fitting a
+single similarity transform over all 524 booths lands 73% of them in the right
+hall and cannot do better, because no such transform exists. And at the module
+scale two halls' booth blocks come out *wider than the halls they are in* —
+Hall H is 84 m of booths in a 73 m hall.
+
+So it is a page layout of real blocks. Placing stands from it would put people
+in the wrong aisle with every appearance of knowing, which is the one failure
+this repository has spent its whole life avoiding.
+
+**What was kept.** `src/data/booth-plan.ts`: all 524 numbers, each with its
+stand size in ten-foot booths. The size survives what the position does not,
+because the module is real even where the layout is a page — and it is the
+difference between a table and ninety feet of frontage. Search shows it.
+
+**What would close it.** A plan of the exhibit floor in the building's own
+geometry: the ICC's own floor plans with the booth grid on them, or Gen Con's
+map with the halls in their real arrangement, or a georeferenced exhibitor map
+from the app Gen Con ships. Any of the three, and the reading above supplies
+the numbers to hang on it.
