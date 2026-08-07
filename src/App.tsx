@@ -4,6 +4,7 @@ import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
+import type { SearchHit } from './data/search';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
@@ -13,6 +14,7 @@ import { useWarmCampus } from './hooks/useWarmCampus';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
 import {
+  pinPlace,
   placeRoom,
   roomPlace,
   routeBetween,
@@ -156,7 +158,18 @@ export default function App() {
   // point of searching for one: the map flies there behind the dialog, so
   // closing it leaves you looking at the right place.
   const handlePickSearchResult = useCallback(
-    (room: Room) => {
+    (hit: SearchHit) => {
+      // A pin has no room to select, no building to open and no floor to
+      // switch to — it is a coordinate with an address on it. Picking one puts
+      // it straight into directions, because going there is the only thing
+      // anybody can do with it.
+      if (hit.pin) {
+        setNav({ from: null, to: pinPlace(hit.pin) });
+        setEditing('from');
+        setPickOnMap(false);
+        return;
+      }
+      const room = hit.room!;
       setSelectedRoomId(room.id);
       showRoom(room);
       setFocusRequest({ room, token: Date.now() });

@@ -20,6 +20,7 @@ import { ROOMS, ROOMS_BY_ID, VENUES_BY_ID, roomBounds, roomShapes, type Room } f
 import { roomEntrance } from './walkable';
 import { walkBetween, type Anchor, type Walk } from './route';
 import { distanceMetres, walkingMinutes, type LatLng } from '../utils/geo';
+import type { Pin } from './offsite';
 
 /** Which end of a route is being chosen. */
 export type NavEnd = 'from' | 'to';
@@ -29,7 +30,19 @@ export type NavPlace =
   /** Wherever the device says it is, read live rather than captured. */
   | { kind: 'device' }
   /** A point tapped on the map, which names nothing. */
-  | { kind: 'point'; position: LatLng };
+  | { kind: 'point'; position: LatLng }
+  /**
+   * A street address: a name, a coordinate, and no inside.
+   *
+   * The fourth kind exists because the third could not carry a name and the
+   * first claims too much. Gen Con schedules forty events at places the map
+   * has no plan of — a steakhouse, a ballpark, a museum lawn — and each is a
+   * real destination with a real address and nothing else: no floor, no
+   * doorway, no level to switch the map to. Carrying one as a room would have
+   * it claiming an outline it does not have; carrying it as a point would lose
+   * the address, which is the whole of what is known about it.
+   */
+  | { kind: 'pin'; pin: Pin };
 
 /** A reading from the device's own positioning, with the radius it claims. */
 export interface DeviceFix {
@@ -39,6 +52,7 @@ export interface DeviceFix {
 }
 
 export const roomPlace = (room: Room): NavPlace => ({ kind: 'room', roomId: room.id });
+export const pinPlace = (pin: Pin): NavPlace => ({ kind: 'pin', pin });
 
 function roomCentre(room: Room): LatLng {
   const [nw, se] = roomBounds(room);
@@ -155,6 +169,8 @@ export function placePosition(place: NavPlace, device: DeviceFix | null): LatLng
       return device?.position ?? null;
     case 'point':
       return place.position;
+    case 'pin':
+      return { lat: place.pin.lat, lng: place.pin.lng };
   }
 }
 
@@ -166,6 +182,8 @@ export function placeLabel(place: NavPlace): string {
       return 'My location';
     case 'point':
       return 'Point on the map';
+    case 'pin':
+      return place.pin.name;
   }
 }
 
@@ -184,6 +202,10 @@ export function placeDetail(place: NavPlace, device: DeviceFix | null): string {
       return device ? `Accurate to about ${Math.round(device.accuracy)} m` : '';
     case 'point':
       return `${place.position.lat.toFixed(5)}, ${place.position.lng.toFixed(5)}`;
+    // The address rather than the coordinate: it is what the schedule printed,
+    // it is what is on the door, and it is the thing somebody can act on.
+    case 'pin':
+      return place.pin.address;
   }
 }
 
@@ -203,6 +225,8 @@ export function placeKey(place: NavPlace | null): string {
       return 'device';
     case 'point':
       return `point:${place.position.lat.toFixed(5)},${place.position.lng.toFixed(5)}`;
+    case 'pin':
+      return place.pin.id;
   }
 }
 

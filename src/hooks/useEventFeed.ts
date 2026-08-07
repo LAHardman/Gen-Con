@@ -12,6 +12,7 @@ export interface EventFeedState {
 
 const EMPTY_INDEX: EventIndex = {
   byRoom: new Map(),
+  byPin: new Map(),
   unmatched: [],
   days: [],
   total: 0,

@@ -19,8 +19,11 @@ import { indexEvents, type ConEvent } from './events';
 
 const NO_EVENTS: EventSearchIndex = { entries: [] };
 
+/** Room ids only: an address hit has no room, and most of these are about rooms. */
 const ids = (query: string, events: EventSearchIndex = NO_EVENTS, limit = 8) =>
-  search(query, events, limit).map((hit) => hit.room.id);
+  search(query, events, limit)
+    .filter((hit) => hit.room)
+    .map((hit) => hit.room!.id);
 
 /** An event in a room, with only the fields the search and the index read. */
 const event = (over: Partial<ConEvent> & { title: string; roomText: string }): ConEvent => ({
@@ -33,7 +36,7 @@ const event = (over: Partial<ConEvent> & { title: string; roomText: string }): C
 describe('finding a room', () => {
   it('puts the room whose name starts with what you typed first', () => {
     const [first] = search('exhibit hall b', NO_EVENTS);
-    expect(first.room.id).toBe('hall-b');
+    expect(first.room!.id).toBe('hall-b');
     expect(first.kind).toBe('room');
   });
 
@@ -50,6 +53,27 @@ describe('finding a room', () => {
     for (const id of hits) expect(id).toMatch(/^jw-white-river/);
   });
 
+  it('puts every room above every street address, whatever was typed', () => {
+    // The gazetteer is 839 addresses against 149 rooms, and on a word like
+    // "river" both answer — the JW's ballrooms, and River Avenue, and the
+    // Riverwalk car park. A search that let the street compete would bury the
+    // campus under its own neighbourhood, so the rule is flat: an address is
+    // what you get when nothing on the campus matched.
+    //
+    // Asserted over several queries rather than one, because the failure is a
+    // score that creeps rather than a rule that breaks.
+    for (const query of ['river', 'lucas oil', 'washington', 'meridian', 'illinois']) {
+      const hits = search(query, NO_EVENTS, 20);
+      const worstRoom = Math.max(...hits.filter((h) => h.room).map((h) => h.score), -Infinity);
+      const bestAddress = Math.min(...hits.filter((h) => h.pin).map((h) => h.score), Infinity);
+      expect(worstRoom, query).toBeLessThan(bestAddress);
+      // And on the order, not only on the score.
+      const lastRoom = hits.map((h) => Boolean(h.room)).lastIndexOf(true);
+      const firstAddress = hits.map((h) => Boolean(h.pin)).indexOf(true);
+      if (lastRoom !== -1 && firstAddress !== -1) expect(lastRoom, query).toBeLessThan(firstAddress);
+    }
+  });
+
   it('puts the room actually called 140 above the one whose address begins 140', () => {
     // A real ordering bug, and one nobody would have found by reading the code.
     // The Indiana Repertory Theatre's only alias is its street address, 140 W
@@ -57,13 +81,13 @@ describe('finding a room', () => {
     // *better* than an exact alias, which is what the convention centre's
     // Meeting Room 140 had. Typing a room number offered a theatre.
     const hits = search('140', NO_EVENTS, 10);
-    expect(hits[0].room.id).toBe('rooms-130-145');
-    expect(hits.map((hit) => hit.room.id)).toContain('indiana-rep-stage');
+    expect(hits[0].room!.id).toBe('rooms-130-145');
+    expect(hits.map((hit) => hit.room!.id)).toContain('indiana-rep-stage');
 
     // On the scores, not only on the order: these two also differ in name
     // length, and the tie-break would put the right one first by luck even with
     // the ranking back to front.
-    const at = (id: string) => hits.find((hit) => hit.room.id === id)!;
+    const at = (id: string) => hits.find((hit) => hit.room!.id === id)!;
     expect(at('rooms-130-145').score).toBeLessThan(at('indiana-rep-stage').score);
   });
 
@@ -74,7 +98,7 @@ describe('finding a room', () => {
     // They are not equally good answers and the order is the whole of saying
     // so.
     const scored = search('room', NO_EVENTS, 40);
-    const at = (id: string) => scored.find((hit) => hit.room.id === id)!;
+    const at = (id: string) => scored.find((hit) => hit.room!.id === id)!;
     const starts = at('jw-room-109');
     const word = at('hyatt-board-room');
     const anywhere = at('sagamore-ballroom');
@@ -97,7 +121,7 @@ describe('finding a room', () => {
     const hits = search('grand', NO_EVENTS, 20);
     expect(hits.length).toBeGreaterThan(2);
     const byScore = new Map<number, number[]>();
-    for (const hit of hits) byScore.set(hit.score, [...(byScore.get(hit.score) ?? []), hit.room.name.length]);
+    for (const hit of hits) byScore.set(hit.score, [...(byScore.get(hit.score) ?? []), hit.room!.name.length]);
     expect([...byScore.values()].some((lengths) => lengths.length > 1)).toBe(true);
     for (const lengths of byScore.values()) {
       expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
@@ -112,8 +136,8 @@ describe('finding a room', () => {
     // "104" to say which. Picking one would take half the people who type it to
     // the wrong building, and look exactly like a working search.
     const hits = search('104', NO_EVENTS, 20);
-    expect(new Set(hits.map((hit) => hit.room.venueId)).size).toBeGreaterThan(1);
-    expect(hits.map((hit) => hit.room.id)).toEqual(
+    expect(new Set(hits.map((hit) => hit.room!.venueId)).size).toBeGreaterThan(1);
+    expect(hits.map((hit) => hit.room!.id)).toEqual(
       expect.arrayContaining(['rooms-101-117', 'jw-rooms-101-104']),
     );
   });
@@ -128,9 +152,9 @@ describe('finding a room', () => {
   });
 
   it('finds a room by the building it is in', () => {
-    const hits = search('lucas oil', NO_EVENTS, 20);
+    const hits = search('lucas oil', NO_EVENTS, 20).filter((hit) => hit.room);
     expect(hits.length).toBeGreaterThan(0);
-    for (const hit of hits) expect(hit.room.venueId).toBe('lucas-oil');
+    for (const hit of hits) expect(hit.room!.venueId).toBe('lucas-oil');
   });
 
   it('ranks the building below anything the room itself is called', () => {
@@ -163,7 +187,7 @@ describe('finding an event', () => {
     const events = feed([event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall B' })]);
     const [hit] = search('catan', events);
     expect(hit.kind).toBe('event');
-    expect(hit.room.id).toBe('hall-b');
+    expect(hit.room!.id).toBe('hall-b');
     expect(hit.event?.title).toBe('Learn to Play Catan');
   });
 
@@ -193,7 +217,7 @@ describe('finding an event', () => {
       event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall B' }),
       event({ title: 'Learn to Play Catan', roomText: 'Exhibit Hall C' }),
     ]);
-    expect(new Set(search('catan', events).map((hit) => hit.room.id))).toEqual(
+    expect(new Set(search('catan', events).map((hit) => hit.room!.id))).toEqual(
       new Set(['hall-b', 'hall-c']),
     );
   });
@@ -207,7 +231,7 @@ describe('finding an event', () => {
     ]);
     const [first] = search('hall b', events);
     expect(first.kind).toBe('room');
-    expect(first.room.id).toBe('hall-b');
+    expect(first.room!.id).toBe('hall-b');
   });
 
   it('prefers a title that starts with what you typed', () => {
@@ -215,7 +239,7 @@ describe('finding an event', () => {
       event({ title: 'Advanced Catan Strategy', roomText: 'Exhibit Hall C' }),
       event({ title: 'Catan Championship', roomText: 'Exhibit Hall B' }),
     ]);
-    expect(search('catan', events).map((hit) => hit.room.id)).toEqual(['hall-b', 'hall-c']);
+    expect(search('catan', events).map((hit) => hit.room!.id)).toEqual(['hall-b', 'hall-c']);
   });
 
   it('leaves out events the map cannot place', () => {

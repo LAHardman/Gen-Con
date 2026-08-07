@@ -19,17 +19,52 @@ import { ROOMS, VENUES_BY_ID, type Room } from './venues';
 import { roomIdForEvent, type ConEvent, type EventIndex } from './events';
 import { EXHIBITORS, type Exhibitor } from './exhibitors';
 import { hallForBooth } from './booths';
+import { ADDRESSES } from './addresses';
+import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
+import { pinPlace, roomPlace, type NavPlace } from './navigation';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
   key: string;
-  kind: 'room' | 'event';
-  room: Room;
+  kind: 'room' | 'event' | 'address';
+  /** The room this is, or the room an event is in. A pin has none. */
+  room?: Room;
+  /**
+   * Where an address is, for the places the map draws no room for.
+   *
+   * A room and a pin are mutually exclusive and exactly one is always set:
+   * a hit is somewhere, and the two are the two kinds of somewhere there are.
+   */
+  pin?: Pin;
   /** The soonest session, when this hit came from an event. */
   event?: ConEvent;
   /** How many sessions share this title in this room. */
   sessions?: number;
   score: number;
+}
+
+/** Where a hit takes you — the one thing every consumer actually wants. */
+export function hitPlace(hit: SearchHit): NavPlace {
+  return hit.pin ? pinPlace(hit.pin) : roomPlace(hit.room!);
+}
+
+/** What a hit is called, and the line under it. */
+export function hitLabel(hit: SearchHit): { title: string; detail: string } {
+  if (hit.kind === 'event') {
+    const venue = hit.room ? VENUES_BY_ID[hit.room.venueId] : undefined;
+    return {
+      title: hit.event?.title ?? '',
+      detail: hit.room
+        ? `${hit.room.shortName ?? hit.room.name} · ${venue?.shortName ?? venue?.name ?? ''}`
+        : (hit.pin?.name ?? ''),
+    };
+  }
+  if (hit.pin) return { title: hit.pin.name, detail: hit.pin.address };
+  const venue = VENUES_BY_ID[hit.room!.venueId];
+  return {
+    title: hit.room!.name,
+    detail: `${venue?.shortName ?? venue?.name ?? ''} · ${hit.room!.level}`,
+  };
 }
 
 /** Lower is better. Ordered by how directly the text was matched. */
@@ -58,6 +93,13 @@ const SCORE = {
   // and above the building's, since a publisher is the more specific thing.
   exhibitorName: 3.5,
   venueStart: 4,
+  /**
+   * A street address, and every one of these is below every room on purpose.
+   * The gazetteer is 839 addresses against 149 rooms; letting a house number
+   * outrank a room would answer "500" with a street and hide the 500 Ballroom.
+   */
+  addressExact: 5,
+  addressName: 5.5,
   eventTitleStart: 5,
   eventTitleAnywhere: 6,
 };
@@ -187,7 +229,8 @@ function scoreRoom(keys: RoomKeys, query: string): number | null {
  * has nowhere to take you, so offering it would be a dead end.
  */
 export interface EventSearchIndex {
-  entries: Array<{ room: Room; event: ConEvent; title: string }>;
+  /** Exactly one of `room` and `pin` is set: an event happens somewhere. */
+  entries: Array<{ room?: Room; pin?: Pin; event: ConEvent; title: string }>;
 }
 
 export function buildEventSearchIndex(index: EventIndex | null): EventSearchIndex {
@@ -198,7 +241,83 @@ export function buildEventSearchIndex(index: EventIndex | null): EventSearchInde
     if (!room) continue;
     for (const event of events) entries.push({ room, event, title: normalise(event.title) });
   }
+  // The forty at an address rather than in a room. Searched the same way and
+  // shown the same way: what somebody types is the name of the event, and
+  // where it is happening is the answer either way.
+  for (const { pin, events } of index.byPin.values()) {
+    for (const event of events) entries.push({ pin, event, title: normalise(event.title) });
+  }
   return { entries };
+}
+
+/**
+ * Addresses downtown, so that somewhere the map draws nothing is still a place.
+ *
+ * Ranked below every room, and that is the point rather than an accident. The
+ * gazetteer holds 839 addresses and the campus holds 149 rooms, so on any
+ * query they both match — "500" is the 500 Ballroom and it is also a dozen
+ * house numbers — and a search that let the street win would bury the
+ * convention centre under its own neighbourhood. An address is the answer when
+ * nothing on the campus is.
+ *
+ * Two ways in, because there are two ways somebody knows a place:
+ *
+ *   the number and the street   `127 s illinois`, matched after both ends are
+ *                               spelled out, so the abbreviation somebody types
+ *                               reaches the way OpenStreetMap files it
+ *   what is there               `st elmo`, matched on the name, which is what
+ *                               anybody would actually type
+ */
+function addressHits(rawQuery: string): SearchHit[] {
+  const hits: SearchHit[] = [];
+  const asked = plainStreet(rawQuery);
+  const words = plainWords(rawQuery);
+  const numbered = /^([0-9]+[a-z]?)\s+(.+)$/.exec(asked);
+
+  // The four with no address in OpenStreetMap, which the gazetteer below
+  // therefore cannot offer. Matched on the name and on the address, because
+  // "Janus Lofts" is on the building and "255 McCrea" is in the schedule, and
+  // either is a thing somebody types.
+  const spoken = new Set<string>();
+  for (const pin of NAMED_PINS) {
+    const name = plainWords(pin.name);
+    const line = plainStreet(pin.address);
+    const score = name.startsWith(words)
+      ? SCORE.addressName
+      : line.startsWith(asked) || startsWord(name, words) || startsWord(line, asked)
+        ? SCORE.addressName + 0.5
+        : null;
+    if (score === null) continue;
+    spoken.add(name);
+    hits.push({ key: `pin:${pin.id}`, kind: 'address', pin, score });
+  }
+
+  for (const entry of ADDRESSES) {
+    const name = entry.name ? plainWords(entry.name) : '';
+    const street = plainStreet(entry.street);
+    let score: number | null = null;
+
+    if (numbered && entry.number.toLowerCase() === numbered[1]) {
+      // The number is exact and the street is what is left. A prefix is enough
+      // — "127 s illinois" should find South Illinois Street without the word
+      // "street" being typed.
+      if (street.startsWith(numbered[2])) score = SCORE.addressExact;
+    }
+    if (score === null && name) {
+      if (name.startsWith(words)) score = SCORE.addressName;
+      else if (startsWord(name, words)) score = SCORE.addressName + 0.5;
+    }
+    if (score === null) continue;
+    // A corner building has two addresses and OpenStreetMap files it under
+    // one of them: Janus Lofts is 255 McCrea Street to Gen Con and 20 West
+    // Louisiana Street to OSM, 35 m apart and the same front door. Where the
+    // schedule has already named a place, its own address is the one to show.
+    if (name && spoken.has(name)) continue;
+    hits.push({ key: `address:${entry.number}:${entry.street}`, kind: 'address', pin: addressPin(entry), score });
+  }
+  // Enough to show that the street was understood, not enough to fill a list
+  // with one block of a numbered avenue.
+  return hits.sort((a, b) => a.score - b.score).slice(0, 4);
 }
 
 export function search(
@@ -218,7 +337,7 @@ export function search(
 
   // One hit per title per room, keeping the soonest session and counting the rest.
   const grouped = new Map<string, SearchHit>();
-  for (const { room, event, title } of events.entries) {
+  for (const { room, pin, event, title } of events.entries) {
     const score = title.startsWith(query)
       ? SCORE.eventTitleStart
       : startsWord(title, query)
@@ -228,21 +347,23 @@ export function search(
           : null;
     if (score === null) continue;
 
-    const key = `event:${room.id}:${title}`;
+    const key = `event:${room?.id ?? pin!.id}:${title}`;
     const existing = grouped.get(key);
     if (existing) {
       existing.sessions = (existing.sessions ?? 1) + 1;
       if (Date.parse(event.start) < Date.parse(existing.event!.start)) existing.event = event;
     } else {
-      grouped.set(key, { key, kind: 'event', room, event, sessions: 1, score });
+      grouped.set(key, { key, kind: 'event', room, pin, event, sessions: 1, score });
     }
   }
   hits.push(...grouped.values());
 
+  hits.push(...addressHits(rawQuery));
+
   hits.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
-    const aText = a.kind === 'room' ? a.room.name : (a.event?.title ?? '');
-    const bText = b.kind === 'room' ? b.room.name : (b.event?.title ?? '');
+    const aText = hitLabel(a).title;
+    const bText = hitLabel(b).title;
     return aText.length - bText.length || aText.localeCompare(bText);
   });
 

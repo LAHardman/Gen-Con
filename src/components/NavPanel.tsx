@@ -3,14 +3,12 @@ import {
   formatDistance,
   placeDetail,
   placeLabel,
-  roomPlace,
   type NavEnd,
   type NavPlace,
   type RouteSummary,
 } from '../data/navigation';
-import { search, type EventSearchIndex } from '../data/search';
+import { hitLabel, hitPlace, search, type EventSearchIndex } from '../data/search';
 import { deviceMessage, type DeviceLocation } from '../hooks/useDeviceLocation';
-import { VENUES_BY_ID } from '../data/venues';
 
 interface Props {
   from: NavPlace | null;
@@ -191,7 +189,7 @@ export function NavPanel({
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && hits.length > 0) {
                     event.preventDefault();
-                    choose(editing, roomPlace(hits[0].room));
+                    choose(editing, hitPlace(hits[0]));
                   }
                 }}
               />
@@ -202,7 +200,7 @@ export function NavPanel({
                     <li className="search__empty">Nothing matches “{query.trim()}”</li>
                   )}
                   {hits.map((hit) => {
-                    const venue = VENUES_BY_ID[hit.room.venueId];
+                    const { title, detail } = hitLabel(hit);
                     return (
                       <li key={hit.key}>
                         <button
@@ -210,16 +208,10 @@ export function NavPanel({
                           role="option"
                           aria-selected={false}
                           className="search__hit"
-                          onClick={() => choose(editing, roomPlace(hit.room))}
+                          onClick={() => choose(editing, hitPlace(hit))}
                         >
-                          <span className="search__hit-main">
-                            {hit.kind === 'room' ? hit.room.name : hit.event?.title}
-                          </span>
-                          <span className="search__hit-sub">
-                            {hit.kind === 'room'
-                              ? `${venue?.shortName ?? venue?.name ?? ''} · ${hit.room.level}`
-                              : `${hit.room.shortName ?? hit.room.name} · ${venue?.shortName ?? venue?.name ?? ''}`}
-                          </span>
+                          <span className="search__hit-main">{title}</span>
+                          <span className="search__hit-sub">{detail}</span>
                         </button>
                       </li>
                     );

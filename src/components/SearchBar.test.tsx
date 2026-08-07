@@ -34,7 +34,16 @@ function setup() {
   const onPick = vi.fn();
   render(<SearchBar events={EVENTS} onPick={onPick} />);
   const input = screen.getByRole('combobox') as HTMLInputElement;
-  return { onPick, input, type: (text: string) => fireEvent.change(input, { target: { value: text } }) };
+  return {
+    onPick,
+    input,
+    type: (text: string) => fireEvent.change(input, { target: { value: text } }),
+    // What was handed over. `onPick` takes the whole hit now rather than a
+    // room, because a hit can be a street address with no room in it — see
+    // `hitPlace`. Every assertion below is still about the room, so unwrap it
+    // here rather than in nine places.
+    picked: (call = 0) => onPick.mock.calls[call][0].room,
+  };
 }
 
 const options = () => screen.queryAllByRole('option');
@@ -113,13 +122,13 @@ describe('the keyboard', () => {
     // The bug this is really for: a highlight that moves on screen while Enter
     // still reads the top of the list takes you somewhere you did not choose,
     // and looks like a working search doing something inexplicable.
-    const { type, input, onPick } = setup();
+    const { type, input, onPick, picked } = setup();
     type('hall');
     const second = options()[1].textContent;
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onPick).toHaveBeenCalledTimes(1);
-    expect(second).toContain(onPick.mock.calls[0][0].name);
+    expect(second).toContain(picked().name);
   });
 
   it('starts again from the top when the query changes under it', () => {
@@ -127,7 +136,7 @@ describe('the keyboard', () => {
     // letter and the list is two long — the highlight is off the end of it, and
     // Enter reads `hits[5]` of a two-item array. That is `undefined`, and what
     // happens next is a crash in the picking rather than a wrong room.
-    const { type, input, onPick } = setup();
+    const { type, input, picked } = setup();
     type('hall');
     expect(options().length).toBeGreaterThan(2);
     for (let n = 0; n < 5; n += 1) fireEvent.keyDown(input, { key: 'ArrowDown' });
@@ -135,7 +144,7 @@ describe('the keyboard', () => {
     expect(options().length).toBeLessThan(5);
     expect(highlighted()).toBe(options()[0]);
     expect(() => fireEvent.keyDown(input, { key: 'Enter' })).not.toThrow();
-    expect(onPick.mock.calls[0][0].id).toBe('hall-b');
+    expect(picked().id).toBe('hall-b');
   });
 
   it('does nothing on Enter with nothing to pick', () => {
@@ -146,12 +155,12 @@ describe('the keyboard', () => {
   });
 
   it('follows the mouse, so Enter picks what is under it', () => {
-    const { type, input, onPick } = setup();
+    const { type, input, picked } = setup();
     type('hall');
     fireEvent.mouseEnter(options()[2]);
     expect(highlighted()).toBe(options()[2]);
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onPick.mock.calls[0][0].name).toBeTruthy();
+    expect(picked().name).toBeTruthy();
   });
 });
 
@@ -161,11 +170,11 @@ describe('picking one', () => {
     // it — so on `click` the list would already be gone by the time the click
     // landed and tapping a result would do nothing. On a phone, which is where
     // this is used.
-    const { type, onPick } = setup();
+    const { type, onPick, picked } = setup();
     type('hall b');
     fireEvent.pointerDown(options()[0]);
     expect(onPick).toHaveBeenCalledTimes(1);
-    expect(onPick.mock.calls[0][0].id).toBe('hall-b');
+    expect(picked().id).toBe('hall-b');
   });
 
   it('clears itself and gets out of the way', () => {
@@ -182,6 +191,7 @@ describe('picking one', () => {
     // An event is not a place. The hit is really a hit on where it happens,
     // and the room is the only thing the map can be taken to.
     const feed = buildEventSearchIndex({
+      byPin: new Map(),
       byRoom: new Map([
         [
           'hall-b',
@@ -201,6 +211,6 @@ describe('picking one', () => {
     const input = screen.getByRole('combobox');
     fireEvent.change(input, { target: { value: 'catan' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onPick.mock.calls[0][0].id).toBe('hall-b');
+    expect(onPick.mock.calls[0][0].room.id).toBe('hall-b');
   });
 });

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { search, type EventSearchIndex, type SearchHit } from '../data/search';
-import { VENUES_BY_ID, type Room } from '../data/venues';
+import { hitLabel, search, type EventSearchIndex, type SearchHit } from '../data/search';
 import { formatTimeRange } from '../data/events';
 
 interface Props {
@@ -11,7 +10,7 @@ interface Props {
    */
   events: EventSearchIndex;
   /** Take the map to this room and open it. */
-  onPick: (room: Room) => void;
+  onPick: (hit: SearchHit) => void;
 }
 
 const RESULT_LIMIT = 8;
@@ -38,7 +37,7 @@ export function SearchBar({ events, onPick }: Props) {
   }, [open]);
 
   const choose = (hit: SearchHit) => {
-    onPick(hit.room);
+    onPick(hit);
     setQuery('');
     setOpen(false);
     inputRef.current?.blur();
@@ -90,7 +89,16 @@ export function SearchBar({ events, onPick }: Props) {
         <ul className="search__results" id="search-results" role="listbox">
           {hits.length === 0 && <li className="search__empty">Nothing matches “{query.trim()}”</li>}
           {hits.map((hit, position) => {
-            const venue = VENUES_BY_ID[hit.room.venueId];
+            const { title, detail } = hitLabel(hit);
+            // How many times it runs, or when the next one is: only an event
+            // has either, and for one it is the difference between "there is a
+            // thing called that" and "you can still get to it".
+            const when =
+              hit.sessions && hit.sessions > 1
+                ? ` · ${hit.sessions} sessions`
+                : hit.event
+                  ? ` · ${formatTimeRange(hit.event)}`
+                  : '';
             return (
               <li key={hit.key}>
                 <button
@@ -105,20 +113,8 @@ export function SearchBar({ events, onPick }: Props) {
                     choose(hit);
                   }}
                 >
-                  <span className="search__hit-main">
-                    {hit.kind === 'room' ? hit.room.name : hit.event?.title}
-                  </span>
-                  <span className="search__hit-sub">
-                    {hit.kind === 'room'
-                      ? `${venue?.shortName ?? venue?.name ?? ''} · ${hit.room.level}`
-                      : `${hit.room.shortName ?? hit.room.name} · ${venue?.shortName ?? venue?.name ?? ''}${
-                          hit.sessions && hit.sessions > 1
-                            ? ` · ${hit.sessions} sessions`
-                            : hit.event
-                              ? ` · ${formatTimeRange(hit.event)}`
-                              : ''
-                        }`}
-                  </span>
+                  <span className="search__hit-main">{title}</span>
+                  <span className="search__hit-sub">{`${detail}${when}`}</span>
                 </button>
               </li>
             );

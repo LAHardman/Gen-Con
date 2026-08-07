@@ -13,6 +13,7 @@
 
 import { ROOMS, VENUES, type Room, type Venue } from './venues';
 import { boothIn, hallForBooth } from './booths';
+import { pinForEvent, type Pin } from './offsite';
 
 export interface ConEvent {
   id: string;
@@ -207,7 +208,16 @@ export function roomIdForEvent(event: ConEvent): string | null {
 export interface EventIndex {
   /** Events per room id, each list sorted by start time. */
   byRoom: Map<string, ConEvent[]>;
-  /** Events whose location didn't resolve to any room on the map. */
+  /**
+   * Events at a street address rather than in a room, per pin id.
+   *
+   * These are the ones the map draws nothing for — a steakhouse, a ballpark —
+   * and they are kept apart from `byRoom` rather than folded into it because
+   * the difference is real: a room has an outline, a floor and a doorway, and
+   * a pin has a coordinate. Anything that draws a room would draw these wrong.
+   */
+  byPin: Map<string, { pin: Pin; events: ConEvent[] }>;
+  /** Events whose location didn't resolve to a room or an address either. */
   unmatched: ConEvent[];
   /** Distinct days that have events, as YYYY-MM-DD in convention local time. */
   days: string[];
@@ -216,6 +226,7 @@ export interface EventIndex {
 
 export function indexEvents(events: ConEvent[]): EventIndex {
   const byRoom = new Map<string, ConEvent[]>();
+  const byPin = new Map<string, { pin: Pin; events: ConEvent[] }>();
   const unmatched: ConEvent[] = [];
   const days = new Set<string>();
 
@@ -225,7 +236,14 @@ export function indexEvents(events: ConEvent[]): EventIndex {
 
     const roomId = roomIdForEvent(event);
     if (!roomId) {
-      unmatched.push(event);
+      // No room, but perhaps an address. Tried second and never first: an
+      // event in Exhibit Hall B belongs in the hall, not on a pin outside it.
+      const pin = pinForEvent(event);
+      if (pin) {
+        const at = byPin.get(pin.id);
+        if (at) at.events.push(event);
+        else byPin.set(pin.id, { pin, events: [event] });
+      } else unmatched.push(event);
       continue;
     }
     const list = byRoom.get(roomId);
@@ -236,9 +254,13 @@ export function indexEvents(events: ConEvent[]): EventIndex {
   for (const list of byRoom.values()) {
     list.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   }
+  for (const { events: list } of byPin.values()) {
+    list.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  }
 
   return {
     byRoom,
+    byPin,
     unmatched,
     days: [...days].sort(),
     total: events.length,

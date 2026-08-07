@@ -20,7 +20,10 @@ import { roomIdForExhibitor, search } from './search';
 import { ROOMS_BY_ID } from './venues';
 
 const NO_EVENTS = { entries: [] };
-const ids = (query: string) => search(query, NO_EVENTS).map((hit) => hit.room.id);
+const ids = (query: string) =>
+  search(query, NO_EVENTS)
+    .filter((hit) => hit.room)
+    .map((hit) => hit.room!.id);
 
 describe('the table itself', () => {
   it('has the campus in it, and one row per place rather than per exhibitor', () => {
@@ -150,7 +153,7 @@ describe('searching for a publisher rather than a room', () => {
     // — it is on the stand, on the box and in the programme, and it is not one
     // of the room's own names, so without this the search has nothing.
     const hits = search('asmodee', NO_EVENTS);
-    expect(hits.map((hit) => hit.room.id)).toContain('hall-e');
+    expect(hits.map((hit) => hit.room?.id)).toContain('hall-e');
   });
 
   it('ranks a room found by who is in it below one found by its own name', () => {
@@ -158,8 +161,8 @@ describe('searching for a publisher rather than a room', () => {
     // today no exhibitor is named after a room and a test on the ordering
     // could not fail. It will matter the first year one is: a publisher called
     // "Wabash" must not take "wabash" away from the Wabash Ballroom.
-    const named = search('hall e', NO_EVENTS).find((hit) => hit.room.id === 'hall-e')!;
-    const standing = search('asmodee', NO_EVENTS).find((hit) => hit.room.id === 'hall-e')!;
+    const named = search('hall e', NO_EVENTS).find((hit) => hit.room?.id === 'hall-e')!;
+    const standing = search('asmodee', NO_EVENTS).find((hit) => hit.room?.id === 'hall-e')!;
     expect(named).toBeDefined();
     expect(standing).toBeDefined();
     expect(standing.score).toBeGreaterThan(named.score);
