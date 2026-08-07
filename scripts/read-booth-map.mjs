@@ -44,15 +44,13 @@
  * about this pipeline was tuned against that list — it is the answer sheet, and
  * it is the reason the reading can be believed.
  *
- * WHAT THIS CANNOT DO, and it is the thing somebody will come here wanting.
- * It cannot say where a booth is in the building. The map is drawn on a strict
- * 12 pt = 10 ft module, so it is to scale — but the halls are laid out along
- * the page in numbering order rather than in the arrangement the building has.
- * Halls F and G are side by side on it and stacked in the convention centre's
- * own floor plans; two halls' booth blocks come out wider than the halls they
- * are in. It is a page layout of real blocks, not a survey, and placing stands
- * from it would put people in the wrong aisle with every appearance of
- * knowing. See docs/next-steps.md.
+ * WHAT THIS DOES NOT DO. It reads the sheet; it does not place anything. `x`
+ * and `y` in what it writes are page points and nothing else — the halls are
+ * laid along the page in numbering order rather than in the arrangement the
+ * building has, so Halls F and G are side by side here and stacked in the
+ * convention centre's own floor plans. Turning page points into coordinates is
+ * `fit-booths.mjs`, which lays each hall's block into that hall separately,
+ * and there is a reason it is a second script rather than the end of this one.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
