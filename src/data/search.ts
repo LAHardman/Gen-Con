@@ -86,8 +86,9 @@ function startsWord(haystack: string, needle: string) {
  * The exhibit hall needs the extra step. Its labels are `Exhibit Hall : Booth
  * 1637` and there are eleven exhibit halls, so nothing in the words says which
  * — but the number does, once you know where the air walls are (`booths.ts`).
- * That places 446 of the 573 stands; the rest are in the stretch where J and K
- * have not been told apart, and they stay unplaced rather than guess.
+ * That places all 573 of them.
+ *
+ * And a handful of areas name neither a building nor a hall: see `AREA_ROOMS`.
  */
 export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
   const [building, ...within] = exhibitor.area.split(' : ');
@@ -97,8 +98,38 @@ export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
     tableText: exhibitor.spot,
   } as unknown as ConEvent);
   if (named) return named;
-  return exhibitor.area === 'Exhibit Hall' ? hallForBooth(exhibitor.booth) : null;
+  if (exhibitor.area === 'Exhibit Hall') return hallForBooth(exhibitor.booth);
+  return AREA_ROOMS[exhibitor.area] ?? null;
 }
+
+/**
+ * Areas that name a place rather than a building, and where that place is.
+ *
+ * The matcher above works down from a building — `ICC : Community Row` finds
+ * the convention centre and then looks inside it — so an area with no building
+ * in front of it has nothing to look inside. These three are like that, and
+ * each one is somewhere a person knows rather than somewhere a file says:
+ *
+ *   Makers Market   in the connector between the convention centre and the
+ *                   stadium, which is why the stand list files it outside the
+ *                   exhibit hall and numbers it 7001–7108 rather than in the
+ *                   grid. Its own room, drawn on that connector.
+ *   Block Party     South Street, closed to traffic Wednesday to Sunday. Its
+ *                   own "venue", because a closed street is not in any
+ *                   building.
+ *   Field           the stadium field. This one is a reading rather than a
+ *                   telling: four publishers with a demo space each, an area
+ *                   that is one word, and exactly one Field on the campus.
+ *
+ * Everything else that resolves does so through a room's own aliases, which is
+ * where a new one should go if it can — `Community Row` and `Educator Row` are
+ * both aliases of the hallway they share, not entries here.
+ */
+const AREA_ROOMS: Record<string, string> = {
+  'Makers Market': 'makers-market',
+  'Block Party': 'block-party-street',
+  Field: 'lucas-oil-field',
+};
 
 interface RoomKeys {
   room: Room;

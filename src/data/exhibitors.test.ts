@@ -111,6 +111,15 @@ describe('where the map and the stand list agree', () => {
       // The exhibit hall names no hall in its words. Its booth numbers do,
       // and they reach all six halls the grid runs through.
       'Exhibit Hall': ['hall-f', 'hall-g', 'hall-h', 'hall-i', 'hall-j', 'hall-k'],
+      // Two names for the two ends of one corridor, and both have to land in
+      // it: the tables are numbered 1–19 straight through, and splitting them
+      // across two rooms would put table 15 and table 16 in different places.
+      'ICC : Community Row': ['community-row'],
+      'ICC : Educator Row': ['community-row'],
+      // Areas with no building in front of them — see `AREA_ROOMS`.
+      'Makers Market': ['makers-market'],
+      'Block Party': ['block-party-street'],
+      Field: ['lucas-oil-field'],
     });
     for (const ids of found.values()) for (const id of ids) expect(ROOMS_BY_ID[id], id).toBeDefined();
   });
@@ -156,10 +165,35 @@ describe('searching for a publisher rather than a room', () => {
     expect(ids('kenzer')).toEqual(['hall-i']);
   });
 
+  it('takes the name of a place with no building in front of it to that place', () => {
+    // `Makers Market`, `Block Party` and `Field` are areas that name somewhere
+    // directly rather than a building and a space inside it, so the matcher
+    // that works down from a building has nothing to work down from. Each is
+    // typed as its own word and has to reach its own room.
+    expect(ids('makers market')).toContain('makers-market');
+    expect(ids('block party')).toContain('block-party-street');
+    // And through an exhibitor standing there, which is the other way in.
+    expect(ids('nerdy nixies')).toEqual(['makers-market']);
+    expect(ids('sun king')).toEqual(['block-party-street']);
+  });
+
+  it('keeps Community Row and Educator Row together, because the tables are one run', () => {
+    // Two names, one corridor. The stand list numbers them 1 to 19 straight
+    // through and files 16–19 under the second name, so splitting them would
+    // put table 15 and table 16 in different rooms — and the numbers on the
+    // tables would be the thing saying otherwise.
+    const rows = EXHIBITORS.filter((e) => e.area.endsWith('Community Row') || e.area.endsWith('Educator Row'));
+    const numbers = rows.map((e) => Number(e.spot.replace('Table ', ''))).sort((a, b) => a - b);
+    expect(numbers).toEqual(Array.from({ length: 19 }, (_, i) => i + 1));
+    for (const row of rows) expect(roomIdForExhibitor(row), row.name).toBe('community-row');
+    expect(ids('community row')).toContain('community-row');
+    expect(ids('educator row')).toContain('community-row');
+  });
+
   it('offers nothing for a stand that is not in the exhibit hall at all', () => {
-    // The Art Show, the Block Party, Makers Market: real places with no room
-    // on the map, so their stands reach nothing rather than reaching whatever
-    // is nearest.
+    // The Art Show, Authors Avenue, the Entertainers Spotlight: real places
+    // nobody has said where, so their stands reach nothing rather than reaching
+    // whatever is nearest.
     const elsewhere = EXHIBITORS.find(
       (e) => e.area === 'Art Show' && !roomIdForExhibitor(e) && e.name.length > 8,
     )!;

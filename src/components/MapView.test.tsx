@@ -81,8 +81,8 @@ describe('what is on the map', () => {
     // drawn. A room missing from the map is invisible until somebody goes
     // looking for that room, and then it is simply not there.
     setup();
-    expect(venues()).toHaveLength(14);
-    expect(rooms()).toHaveLength(146);
+    expect(venues()).toHaveLength(16);
+    expect(rooms()).toHaveLength(149);
     expect(links().filter((l) => l.classList.contains('map__link--skywalk'))).toHaveLength(11);
     expect(links().filter((l) => l.classList.contains('map__link--tunnel'))).toHaveLength(1);
   });
@@ -92,12 +92,12 @@ describe('what is on the map', () => {
     const named = [...document.querySelectorAll('.leaflet-tooltip')].map((t) => t.textContent);
     expect(named).toContain('Convention Center');
     expect(named).toContain('Lucas Oil Stadium');
-    expect(named).toHaveLength(14);
+    expect(named).toHaveLength(16);
   });
 
   it('keeps every room shut until its building is opened', () => {
     // Nothing draws an inside until one is opened; that is the whole shape of
-    // the map. Rooms drawn open everywhere would put 146 shapes on a campus
+    // the map. Rooms drawn open everywhere would put 149 shapes on a campus
     // view meant to be fourteen outlines.
     const { rerender } = setup();
     expect(openRooms()).toHaveLength(0);

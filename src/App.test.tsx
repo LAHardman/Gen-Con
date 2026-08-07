@@ -55,7 +55,7 @@ describe('starting up', () => {
     // A missing feed is a normal state rather than an error, and the app has to
     // be worth opening in it: this is what a fresh clone runs.
     render(<App />);
-    expect(document.querySelectorAll('path.map__venue')).toHaveLength(14);
+    expect(document.querySelectorAll('path.map__venue')).toHaveLength(16);
     expect(openRooms()).toHaveLength(0);
     expect(floors()).toHaveLength(0);
   });

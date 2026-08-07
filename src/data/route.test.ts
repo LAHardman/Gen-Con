@@ -254,8 +254,11 @@ describe('the surface a route is searched over', () => {
   }, 30_000);
 
   it('draws a surface for every floor a plan was read for', () => {
-    // Three floors have none, and all three are venues Gen Con does not colour
-    // as its own on the campus sheets. Everything it does colour is drawn.
+    // Five floors have none. Three are venues Gen Con does not colour as its
+    // own on the campus sheets. The other two are the Block Party and the
+    // connector across the street to it — one is a street and the other is a
+    // corridor, and neither has an inside to search over. Everything Gen Con
+    // does colour is drawn.
     const bare = VENUES.flatMap((venue) =>
       (VENUE_LEVELS[venue.id] ?? [])
         .filter((level) => !floorArea(venue.id, level).cells)
@@ -265,6 +268,8 @@ describe('the surface a route is searched over', () => {
       'indiana-rep/Auditorium',
       'escape-room/200 S. Meridian St',
       'circle-centre/Levels 1–4',
+      'pedestrian-connector/Pedestrian Connector',
+      'block-party/West South Street',
     ]);
   });
 });

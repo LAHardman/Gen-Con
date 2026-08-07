@@ -509,6 +509,9 @@ stand locations placed on the map  47 → 621  of 846
 exhibit-hall stands placed          0 → 573  of 573
 ```
 
+Placing Community Row, the Makers Market and the Block Party — see §8 — took
+the stand total on to **709 of 846**.
+
 The 79 exhibit-hall events that used to be the largest group of unmatched are
 all placed, and so is every stand in the hall. Searching a publisher now takes
 you to the hall: "Kenzer" finds Exhibit Hall I.
@@ -564,11 +567,41 @@ Three things about it, so nobody opens it hoping for more:
     geometric fit is now attemptable — though it still needs the two thousand
     small numbers OCR'd first.
 
+**Three areas still unplaced — waiting on somebody who has walked them.** The
+Art Show (90 stands), Authors Avenue (39) and the Entertainers Spotlight (8).
+All three are lettered on Gen Con's printed exhibit-hall plan, in one block
+bounded by the 600s on its left and the 1100s on its right — and 600–1399 is
+Hall I, so the plan reads as putting all three in Hall I. That is a *reading*
+rather than a telling, which is the whole reason it has not been applied: the
+same plan letters no hall anywhere, so the inference rests on booth numbers
+that are vector art rather than text. One sentence from somebody who has been
+there closes it.
+
+Three others are closed, and are worth writing down because none of them was
+in any file:
+
+  - **Community Row** — Sagamore Ballroom hallway, ICC Level 2. Its four
+    Educator Row tables are the same run: the stand list numbers Community Row
+    1–15 and Educator Row 16–19, so they are one corridor with two names, and
+    `venues.ts` carries both as aliases of one room.
+  - **Makers Market** — the connector between the convention centre and the
+    stadium, which is a venue of its own on the map because the ICC's
+    OpenStreetMap footprint has the arm and its floor plans do not.
+  - **Block Party** — West South Street, closed Wednesday to Sunday, drawn
+    kerb to kerb from the two pavement ways OSM maps either side of it. The
+    2025 Block Party map Gen Con published labels a "Pedestrian Connector" at
+    the edge of the party, and the connector above comes down to the ground at
+    the north-east corner of this block — the two agree, which is the only
+    independent check there is on the extent.
+
 **Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
 the Escape Room and Circle Centre are single-room venues Gen Con does not
 colour as its own on the campus sheets, so there is nothing to read. Their
 rooms keep their centres and their routes say so. Nothing short of a floor plan
-for each changes this, and each is one room.
+for each changes this, and each is one room. The Block Party and the connector
+have no walkable floor either, but for a reason that needs no fixing: a street
+and a corridor have no inside to search over, and falling back to the centre of
+either is where somebody walking there is going.
 
 **Four rooms with no doorway — waiting on better rectangles.** `hall-g` and
 `jw-rooms-206-207` sit 30 m and 36 m from the drawn circulation; Lucas Oil's

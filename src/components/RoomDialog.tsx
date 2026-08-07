@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CATEGORY_STYLES,
+  NOT_A_BUILDING,
   PLANNED_LAYOUT,
   TRACED_FOOTPRINT,
   VENUES_BY_ID,
@@ -263,7 +264,9 @@ export function RoomDialog({
         </div>
 
         <p className="dialog__note">
-          {room.venueId === 'icc'
+          {NOT_A_BUILDING.has(room.venueId)
+            ? 'This is a street closed to traffic, not a building. The kerbs either side of it are surveyed, but how much of the street the closure covers is not published — the block drawn is the one the party is named for. Check the official Gen Con program for exact locations.'
+            : room.venueId === 'icc'
             ? 'Room outlines are traced from the convention centre’s official floor plans, which the map draws underneath. Check the official Gen Con program for exact room assignments.'
             : TRACED_FOOTPRINT.has(room.venueId)
               ? 'This building is not in OpenStreetMap, so even its outline is traced from a published plan rather than surveyed — it is the one venue on the map whose shape and position are both approximate. Its rooms come from that same plan. Check the official Gen Con program for exact room assignments.'

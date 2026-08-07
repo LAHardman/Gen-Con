@@ -346,6 +346,24 @@ Oil's West Club Lounge. Typing "Asmodee" finds Hall E and Room 233. Exhibitor
 names rank *below* a room's own names, so "hall b" still finds Exhibit Hall B
 rather than the thirteen publishers standing in it.
 
+**Three places the stand list names that no plan draws.** Community Row is the
+hallway outside the Sagamore Ballroom; the Makers Market is the connector
+between the convention centre and the stadium; the Block Party is South Street,
+closed to traffic. None of the three is a room on any floor plan, so each is
+constructed — but constructed out of geometry that already exists rather than
+placed by eye, which is the difference between drawing it and guessing it:
+
+| | drawn as | out of |
+|---|---|---|
+| Community Row | a 94 × 5.7 m corridor on Level 2 | the gap between two blocks the plan *does* draw — the Sagamore stops at y 50.4, the 201–212 rooms start at y 56.3 |
+| Makers Market | a venue of its own | the convention centre's OSM footprint carries a 23 × 119 m arm south to the stadium that its floor plans leave out; this is that arm |
+| Block Party | a venue of its own | the two pavements OSM maps either side of West South Street, way/1229666665 and way/667563570 |
+
+The Block Party is the one venue here that is not a building, and the room
+pop-up says so: the kerbs are surveyed but how much of the street the closure
+covers is not published anywhere, so the block drawn is the block the party is
+named for. `NOT_A_BUILDING` in `venues.ts` is what makes it say that.
+
 **The other 573 say `Exhibit Hall : Booth N`, and there are eleven exhibit
 halls.** No source names one. The schedule does it twice in 27,467 events and
 never otherwise; the map API's coordinates sit on a star field rather than a
@@ -370,7 +388,10 @@ places it crosses — between 331 and 339, and between 429 and 439 — and booth
 
 That took events resolving to no room from **130 to 51** of 27,467, and stands
 placed on the map from **47 to 621** of 846 — every one of the 573 in the
-exhibit hall. Searching "Kenzer" now finds Exhibit Hall I.
+exhibit hall. Searching "Kenzer" now finds Exhibit Hall I. Placing Community
+Row, the Makers Market and the Block Party took it to **709**; what is left is
+the Art Show, Authors Avenue and the Entertainers Spotlight, which nobody has
+said the location of.
 
 ### Getting between buildings
 

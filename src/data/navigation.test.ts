@@ -322,19 +322,26 @@ describe('the doorways, over the real campus', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('finds one for all but seven rooms, and names the seven', () => {
+  it('finds one for all but nine rooms, and names the nine', () => {
     // Counted and named rather than counted alone, because the way this gets
     // worse is that a room quietly falls back to its centre — which for a hall
     // the size of Exhibit Hall A is eighty metres from any door, and looks like
     // a route.
     //
     // Three of these are single-room venues Gen Con does not colour on its own
-    // campus sheets, so nothing draws a corridor for them to open onto. The
-    // other four are rooms whose schematic rectangle sits further from the
-    // drawn circulation than any honest search reaches — Lucas Oil's two are
-    // 64 m and 112 m out.
+    // campus sheets, so nothing draws a corridor for them to open onto. Four
+    // are rooms whose schematic rectangle sits further from the drawn
+    // circulation than any honest search reaches — Lucas Oil's two are 64 m and
+    // 112 m out.
+    //
+    // The last two are fine as they are, and for the same reason. Neither is a
+    // room with a way in and out of a building: one is a street, the other the
+    // corridor across it. Falling back to the centre of a closed block, or to
+    // the middle of a 119 m corridor, is where somebody walking there is going
+    // anyway — 430 m to the Block Party from Hall K, 200 m to the market.
     const roomless = ROOMS.filter((room) => !roomDoor(room)).map((room) => room.id);
     expect(roomless.sort()).toEqual([
+      'block-party-street',
       'circle-centre-mall',
       'escape-room-venue',
       'hall-g',
@@ -342,6 +349,7 @@ describe('the doorways, over the real campus', () => {
       'jw-rooms-206-207',
       'lucas-oil-exhibit-halls',
       'lucas-oil-meeting-rooms',
+      'makers-market',
     ]);
   });
 });

@@ -362,6 +362,81 @@ export const VENUES: Venue[] = [
     footprint: VENUE_FOOTPRINTS['circle-centre'],
     grid: UNIT_GRID,
   },
+  {
+    id: 'pedestrian-connector',
+    name: 'Pedestrian Connector',
+    shortName: 'Connector',
+    aliases: ['Makers Market', 'Pedestrian Connector'],
+    anchor: {
+      nw: { lat: 39.762779, lng: -86.1623 },
+      widthMetres: 23,
+      heightMetres: 119,
+    },
+    // Drawn as a venue of its own because it is part of the convention centre
+    // that the convention centre is not drawn with. The ICC's outline on the
+    // map is traced from its floor plans, and the plans stop at the building —
+    // they do not include this. Its *footprint* does: the OSM relation carries
+    // a 23 m wide arm running 119 m south off the building's south-east corner
+    // to the stadium, and the ring below is that arm, cut out of it along the
+    // two sides that are its own.
+    //
+    // Only one corner is not a vertex of the ICC ring: the top of the east
+    // side, where the arm meets the building. That is the point at latitude
+    // 39.762779 on the edge running from 39.764431/-86.161936 down to
+    // 39.761945/-86.162071, which is -86.162026.
+    //
+    // © OpenStreetMap contributors, ODbL. See `footprints.ts`.
+    footprint: [
+      [39.762779, -86.162026],
+      [39.761945, -86.162071],
+      [39.761945, -86.162102],
+      [39.761751, -86.162112],
+      [39.761752, -86.162152],
+      [39.761706, -86.162154],
+      [39.761736, -86.1623],
+      [39.761922, -86.162294],
+      [39.761928, -86.162225],
+      [39.762779, -86.1622],
+    ],
+    grid: UNIT_GRID,
+  },
+  {
+    id: 'block-party',
+    name: 'Gen Con Block Party',
+    shortName: 'Block Party',
+    aliases: ['Block Party', 'South Street'],
+    anchor: {
+      nw: { lat: 39.761704, lng: -86.165407 },
+      widthMetres: 279,
+      heightMetres: 30,
+    },
+    // The one "venue" here that is not a building: it is a street, closed.
+    //
+    // So there is no footprint to take, and this ring is written out rather
+    // than pulled from `footprints.ts`, which is documented as surveyed
+    // buildings and should stay that way. What it *is* taken from is still
+    // OpenStreetMap: West South Street's two flanking pavements, which OSM maps
+    // as ways of their own along this block —
+    //
+    //   north kerb  way/1229666665   south kerb  way/667563570
+    //
+    // so the four corners below are their ends, and the shape is the real
+    // kerb-to-kerb width of the real street. © OpenStreetMap contributors, ODbL.
+    //
+    // What is *not* known is how much of the street Gen Con closes. This block
+    // is the one the party is named for and the one both buildings face: the
+    // convention centre's pedestrian connector comes down to the ground at its
+    // north-east corner, 39.761706/-86.162154, which is the "Pedestrian
+    // Connector" drawn at the edge of Gen Con's own Block Party map. Whether
+    // the closure runs a little past either end of it, nothing published says.
+    footprint: [
+      [39.761704, -86.165407],
+      [39.761641, -86.162145],
+      [39.761439, -86.162158],
+      [39.761516, -86.165316],
+    ],
+    grid: UNIT_GRID,
+  },
 ];
 
 export const VENUES_BY_ID: Record<string, Venue> = Object.fromEntries(
@@ -399,6 +474,17 @@ export const PLANNED_LAYOUT = new Set([
  * weaker claim than the rest of the map makes, and the room pop-up says so.
  */
 export const TRACED_FOOTPRINT = new Set(['le-meridien']);
+
+/**
+ * "Venues" that are not buildings, and whose extent is therefore a judgement.
+ *
+ * The Block Party is a street with the traffic taken off it. Its outline is
+ * real — the kerbs either side of it are mapped in OpenStreetMap and the ring
+ * is their ends — but how much of the street is closed is not published
+ * anywhere, so the block drawn is the block the party is named for and the one
+ * both buildings face, not a surveyed boundary. The room pop-up says so.
+ */
+export const NOT_A_BUILDING = new Set(['block-party']);
 
 /** Numeric meeting-room aliases: `numberRange(120, 133)` -> ['120', …, '133']. */
 function numberRange(first: number, last: number): string[] {
@@ -728,6 +814,25 @@ export const ROOMS: Room[] = [
     description:
       'East end of the Level 2 block. Often used for tournaments and multi-session campaign play that needs a room for the whole day.',
     highlights: ['Tournaments', 'All-day campaigns', 'Near east escalators'],
+  },
+  {
+    id: 'community-row',
+    name: 'Community Row',
+    shortName: 'Community Row',
+    category: 'amenity',
+    venueId: 'icc',
+    level: 'Level 2',
+    // The hallway outside the Sagamore Ballroom, which is not a space the plan
+    // letters — so this is the gap between two spaces it does letter. The
+    // ballroom's seven sections run x 297.4–391.4 and stop at y 50.4; the
+    // 201–212 block picks up again at y 56.3. Just under six metres between
+    // them, and this is it, held off both by a decimetre so the corridor is
+    // beside the rooms rather than sharing a wall with them.
+    rect: { x: 297.5, y: 50.5, width: 93.8, height: 5.7 },
+    aliases: ['Community Row', 'Educator Row'],
+    description:
+      'Nineteen tables along the Sagamore Ballroom hallway: clubs, charities, libraries, other conventions, and four university game-design programmes at the far end under the name Educator Row. Free to walk up to, and the numbering runs straight through both — 1 to 15 is Community Row, 16 to 19 Educator Row.',
+    highlights: ['Tables 1–19', 'Sagamore Ballroom hallway', 'Clubs, charities & universities'],
   },
 
   // ----------------------------------------------- Lucas Oil Stadium
@@ -2269,6 +2374,34 @@ export const ROOMS: Room[] = [
     description:
       'Skywalk-connected mall with a food court and restaurants. No events are scheduled here — it is the reliable option when convention center concession lines are 30 deep.',
     highlights: ['Food court', 'Restaurants', 'Skywalk connected'],
+  },
+  {
+    id: 'makers-market',
+    name: 'Makers Market',
+    shortName: 'Makers Market',
+    category: 'exhibit',
+    venueId: 'pedestrian-connector',
+    level: 'Pedestrian Connector',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    aliases: ['Makers Market', 'Makers'],
+    description:
+      'Twenty-two makers — jewellery, woodwork, art, dice — in the connector between the convention centre and the stadium, which is why the stand list files them outside the exhibit hall and numbers them in a 7000 series of their own. It is a corridor rather than a hall: a way in at each end and everything along the walls.',
+    highlights: ['Booths 7001–7108', 'ICC to stadium connector', 'Outside the exhibit hall'],
+  },
+  {
+    id: 'block-party-street',
+    name: 'Gen Con Block Party',
+    shortName: 'Block Party',
+    category: 'amenity',
+    venueId: 'block-party',
+    level: 'West South Street',
+    rect: WHOLE_VENUE,
+    fillsVenue: true,
+    aliases: ['Block Party', 'South Street'],
+    description:
+      'South Street closed to traffic from Wednesday to Sunday, between the convention centre and the stadium: food trucks, bars and somewhere to sit down outdoors. The stand list gives 30 numbered food trucks and 15 lettered booths along it; which pitch is which is not published, so the whole street is drawn rather than each stand placed.',
+    highlights: ['Food trucks & bars', 'Wednesday to Sunday', 'Outdoors — no shelter'],
   },
 ];
 
