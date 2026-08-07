@@ -1020,6 +1020,32 @@ body {
   font-size: 11px;
 }
 
+.map__booth {
+  /*
+   * Small, and quiet. There are 524 of these and they sit on top of the hall
+   * they are in, so they have to read as a texture at a glance and as numbers
+   * when you lean in — never as something competing with the room beneath.
+   */
+  border-radius: 1px;
+  background: rgba(226, 232, 245, 0.55);
+}
+
+.map__booth--named {
+  display: grid;
+  place-items: center;
+  border-radius: 2px;
+  background: rgba(18, 22, 30, 0.72);
+  border: 1px solid rgba(140, 170, 200, 0.35);
+}
+
+.map__booth--named > span {
+  color: #dfe6f2;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
 .map__pin {
   /*
    * A teardrop, and deliberately not the same shape as anything else here.

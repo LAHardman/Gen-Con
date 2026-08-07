@@ -662,19 +662,20 @@ would shorten it where they exist. It is the smallest of these.
 
 ---
 
-## 9. Reading the booth map, and why the booths are still not drawn
+## 9. Reading the booth map, and putting the stands on the ground
 
 **What was wanted.** The exhibit hall drawn as booths rather than as six halls,
 since the booth number is on every sign in the building and the hall letter is
-on none of them. That needs a coordinate per booth, and no source has one.
+on none of them.
 
-**What was tried.** `scripts/read-booth-map.mjs` reads Gen Con's printed
-exhibit-hall map, which has no text on it. The grid is 4,612 filled paths: 405
-stand rectangles and about 1,900 digit outlines. The digits are scan-filled
-into coverage rasters, clustered by mean absolute difference, and ten clusters
-come out far larger than the rest — 330 down to 82. Those are the ten digits;
-what they are was read off a rendering of the cluster means, which is the one
-step in the pipeline a person did.
+### Reading it
+
+`scripts/read-booth-map.mjs` reads Gen Con's printed exhibit-hall map, which
+has no text on it. The grid is 4,612 filled paths: 405 stand rectangles and
+about 1,900 digit outlines. The digits are scan-filled into coverage rasters,
+clustered by mean absolute difference, and ten clusters come out far larger
+than the rest — 330 down to 82. Those are the ten digits; what they are was
+read off a rendering of the cluster means, which is the one step a person did.
 
 Grouping them into numbers took two corrections worth keeping:
 
@@ -689,41 +690,84 @@ Grouping them into numbers took two corrections worth keeping:
     to the next is 2.7 pt inside a number and 6.4 pt between two, which needs
     no tuning at all.
 
-**How well it worked: 521 of 524, or 99.4%.** The check is `exhibitors.ts` —
-562 booth numbers from a different Gen Con system, pulled on a different day,
-by a script that has never seen the PDF. Nothing in the pipeline was tuned
-against it. The three that are not in it are valid-looking numbers for stands
-nobody had taken; the 41 in the list and not on the map are stands let after it
-was printed, or numbered inside a block the map labels once.
+**521 of 524, or 99.4%.** The check is `exhibitors.ts` — 562 booth numbers from
+a different Gen Con system, pulled on a different day, by a script that has
+never seen the PDF. Nothing in the pipeline was tuned against it.
 
-**Why the booths are still not drawn, which is the point of this section.**
-The map is drawn on a strict 12 pt = 10 ft module, so it is to scale. It is not
-a plan of the building. The halls are laid along the page in numbering order —
-J, K, I, H, G, F from left to right — and that is not how they sit:
+### Placing them
+
+The map is on a strict 12 pt = 10 ft module, so it is to scale — and it is not
+a plan of the building. The halls run along the page in numbering order and
+that is not how they sit:
 
 ```
 on the printed map     [J/K] [I] [H] [G] [F]        one strip, five bands
 in the ICC's own plans [F/G] [H] [I] [J/K]          four columns, F over G
 ```
 
-Halls F and G are side by side on Gen Con's map and stacked in the convention
-centre's own floor plans, which is where `venues.ts` gets them. Fitting a
-single similarity transform over all 524 booths lands 73% of them in the right
-hall and cannot do better, because no such transform exists. And at the module
-scale two halls' booth blocks come out *wider than the halls they are in* —
-Hall H is 84 m of booths in a 73 m hall.
+One similarity transform over all 524 stands lands 73% of them in the right
+hall and cannot do better, because no such transform exists. **That was the
+wrong model, not the wrong data.** What the sheet holds is six real blocks
+arranged for a page, so `scripts/fit-booths.mjs` lays each hall's block into
+that hall's own outline separately, at the module's true scale, with only a
+quarter-turn and an offset free — six rigid placements rather than one.
 
-So it is a page layout of real blocks. Placing stands from it would put people
-in the wrong aisle with every appearance of knowing, which is the one failure
-this repository has spent its whole life avoiding.
+Three things pin it, and it takes all three:
 
-**What was kept.** `src/data/booth-plan.ts`: all 524 numbers, each with its
-stand size in ten-foot booths. The size survives what the position does not,
-because the module is real even where the layout is a page — and it is the
-difference between a table and ninety feet of frontage. Search shows it.
+  1. **Containment.** Every stand inside the hall its number claims. Alone this
+     is worth nothing: it is satisfied perfectly by shrinking each block until
+     it fits anywhere, which is what a free scale does — every hall picked the
+     smallest scale offered. So the scale is fixed at the module and never
+     fitted.
+  2. **The seams.** Stands facing each other across an air wall have to land
+     next to each other, which ties six separately-placed blocks into one
+     floor. Fitted independently they are 87 to 119 m out from one another.
+  3. **The aisle structure**, which the fit never uses. A booth number is an
+     aisle and a position along it, and the J/K wall cuts *across* the aisles —
+     so position must run north-south and aisle number east-west. This is what
+     settles the last ambiguity: the seams alone leave two arrangements 3 m
+     apart in cost, and on this they are 0.98 against 0.32.
 
-**What would close it.** A plan of the exhibit floor in the building's own
-geometry: the ICC's own floor plans with the booth grid on them, or Gen Con's
-map with the halls in their real arrangement, or a georeferenced exhibitor map
-from the app Gen Con ships. Any of the three, and the reading above supplies
-the numbers to hang on it.
+**A mistake worth recording, because it changed the answer.** The seams were
+first written as pairs of *consecutive numbers* — 1401 with 1363. Those follow
+each other in the numbering and are nowhere near each other on the floor: one
+starts aisle 14, the other is 63 stands along aisle 13. Facing stands are
+adjoining aisles at the same position — 2727 opposite 2627. With the pairs
+corrected the fit chose a different arrangement, so the first answer was luck.
+
+**Where it landed.**
+
+```
+stands inside their own hall     501/524   95.6%
+along an aisle, north-south      r = 1.000
+across the aisles, east-west     r = 0.980
+next-best arrangement            r = 0.324
+```
+
+| wall | facing pairs | mean apart |
+|---|---|---|
+| F/G | 71 | 7.3 m |
+| G/H | 36 | **34.4 m** |
+| H/I | 40 | 11.0 m |
+| I/J | 21 | 6.8 m |
+| J/K | 14 | 7.7 m |
+
+**One wall does not agree and is carried rather than averaged away.** Four come
+out at 7 to 11 m, which is what two stands facing across an air wall should be.
+G/H comes out at 34 and will not move — ten times the search finds the same
+answer — so something structural disagrees there: a hall outline, or the
+assumption that aisle 22 adjoins aisle 23 on the floor. `booth-place.ts` names
+it in its own header, and the guard in `fit-booths.mjs` tests the *median* wall
+rather than the total, because a total hides which of the two situations it is.
+
+**What a stand's position is worth.** Within a hall it is the printed plan's
+own geometry at true scale: neighbouring stands are neighbours, an aisle is an
+aisle. Between halls it carries the fit's error. So a stand is in the right
+aisle of the right hall and within a stand or two along it — except near the
+G/H wall, where it may be tens of metres out. Enough to walk to, not a survey,
+and the map draws them as marks rather than as outlines for that reason.
+
+**What would still improve it.** A plan of the exhibit floor in the building's
+own geometry would remove the fit entirely. Short of that, resolving the G/H
+disagreement — most likely by re-tracing Hall G or Hall H from the campus
+tiles — would close the one wall that does not fit.

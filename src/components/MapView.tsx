@@ -20,6 +20,7 @@ import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import type { Pin } from '../data/offsite';
+import { PLACED_BOOTHS } from '../data/booth-place';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
 import { allVerticals } from '../data/vertical';
 import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
@@ -54,6 +55,14 @@ interface Props {
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
+/**
+ * Below this a stand is smaller than the dot standing for it, and 524 dots on
+ * a four-hundred-metre building is a smear rather than a map.
+ */
+export const BOOTH_MIN_ZOOM = 18;
+/** And below this the numbers would overprint each other. */
+export const BOOTH_LABEL_ZOOM = 20;
+
 export const ROOM_LABEL_MIN_ZOOM = 16;
 
 /** And street names, once you are near enough a street to be walking it. */
@@ -462,6 +471,55 @@ export function MapView({
       for (const layer of layers) layer.remove();
     };
   }, [showAmenities, levels, openVenueId]);
+
+  /* ---------------------------------------------------------------- booths */
+  /*
+   * The exhibit hall as stands rather than as six halls.
+   *
+   * Which is the way round somebody actually needs it: the booth number is
+   * printed on the stand, in the programme and on every sign in the building,
+   * and the hall letter is on none of them. The halls stay underneath — they
+   * are still rooms, still searchable, still where a route goes — and this
+   * draws what is in them.
+   *
+   * Only when the convention centre is open on Level 1, and only past the zoom
+   * where a stand is bigger than the mark for it. 524 marks on a campus view
+   * would be a smear over four hundred metres.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || openVenueId !== 'icc' || levelOf('icc', levels) !== 'Level 1') return;
+
+    const layers: L.Layer[] = [];
+    const draw = () => {
+      for (const layer of layers) layer.remove();
+      layers.length = 0;
+      if (map.getZoom() < BOOTH_MIN_ZOOM) return;
+      const named = map.getZoom() >= BOOTH_LABEL_ZOOM;
+      const seen = map.getBounds().pad(0.2);
+      for (const stand of PLACED_BOOTHS) {
+        if (!seen.contains([stand.lat, stand.lng])) continue;
+        const marker = L.marker([stand.lat, stand.lng], {
+          icon: L.divIcon({
+            className: `map__booth${named ? ' map__booth--named' : ''}`,
+            html: named ? `<span>${stand.booth}</span>` : '',
+            iconSize: named ? [26, 12] : [5, 5],
+            iconAnchor: named ? [13, 6] : [2.5, 2.5],
+          }),
+          interactive: false,
+          keyboard: false,
+        });
+        marker.addTo(map);
+        layers.push(marker);
+      }
+    };
+    draw();
+    map.on('zoomend moveend', draw);
+    return () => {
+      map.off('zoomend moveend', draw);
+      for (const layer of layers) layer.remove();
+    };
+  }, [openVenueId, levels]);
 
   /* ------------------------------------------------------------------ pins */
   /*

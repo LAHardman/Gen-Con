@@ -367,9 +367,9 @@ named for. `NOT_A_BUILDING` in `venues.ts` is what makes it say that.
 **The other 573 say `Exhibit Hall : Booth N`, and there are eleven exhibit
 halls.** No source names one. The schedule does it twice in 27,467 events and
 never otherwise; the map API's coordinates sit on a star field rather than a
-plan; and Gen Con's own printed exhibit-hall map letters no hall on it — and has no
-text on it at all, though its numbers have since been read anyway (see
-`scripts/read-booth-map.mjs`).
+plan; and Gen Con's own printed exhibit-hall map letters no hall on it. It has no
+text on it at all — its numbers are outlines — but they have since been read
+and the stands placed: see §9 of `docs/next-steps.md`.
 
 What closed it is five divides — the booth numbers either side of each air
 wall, from somebody who has walked the hall. `src/data/booths.ts` holds them,
