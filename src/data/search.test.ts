@@ -165,6 +165,19 @@ describe('finding a room', () => {
     expect(byName[0].score).toBeLessThan(byVenue[0].score);
   });
 
+  it('will not answer a house number with a house on a different street', () => {
+    // The number alone is nothing: downtown has a 127 on South Illinois, on
+    // North Pennsylvania and on West Washington, and offering all of them to
+    // somebody who typed the street is three wrong answers and one right one
+    // in no particular order. The street has to match too.
+    const wrong = search('127 s illinois', NO_EVENTS, 10).filter(
+      (hit) => hit.pin && !/illinois/i.test(hit.pin.address),
+    );
+    expect(wrong.map((hit) => hit.pin!.address)).toEqual([]);
+    // And the right one is still found, so this is not passing by finding none.
+    expect(search('127 s illinois', NO_EVENTS, 10).some((hit) => hit.pin)).toBe(true);
+  });
+
   it('says nothing at all for one character', () => {
     // "h" matches most of the campus. An eight-item list assembled from that is
     // noise arriving before anybody has finished typing.

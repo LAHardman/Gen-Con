@@ -16,14 +16,24 @@
 
 import { describe, expect, it } from 'vitest';
 import { EXHIBITORS } from './exhibitors';
-import { roomIdForExhibitor, search } from './search';
+import { hitLabel, roomIdForExhibitor, search } from './search';
 import { ROOMS_BY_ID } from './venues';
 
 const NO_EVENTS = { entries: [] };
-const ids = (query: string) =>
-  search(query, NO_EVENTS)
-    .filter((hit) => hit.room)
-    .map((hit) => hit.room!.id);
+/**
+ * The distinct rooms a query reaches.
+ *
+ * De-duplicated, because a stand now reaches its hall twice over: once as the
+ * stand itself, which answers with the booth number, and once as the hall,
+ * which answers with the hall. Both are wanted and both are the same room.
+ */
+const ids = (query: string) => [
+  ...new Set(
+    search(query, NO_EVENTS)
+      .filter((hit) => hit.room)
+      .map((hit) => hit.room!.id),
+  ),
+];
 
 describe('the table itself', () => {
   it('has the campus in it, and one row per place rather than per exhibitor', () => {
@@ -148,6 +158,49 @@ describe('where the map and the stand list agree', () => {
 });
 
 describe('searching for a publisher rather than a room', () => {
+  it('answers a booth number with the booth, which nothing used to answer at all', () => {
+    // `1229` is printed on the stand, printed in the programme and on every
+    // sign in the hall, and typing it used to find nothing whatsoever: it is
+    // not a room name, not an alias and not an event title, so the search
+    // shrugged at the one string that identifies a stand.
+    const [first] = search('1229', NO_EVENTS);
+    expect(first.exhibitor?.name).toBe('Kenzer and Company');
+    expect(first.room!.id).toBe('hall-i');
+    expect(hitLabel(first)).toEqual({ title: 'Kenzer and Company', detail: 'Booth 1229 · Hall I' });
+  });
+
+  it('leads with the booth and follows with the hall, not the other way round', () => {
+    // The hall letter is on no sign in the building; the booth number is on
+    // all of them. Searching a publisher used to answer "Exhibit Hall I",
+    // which is 7,500 m² and 86 stands, and left somebody standing in it.
+    const [first] = search('kenzer', NO_EVENTS);
+    const { title, detail } = hitLabel(first);
+    expect(title).toBe('Kenzer and Company');
+    expect(detail.indexOf('Booth 1229')).toBeLessThan(detail.indexOf('Hall I'));
+  });
+
+  it('offers the room called 140 before the booth numbered 140', () => {
+    // The convention centre numbers meeting rooms in the range the exhibit
+    // hall numbers aisles, so both are real answers and neither should be
+    // guessed away. Ranking the booth first sent everybody typing a room
+    // number to a stand — the same failure the Indiana Repertory Theatre once
+    // caused from the other direction, and the reason this ordering is pinned.
+    const hits = search('140', NO_EVENTS, 6);
+    const room = hits.findIndex((hit) => hit.room?.id === 'rooms-130-145' && !hit.exhibitor);
+    const booth = hits.findIndex((hit) => hit.exhibitor?.booth === '140');
+    // The Indiana Rep's only alias is its street address, 140 W Washington St,
+    // so it answers "140" too — and it is the *worst* of the three answers.
+    // Pinning the booth between them is the point: a stand numbered 140 is a
+    // better answer than a theatre that merely lives at number 140, and a
+    // worse one than the room actually called 140.
+    const theatre = hits.findIndex((hit) => hit.room?.id === 'indiana-rep-stage');
+    expect(room).toBeGreaterThanOrEqual(0);
+    expect(booth).toBeGreaterThanOrEqual(0);
+    expect(theatre).toBeGreaterThanOrEqual(0);
+    expect(room).toBeLessThan(booth);
+    expect(booth).toBeLessThan(theatre);
+  });
+
   it('takes an exhibitor name to the room they are standing in', () => {
     // Asmodee's demo space is Hall E, and "Asmodee" is the word somebody types
     // — it is on the stand, on the box and in the programme, and it is not one

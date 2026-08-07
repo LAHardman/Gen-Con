@@ -56,6 +56,8 @@ function setup(props: Partial<Props> = {}) {
     showAmenities: true,
     levels: {},
     openVenueId: null,
+    pins: [],
+    onOpenPin: () => {},
     picking: false,
     route: null,
     deviceFix: null,

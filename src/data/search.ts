@@ -36,6 +36,16 @@ export interface SearchHit {
    * a hit is somewhere, and the two are the two kinds of somewhere there are.
    */
   pin?: Pin;
+  /**
+   * The stand this hit was found by, where a stand is what was matched.
+   *
+   * A publisher in the exhibit hall is 573 stands in six halls, and the thing
+   * somebody is looking for is the *booth* — "Booth 1229" is printed on the
+   * stand, printed in the programme and the only thing that narrows a hall
+   * the size of a street down to a place to stand. The hall is the room the
+   * route goes to; the booth is the answer.
+   */
+  exhibitor?: Exhibitor;
   /** The soonest session, when this hit came from an event. */
   event?: ConEvent;
   /** How many sessions share this title in this room. */
@@ -61,6 +71,19 @@ export function hitLabel(hit: SearchHit): { title: string; detail: string } {
   }
   if (hit.pin) return { title: hit.pin.name, detail: hit.pin.address };
   const venue = VENUES_BY_ID[hit.room!.venueId];
+  // A stand answers with itself and says which hall afterwards, because the
+  // booth number is what is printed on it and the hall letter is not printed
+  // anywhere. "Kenzer and Company · Booth 1229 · Exhibit Hall I" is the order
+  // somebody reads it in; the hall alone was the old answer and it left them
+  // standing in a hall the size of a street.
+  if (hit.exhibitor) {
+    const where = hit.room!.shortName ?? hit.room!.name;
+    // A demo space is filed under the publisher's own name rather than a booth
+    // number — `ICC : Hall E` / `Asmodee` — so repeating it would read
+    // "Asmodee · Asmodee · Hall E".
+    const spot = hit.exhibitor.spot === hit.exhibitor.name ? '' : `${hit.exhibitor.spot} · `;
+    return { title: hit.exhibitor.name, detail: `${spot}${where}` };
+  }
   return {
     title: hit.room!.name,
     detail: `${venue?.shortName ?? venue?.name ?? ''} · ${hit.room!.level}`,
@@ -92,6 +115,26 @@ const SCORE = {
   // names — "hall b" must still find Exhibit Hall B rather than a stand in it —
   // and above the building's, since a publisher is the more specific thing.
   exhibitorName: 3.5,
+  /**
+   * A booth number, typed exactly.
+   *
+   * Below a room's own name and its exact aliases, above everything else — and
+   * the ordering is load-bearing rather than a taste. The convention centre
+   * numbers meeting rooms in the same range the exhibit hall numbers aisles,
+   * so "140" is Meeting Room 140 *and* Booth 140, and both are real answers to
+   * it. Ranked above the room this offered a stand to everybody typing a room
+   * number, which is the same bug the Indiana Repertory Theatre caused from
+   * the other direction. Ranked here it offers both, room first, which is what
+   * this search does everywhere else something is genuinely ambiguous.
+   */
+  boothNumber: 0.5,
+  /**
+   * A stand matched by the name on it, ranked just under the room that a name
+   * finds directly — "hall b" is Exhibit Hall B before it is anybody standing
+   * in Exhibit Hall B — and above the building, since a publisher is the more
+   * specific thing.
+   */
+  standName: 3.4,
   venueStart: 4,
   /**
    * A street address, and every one of these is below every room on purpose.
@@ -199,6 +242,23 @@ const EXHIBITORS_BY_ROOM = EXHIBITORS.reduce((map, exhibitor) => {
   return map;
 }, new Map<string, string[]>());
 
+/**
+ * Every stand, with the room it stands in and the words that find it.
+ *
+ * Kept as stands rather than as a list of names per room, which is what this
+ * used to be, because the room was then the only thing a match could produce —
+ * and for the exhibit hall the room is six halls of 400 m and the answer
+ * somebody wanted was four digits. Matching the stand keeps the booth.
+ */
+const STANDS: ReadonlyArray<{ exhibitor: Exhibitor; room: Room; name: string; booth: string }> =
+  EXHIBITORS.flatMap((exhibitor) => {
+    const roomId = roomIdForExhibitor(exhibitor);
+    const room = roomId ? ROOMS.find((candidate) => candidate.id === roomId) : undefined;
+    return room
+      ? [{ exhibitor, room, name: normalise(exhibitor.name), booth: exhibitor.booth ?? '' }]
+      : [];
+  });
+
 /** Built once: every string that should find a given room. */
 const ROOM_KEYS: RoomKeys[] = ROOMS.map((room) => ({
   room,
@@ -248,6 +308,43 @@ export function buildEventSearchIndex(index: EventIndex | null): EventSearchInde
     for (const event of events) entries.push({ pin, event, title: normalise(event.title) });
   }
   return { entries };
+}
+
+/**
+ * The stands, answered as stands.
+ *
+ * Two ways in, and the first is the one this was missing. Typing a booth
+ * number used to find nothing at all: `1229` is not a room name, not an alias
+ * and not an event, so the search shrugged at the number printed on the stand,
+ * in the programme and on every sign in the hall. It now answers with the
+ * stand, and the hall it is in comes second — which is the way round somebody
+ * reads it, since the hall letter is on no sign and the booth number is on all
+ * of them.
+ *
+ * A name still finds the room it is in as well, ranked below this, so "hall b"
+ * keeps meaning Exhibit Hall B rather than the thirteen publishers in it.
+ */
+function standHits(query: string): SearchHit[] {
+  const hits: SearchHit[] = [];
+  for (const stand of STANDS) {
+    const score =
+      stand.booth && stand.booth === query
+        ? SCORE.boothNumber
+        : stand.name.startsWith(query)
+          ? SCORE.standName
+          : startsWord(stand.name, query)
+            ? SCORE.standName + 0.5
+            : null;
+    if (score === null) continue;
+    hits.push({
+      key: `stand:${stand.exhibitor.name}:${stand.exhibitor.spot}`,
+      kind: 'room',
+      room: stand.room,
+      exhibitor: stand.exhibitor,
+      score,
+    });
+  }
+  return hits;
 }
 
 /**
@@ -358,6 +455,7 @@ export function search(
   }
   hits.push(...grouped.values());
 
+  hits.push(...standHits(query));
   hits.push(...addressHits(rawQuery));
 
   hits.sort((a, b) => {

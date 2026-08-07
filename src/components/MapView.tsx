@@ -19,6 +19,7 @@ import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
+import type { Pin } from '../data/offsite';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
 import { allVerticals } from '../data/vertical';
 import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
@@ -41,6 +42,9 @@ interface Props {
    * The next click picks a place for a route rather than opening a building or
    * a room. A room click means that room; anywhere else means that point.
    */
+  /** Places with an address and no room, drawn as marks. */
+  pins: ReadonlyArray<{ pin: Pin; events: number }>;
+  onOpenPin: (pin: Pin) => void;
   picking: boolean;
   onPickPlace: (place: NavPlace) => void;
   /** The route to draw, once both of its ends are known. */
@@ -144,6 +148,8 @@ export function MapView({
   levels,
   openVenueId,
   onOpenVenue,
+  pins,
+  onOpenPin,
   picking,
   onPickPlace,
   route,
@@ -456,6 +462,41 @@ export function MapView({
       for (const layer of layers) layer.remove();
     };
   }, [showAmenities, levels, openVenueId]);
+
+  /* ------------------------------------------------------------------ pins */
+  /*
+   * The places with an address and no plan: a steakhouse, a ballpark, a loft.
+   *
+   * Drawn as a mark rather than a shape, and always — not only when a building
+   * is open — because a pin belongs to no building and has no floor to be on.
+   * That is the whole difference between these and a room, and the map should
+   * say it rather than hide it: a mark says "here, and that is all anybody
+   * knows", which is exactly true of an address.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const layers: L.Layer[] = [];
+    for (const { pin, events } of pins) {
+      const marker = L.marker([pin.lat, pin.lng], {
+        icon: L.divIcon({
+          className: 'map__pin',
+          html: `<span>${events > 0 ? events : ''}</span>`,
+          iconSize: [20, 26],
+          iconAnchor: [10, 26],
+        }),
+        interactive: true,
+        keyboard: false,
+      });
+      marker.bindTooltip(pin.name, { direction: 'top', offset: [0, -22], className: 'map__pin-tip' });
+      marker.on('click', () => onOpenPin(pin));
+      marker.addTo(map);
+      layers.push(marker);
+    }
+    return () => {
+      for (const layer of layers) layer.remove();
+    };
+  }, [pins, onOpenPin]);
 
   /* ------------------------------------------------------- venues and rooms */
   useEffect(() => {

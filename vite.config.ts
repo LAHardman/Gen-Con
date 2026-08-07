@@ -59,6 +59,11 @@ export default defineConfig({
           if (/src\/data\/(route|pavements|walkable|vertical)\.ts/.test(id)) return 'routing';
           if (/src\/data\/(venue-plan|plan-geometry)\.ts/.test(id)) return 'plans';
           if (/src\/data\/exhibitors\.ts/.test(id)) return 'exhibitors';
+          // 839 street addresses, and 80 KB of them. They are what makes an
+          // event at a steakhouse walkable, and nothing on the first screen
+          // needs one — so they load beside the campus rather than in front
+          // of it.
+          if (/src\/data\/addresses\.ts/.test(id)) return 'addresses';
           if (/src\/data\/venues\.ts/.test(id)) return 'venues';
           return undefined;
         },

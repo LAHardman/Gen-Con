@@ -1020,6 +1020,33 @@ body {
   font-size: 11px;
 }
 
+.map__pin {
+  /*
+   * A teardrop, and deliberately not the same shape as anything else here.
+   * Every other mark on this map sits on a floor of a building; a pin is a
+   * street address with nothing drawn around it, and the shape is the map
+   * saying which of the two it is looking at.
+   */
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(196, 92, 74, 0.94);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+
+.map__pin > span {
+  transform: rotate(45deg);
+  color: #fdf3f0;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.leaflet-tooltip.map__pin-tip,
 .leaflet-tooltip.map__amenity-tip {
   background: var(--panel-raised);
   border: 1px solid var(--border);

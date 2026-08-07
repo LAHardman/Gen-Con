@@ -5,6 +5,7 @@ import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import type { SearchHit } from './data/search';
+import type { Pin } from './data/offsite';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
@@ -96,6 +97,29 @@ export default function App() {
     for (const [roomId, events] of index.byRoom) counts.set(roomId, events.length);
     return counts;
   }, [index]);
+
+  /*
+   * The pins, with how many events stand on each.
+   *
+   * Every pin the schedule reaches, whether or not anything is on today: the
+   * map is a map before it is a timetable, and a steakhouse hosting one dinner
+   * on Thursday is still somewhere worth being able to see and walk to.
+   */
+  const pins = useMemo(
+    () =>
+      index
+        ? [...index.byPin.values()].map(({ pin, events }) => ({ pin, events: events.length }))
+        : [],
+    [index],
+  );
+
+  // A pin has no room to select and no building to open, so opening one is
+  // asking the way there — the only thing anybody can do with an address.
+  const handleOpenPin = useCallback((pin: Pin) => {
+    setNav({ from: null, to: pinPlace(pin) });
+    setEditing('from');
+    setPickOnMap(false);
+  }, []);
 
   const liveCount = useMemo(() => {
     if (!index) return 0;
@@ -287,6 +311,8 @@ export default function App() {
 
       <main className={`app__main${nav ? ' app__main--navigating' : ''}`}>
         <MapView
+          pins={pins}
+          onOpenPin={handleOpenPin}
           selectedRoomId={selectedRoomId}
           onSelectRoom={handleSelectRoom}
           onOpenRoom={setOpenRoom}
