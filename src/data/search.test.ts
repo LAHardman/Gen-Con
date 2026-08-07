@@ -118,6 +118,15 @@ describe('finding a room', () => {
     );
   });
 
+  it('takes the name of a thing inside a hall to the hall it is inside', () => {
+    // The Family Fun Pavilion is a corner of Hall H, not a room of its own, and
+    // "family fun" is what is printed on it and what somebody types. It used to
+    // be an alias of Hall K — the far end of the building, four hundred metres
+    // and one wrong turn away — on nothing more than a recollection.
+    expect(ids('family fun')[0]).toBe('hall-h');
+    expect(ids('family fun')).not.toContain('hall-k');
+  });
+
   it('finds a room by the building it is in', () => {
     const hits = search('lucas oil', NO_EVENTS, 20);
     expect(hits.length).toBeGreaterThan(0);

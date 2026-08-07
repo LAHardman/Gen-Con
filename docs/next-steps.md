@@ -468,6 +468,8 @@ numbers either side of an air wall:
 | 1300s | 1400s | I · H |
 | 2200s | 2300s | H · G |
 | 2723 | 2727 | G · F — the only one inside an aisle rather than between two |
+| 331 | 339 | K · J — and it crosses the aisles, see below |
+| 429 | 439 | K · J — the same wall, two aisles along |
 
 That is knowledge, not a derivation, so it is checked rather than trusted. The
 schedule names a hall exactly twice in 27,467 events — `Exhibit Hall J : Booth
@@ -480,23 +482,46 @@ data supports.
 A third confirmation fell out of it: a row reading `Exhibit Hall G` in its words
 and `Booth #2667` in its table resolves to Hall G both ways.
 
+**The fifth wall is a different shape, which is why it is two rows.** The other
+four run between aisles: an aisle is wholly in one hall and the number alone
+decides it. Halls J and K are stacked one behind the other at the same end of
+the building, so the wall between them runs *across* the aisles — every aisle
+from the 100s to the 500s is cut in half, and a booth's hall depends on how far
+along its aisle it stands. A booth number is an aisle and then a position, so
+the test is `number % 100`: from 32 up is Hall J, below it Hall K.
+
+32 is where the two given crossings put it. Between 331 and 339, and between
+429 and 439: both say the line is somewhere in the low thirties to 39, and 32
+is the tightest line satisfying both. Which side is J is not something either
+crossing says — that is booth 174 again, at position 74 and called Hall J by
+the schedule, doing a second job it was never meant for.
+
+Ten stands straddle the wall rather than falling either side of it — 132, 133,
+135, 136, 137, 234, 237, 533, 535, 537. They are counted as Hall J, and being
+wrong about them costs nothing: a stand *on* the wall is reachable from both
+halls, which is the one case where a coin toss is not a coin toss.
+
 **What it bought.**
 
 ```
 events resolving to no room     130 → 51   of 27,467
-stand locations placed on the map  47 → 494  of 846
-exhibit-hall stands placed          0 → 446  of 573
+stand locations placed on the map  47 → 621  of 846
+exhibit-hall stands placed          0 → 573  of 573
 ```
 
 The 79 exhibit-hall events that used to be the largest group of unmatched are
-all placed. Searching a publisher now takes you to the hall: "Kenzer" finds
-Exhibit Hall I.
+all placed, and so is every stand in the hall. Searching a publisher now takes
+you to the hall: "Kenzer" finds Exhibit Hall I.
 
-**What is still not known, and is left as such.** Where Hall J ends and Hall K
-begins. The first stretch is J *and* K together and nothing says where the wall
-is, so its 127 stands resolve to no hall — a coin toss would send half of them
-to the wrong end of a building 400 m long, and would look exactly like knowing.
-One more divide closes it.
+**What it also disproved.** `venues.ts` called Hall J "Open Gaming" and Hall K
+"Family Fun", and drew both in the gaming colour rather than the exhibit one.
+Neither name appears in the schedule, the stand list or the printed plan —
+they were somebody's recollection. What the stand list says is that 127 trade
+stands are in that stretch, which is not what a hall of free tables looks like.
+Both are now plain exhibit halls, and the Family Fun Pavilion is an alias of
+Hall H, where it actually is. `booths.test.ts` asserts the category off the
+stand list rather than off a hand-written list, so the next name somebody
+remembers has to survive the data.
 
 ---
 
@@ -505,9 +530,9 @@ One more divide closes it.
 Everything below has been measured rather than estimated, and none of it is
 waiting on more code.
 
-**Booth to hall — closed, by somebody who has walked the hall.** See §7. Four
-divides did it; one more, between Halls J and K, would place the last 127
-stands.
+**Booth to hall — closed, by somebody who has walked the hall.** See §7. Five
+divides did it, the fifth cutting across the aisles rather than between them.
+All 573 exhibit-hall stands are placed.
 
 The printed map is not that source and it is worth writing down why, because
 §7 predicted it would be. It was fetched by hand — `files.gencon.com` is
@@ -527,14 +552,17 @@ Three things about it, so nobody opens it hoping for more:
   - **The only lettered regions are the Art Show, Authors Avenue, Entrepreneurs
     Avenue and the Family Fun Pavilion**, plus the Exhibitor Services Desk and
     five entrance arrows.
-  - **The plan and `venues.ts` disagree about where the halls are.** The
-    schedule puts booth 174 in Hall J and 174 is at the extreme left of the
-    plan; the Family Fun Pavilion, which `venues.ts` calls Hall K, is
-    centre-right — yet `venues.ts` has J and K adjacent at the east end. Two
-    halls that share a wall are not at opposite ends of their own plan. The
-    divides in §7 do not depend on resolving this, but any *geometric* fit
-    would, so nobody should attempt one until it is known which of the three is
-    wrong.
+  - **The plan and `venues.ts` disagreed about where the halls are, and the
+    plan was right.** The schedule puts booth 174 in Hall J and 174 is at the
+    extreme left of the plan; the Family Fun Pavilion, which `venues.ts` called
+    Hall K, is centre-right — yet `venues.ts` had J and K adjacent at the east
+    end. Two halls that share a wall are not at opposite ends of their own
+    plan. What was wrong was the *name*: the Family Fun Pavilion is the bottom
+    right corner of Hall H, which is centre-right, which is exactly where the
+    plan draws it. J and K are adjacent after all, stacked rather than side by
+    side. Nothing on the plan contradicts `venues.ts`'s geometry any more, so a
+    geometric fit is now attemptable — though it still needs the two thousand
+    small numbers OCR'd first.
 
 **Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
 the Escape Room and Circle Centre are single-room venues Gen Con does not

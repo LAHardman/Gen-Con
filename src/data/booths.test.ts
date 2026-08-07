@@ -104,6 +104,24 @@ describe('the divides themselves', () => {
     }
   });
 
+  it('draws every hall it fills as an exhibit hall', () => {
+    // Halls J and K were drawn as gaming rooms and named for the programmes
+    // somebody remembered being in them — "Open Gaming" and "Family Fun" —
+    // and neither the schedule nor the stand list nor the printed plan says
+    // either of those words anywhere. What the stand list does say is that
+    // 127 trade stands are in that stretch, which is not what a hall of free
+    // tables looks like. So the category is the check: a hall this table puts
+    // booths in is an exhibit hall, in the legend and in the colour it is
+    // drawn, whatever else also happens inside it.
+    const filled = new Set(
+      EXHIBITORS.filter((stand) => stand.area === 'Exhibit Hall')
+        .map((stand) => hallForBooth(stand.booth))
+        .filter((hall): hall is string => Boolean(hall)),
+    );
+    expect(filled.size).toBe(6);
+    for (const hall of filled) expect(ROOMS_BY_ID[hall].category, hall).toBe('exhibit');
+  });
+
   it('has nothing to say about what is not a booth number', () => {
     expect(hallForBooth(undefined)).toBeNull();
     expect(hallForBooth(null)).toBeNull();

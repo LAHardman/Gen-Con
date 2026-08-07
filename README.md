@@ -352,7 +352,7 @@ never otherwise; the map API's coordinates sit on a star field rather than a
 plan; and Gen Con's own printed exhibit-hall map draws the grid to scale and
 letters no hall on it.
 
-What closed it is four divides — the booth numbers either side of each air
+What closed it is five divides — the booth numbers either side of each air
 wall, from somebody who has walked the hall. `src/data/booths.ts` holds them,
 and holds the checking with them, because a table like that reversed does not
 fail: every booth still gets a hall, every hall still has booths, and everybody
@@ -360,11 +360,17 @@ walks confidently to the wrong end of a building four hundred metres long. The
 two rows where the schedule *does* name a hall are at opposite ends of the grid
 and both agree; read the other way round, one of them lands in the wrong hall.
 
+Four of the five walls run *between* aisles, so an aisle is wholly in one hall.
+The fifth does not. Halls J and K are stacked one behind the other at the same
+end of the building, so the wall between them cuts every aisle in the 100s-to-
+500s stretch in half, and a booth's hall there depends on how far *along* its
+aisle it stands rather than on which aisle it is. It was given as the two
+places it crosses — between 331 and 339, and between 429 and 439 — and booth
+174, the one the schedule calls Hall J, is what fixes which side is which.
+
 That took events resolving to no room from **130 to 51** of 27,467, and stands
-placed on the map from **47 to 494** of 846. Searching "Kenzer" now finds
-Exhibit Hall I. The last 127 stands are in the stretch that is Hall J *and*
-Hall K, where nothing says which — they resolve to no hall rather than to a
-coin toss between two halls at opposite ends of the same wall.
+placed on the map from **47 to 621** of 846 — every one of the 573 in the
+exhibit hall. Searching "Kenzer" now finds Exhibit Hall I.
 
 ### Getting between buildings
 
