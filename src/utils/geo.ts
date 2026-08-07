@@ -30,7 +30,7 @@ export interface VenueAnchor {
 }
 
 /** Metres per degree of latitude. Constant enough at city scale. */
-const METRES_PER_DEGREE_LAT = 111_320;
+export const METRES_PER_DEGREE_LAT = 111_320;
 
 /** Metres per degree of longitude, which narrows as you move away from the equator. */
 function metresPerDegreeLng(lat: number) {

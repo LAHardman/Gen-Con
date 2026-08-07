@@ -286,6 +286,16 @@ function main() {
   const rivalAisle = rival ? aisleScore(spotsFor(rival.pick)) : null;
 
   const spot = spotsFor(won.pick);
+  // The same transform, applied to the stand rectangle's middle rather than to
+  // its number's.
+  const middles = new Map();
+  CHAIN.forEach((id, i) => {
+    const c = won.pick[i];
+    for (const b of boothsOf.get(id)) {
+      const [px, py] = spin(c.o, b.rx, b.ry);
+      middles.set(b.booth, [px * MODULE + c.ox, py * MODULE + c.oy]);
+    }
+  });
   let held = 0;
   for (const b of PLANNED_BOOTHS) {
     const p = spot.get(b.booth);
@@ -331,9 +341,23 @@ function main() {
     process.exit(1);
   }
 
+  // A quarter-turn swaps a stand's two sides, so the placed extents are
+  // written out rather than the printed ones: `wide` is east-west on the
+  // ground and `deep` is north-south, and nothing downstream has to know which
+  // way its hall was laid down.
+  const BOOTH_M = 3.048;
+  const turnOf = new Map(CHAIN.map((id, i) => [id, won.pick[i].o.turn]));
   const placed = PLANNED_BOOTHS.map((b) => {
-    const p = spot.get(b.booth);
-    return { ...b, hall: hallForBooth(b.booth), ...world(p[0], p[1]) };
+    const p = middles.get(b.booth) ?? spot.get(b.booth);
+    const hall = hallForBooth(b.booth);
+    const sideways = turnOf.get(hall) % 2 === 1;
+    return {
+      booth: b.booth,
+      hall,
+      ...world(p[0], p[1]),
+      wide: Number(((sideways ? b.along : b.across) * BOOTH_M).toFixed(1)),
+      deep: Number(((sideways ? b.across : b.along) * BOOTH_M).toFixed(1)),
+    };
   }).sort((a, b) => Number(a.booth) - Number(b.booth));
 
   const anomaly = odd.length
@@ -366,13 +390,13 @@ export interface PlacedBooth {
   hall: string;
   lat: number;
   lng: number;
-  /** The stand's size in ten-foot booths. */
-  across: number;
-  along: number;
+  /** The stand's own size on the ground, in metres. */
+  wide: number;
+  deep: number;
 }
 
 export const PLACED_BOOTHS: ReadonlyArray<PlacedBooth> = [
-${placed.map((b) => `  { booth: '${b.booth}', hall: '${b.hall}', lat: ${b.lat}, lng: ${b.lng}, across: ${b.across}, along: ${b.along} },`).join('\n')}
+${placed.map((b) => `  { booth: '${b.booth}', hall: '${b.hall}', lat: ${b.lat}, lng: ${b.lng}, wide: ${b.wide}, deep: ${b.deep} },`).join('\n')}
 ];
 `;
   writeFileSync(OUT, source);

@@ -277,7 +277,17 @@ async function main() {
   for (const n of numbers) lengths.set(n.text.length, (lengths.get(n.text.length) ?? 0) + 1);
   console.log(`numbers: ${numbers.length}, by length ${[...lengths].sort().map(([l, n]) => `${l}:${n}`).join(' ')}`);
 
-  // Each number takes the stand rectangle it sits in or nearest to.
+  // Each number takes the stand rectangle it sits in or nearest to, and BOTH
+  // positions are kept, because they are answers to different questions.
+  //
+  // The number says *which* stand: it is printed at the booth's own position
+  // along its aisle, and it is what makes the aisles come out straight when
+  // `fit-booths.mjs` lays a hall down. The rectangle says *what the stand is*:
+  // its outline, which for a 2x9 island runs twelve metres from the number
+  // printed on it. Fit on the first and draw the second — using the rectangle
+  // to fit costs half the aisle correlation, and using the number to draw puts
+  // a ninety-foot stand's outline in the wrong place.
+  let moved = 0;
   const booths = numbers.map((n) => {
     const cx = (n.x0 + n.x1) / 2;
     let best = null;
@@ -288,14 +298,19 @@ async function main() {
       const d = Math.hypot(dx, dy);
       if (d < near) { near = d; best = s; }
     }
+    const own = best && near < 14;
+    if (own) moved = Math.max(moved, Math.hypot((best.x0 + best.x1) / 2 - cx, (best.y0 + best.y1) / 2 - n.y));
     return {
       booth: n.text,
       x: NUM(cx),
       y: NUM(n.y),
-      across: best && near < 14 ? Math.round(wide(best) / MODULE) : 0,
-      along: best && near < 14 ? Math.round(tall(best) / MODULE) : 0,
+      rx: NUM(own ? (best.x0 + best.x1) / 2 : cx),
+      ry: NUM(own ? (best.y0 + best.y1) / 2 : n.y),
+      across: own ? Math.round(wide(best) / MODULE) : 0,
+      along: own ? Math.round(tall(best) / MODULE) : 0,
     };
   });
+  console.log(`the furthest a number sits from the middle of its own stand: ${moved.toFixed(1)} pt (${(moved * 3.048 / MODULE).toFixed(1)} m)`);
 
   const sizes = new Map();
   for (const b of booths) sizes.set(`${b.across}x${b.along}`, (sizes.get(`${b.across}x${b.along}`) ?? 0) + 1);
@@ -328,16 +343,19 @@ async function main() {
 export interface PlannedBooth {
   /** As printed. Matches \`Exhibitor.booth\` where the stand is let. */
   booth: string;
-  /** Page points on the printed map. NOT a position on the ground. */
+  /** Where the number is printed. Page points, NOT a position on the ground. */
   x: number;
   y: number;
+  /** The middle of the stand's own rectangle, which is not where its number is. */
+  rx: number;
+  ry: number;
   /** The stand's size in ten-foot booths. 0 where no rectangle was near it. */
   across: number;
   along: number;
 }
 
 export const PLANNED_BOOTHS: ReadonlyArray<PlannedBooth> = [
-${booths.map((b) => `  { booth: '${b.booth}', x: ${b.x}, y: ${b.y}, across: ${b.across}, along: ${b.along} },`).join('\n')}
+${booths.map((b) => `  { booth: '${b.booth}', x: ${b.x}, y: ${b.y}, rx: ${b.rx}, ry: ${b.ry}, across: ${b.across}, along: ${b.along} },`).join('\n')}
 ];
 `;
   writeFileSync(OUT, source);

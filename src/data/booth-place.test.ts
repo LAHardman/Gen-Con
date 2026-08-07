@@ -160,6 +160,25 @@ describe('the shape of a real exhibit floor', () => {
     }
   });
 
+  it('gives every stand its own footprint, in whole ten-foot booths', () => {
+    // The outline the map draws. `wide` and `deep` are the stand's sides on
+    // the ground rather than on the page, so they are already swapped for the
+    // quarter-turn its hall was laid down with — nothing drawing these has to
+    // know which way that was.
+    const BOOTH = 3.048;
+    for (const stand of PLACED_BOOTHS) {
+      for (const side of [stand.wide, stand.deep]) {
+        expect(side, stand.booth).toBeGreaterThan(0);
+        expect(Math.abs(side / BOOTH - Math.round(side / BOOTH)), stand.booth).toBeLessThan(0.05);
+      }
+    }
+    // Most of the hall is single booths, and the largest island is real: ten
+    // stands on this floor are 2x9, which is ninety feet of frontage.
+    const single = PLACED_BOOTHS.filter((s) => s.wide < 4 && s.deep < 4);
+    expect(single.length / PLACED_BOOTHS.length).toBeGreaterThan(0.4);
+    expect(Math.max(...PLACED_BOOTHS.map((s) => Math.max(s.wide, s.deep)))).toBeGreaterThan(20);
+  });
+
   it('spreads a hall over the whole of the hall, not over a corner of it', () => {
     // A block placed at the right angle but far too small would pass every
     // test above and draw the exhibit hall as a smudge in one corner.

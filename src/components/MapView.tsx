@@ -21,6 +21,7 @@ import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import type { Pin } from '../data/offsite';
 import { PLACED_BOOTHS } from '../data/booth-place';
+import { METRES_PER_DEGREE_LAT } from '../utils/geo';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
 import { allVerticals } from '../data/vertical';
 import { CONNECTIONS, connectionShown, type Line } from '../data/connections';
@@ -499,18 +500,29 @@ export function MapView({
       const seen = map.getBounds().pad(0.2);
       for (const stand of PLACED_BOOTHS) {
         if (!seen.contains([stand.lat, stand.lng])) continue;
-        const marker = L.marker([stand.lat, stand.lng], {
-          icon: L.divIcon({
-            className: `map__booth${named ? ' map__booth--named' : ''}`,
-            html: named ? `<span>${stand.booth}</span>` : '',
-            iconSize: named ? [26, 12] : [5, 5],
-            iconAnchor: named ? [13, 6] : [2.5, 2.5],
-          }),
+        // The stand's own footprint, which is why a 2x9 island reads as one
+        // long shape and a single booth as a square: the size is off the
+        // printed map's module and is the one thing about a stand that is not
+        // a fit. Half of each side either way from its middle.
+        const dLat = stand.deep / 2 / METRES_PER_DEGREE_LAT;
+        const dLng = stand.wide / 2 / (METRES_PER_DEGREE_LAT * Math.cos((stand.lat * Math.PI) / 180));
+        const outline = L.rectangle(
+          [
+            [stand.lat - dLat, stand.lng - dLng],
+            [stand.lat + dLat, stand.lng + dLng],
+          ],
+          { className: 'map__booth', interactive: false, weight: 1 },
+        );
+        outline.addTo(map);
+        layers.push(outline);
+        if (!named) continue;
+        const label = L.marker([stand.lat, stand.lng], {
+          icon: L.divIcon({ className: 'map__booth-name', html: `<span>${stand.booth}</span>`, iconSize: [26, 10], iconAnchor: [13, 5] }),
           interactive: false,
           keyboard: false,
         });
-        marker.addTo(map);
-        layers.push(marker);
+        label.addTo(map);
+        layers.push(label);
       }
     };
     draw();
