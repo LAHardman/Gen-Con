@@ -20,6 +20,7 @@ import { roomIdForExhibitor, search } from './search';
 import { ROOMS_BY_ID } from './venues';
 
 const NO_EVENTS = { entries: [] };
+const ids = (query: string) => search(query, NO_EVENTS).map((hit) => hit.room.id);
 
 describe('the table itself', () => {
   it('has the campus in it, and one row per place rather than per exhibitor', () => {
@@ -107,19 +108,34 @@ describe('where the map and the stand list agree', () => {
       // rooms in blocks, so a room resolves to the block that contains it.
       ICC: ['rooms-120-128', 'rooms-130-145', 'rooms-231-245', 'sagamore-ballroom'],
       'Stadium : West Club Lounge': ['lucas-oil-west-club'],
+      // The exhibit hall names no hall in its words. Its booth numbers do —
+      // four of the eleven halls, which is as far as the divides reach.
+      'Exhibit Hall': ['hall-f', 'hall-g', 'hall-h', 'hall-i'],
     });
     for (const ids of found.values()) for (const id of ids) expect(ROOMS_BY_ID[id], id).toBeDefined();
   });
 
-  it('leaves the exhibit hall unplaced, and says so rather than picking a hall', () => {
-    // The honest half of this table. `Exhibit Hall : Booth 1637` does not say
-    // which of the eleven halls, and neither do the coordinates Gen Con's map
-    // carries — they are laid out area by area on a star field rather than on a
-    // plan of the building. Guessing would put a stand in the wrong hall and
-    // nothing on screen would admit it.
+  it('places a stand in the exhibit hall by its booth number', () => {
+    // The words say `Exhibit Hall : Booth 1637` and there are eleven halls, so
+    // this is the number's doing — see `booths.ts`, and the two rows of the
+    // schedule that confirm the table is not back to front.
     const hall = EXHIBITORS.filter((e) => e.area === 'Exhibit Hall');
     expect(hall.length).toBeGreaterThan(500);
-    for (const stand of hall) expect(roomIdForExhibitor(stand), stand.name).toBeNull();
+    const placed = hall.filter((stand) => roomIdForExhibitor(stand));
+    expect(placed.length).toBe(446);
+    expect(roomIdForExhibitor(hall.find((e) => e.booth === '1637')!)).toBe('hall-h');
+  });
+
+  it('leaves the stretch nobody has divided unplaced, rather than picking a hall', () => {
+    // The honest half. The first stretch of the grid is Hall J *and* Hall K and
+    // nothing says where one ends, so its 127 stands get no hall — a coin toss
+    // would send half of them to the wrong end of a building 400 m long, and
+    // would look exactly like knowing.
+    const unplaced = EXHIBITORS.filter(
+      (stand) => stand.area === 'Exhibit Hall' && !roomIdForExhibitor(stand),
+    );
+    expect(unplaced).toHaveLength(127);
+    for (const stand of unplaced) expect(Number(stand.booth)).toBeLessThan(600);
   });
 });
 
@@ -144,11 +160,20 @@ describe('searching for a publisher rather than a room', () => {
     expect(standing.score).toBeGreaterThan(named.score);
   });
 
-  it('offers nothing for a stand whose hall is unknown', () => {
-    // Kenzer and Company is `Exhibit Hall : Booth 1229`. Rather than send
-    // somebody to whichever hall a guess landed on, the search has no answer —
-    // which is the same thing it does for a room the map has never heard of.
+  it('takes an exhibit-hall stand to the hall its number places it in', () => {
+    // Kenzer and Company is `Exhibit Hall : Booth 1229`, which names no hall.
+    // This used to find nothing at all.
     expect(EXHIBITORS.some((e) => e.name === 'Kenzer and Company')).toBe(true);
-    expect(search('kenzer', NO_EVENTS)).toEqual([]);
+    expect(ids('kenzer')).toEqual(['hall-i']);
+  });
+
+  it('still offers nothing for a stand nobody has placed', () => {
+    // A stand in the stretch that is Hall J or Hall K. No answer beats a coin
+    // toss between two halls at opposite ends of the same wall.
+    const unplaced = EXHIBITORS.find(
+      (e) => e.area === 'Exhibit Hall' && Number(e.booth) < 600 && e.name.length > 6,
+    )!;
+    expect(unplaced).toBeDefined();
+    expect(search(unplaced.name.slice(0, 6).toLowerCase(), NO_EVENTS)).toEqual([]);
   });
 });

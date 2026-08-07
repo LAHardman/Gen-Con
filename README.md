@@ -346,26 +346,25 @@ Oil's West Club Lounge. Typing "Asmodee" finds Hall E and Room 233. Exhibitor
 names rank *below* a room's own names, so "hall b" still finds Exhibit Hall B
 rather than the thirteen publishers standing in it.
 
-**The other 573 are `Exhibit Hall : Booth N`, and there are eleven exhibit
-halls.** Each location also carries `lg` and `lt` coordinates on Gen Con's map,
-and the obvious move is to solve those into latitude and longitude and read the
-hall off the geometry. It cannot be done: `gencon.com/map` is `L.CRS.Simple`
-over a tile pyramid whose tiles are **a star field**, with the plan as vector
-overlay laid out area by area, each area at its own zoom, the areas beside one
-another rather than where the buildings are. The booth cloud is aspect 1.84
-against 1.49 for the halls it would have to be, and laid on those halls each of
-the eight ways a rectangle can be, the best fit puts 72% of booths inside a
-hall where a real plan would put all of them.
+**The other 573 say `Exhibit Hall : Booth N`, and there are eleven exhibit
+halls.** No source names one. The schedule does it twice in 27,467 events and
+never otherwise; the map API's coordinates sit on a star field rather than a
+plan; and Gen Con's own printed exhibit-hall map draws the grid to scale and
+letters no hall on it.
 
-**Gen Con's printed exhibit-hall map does not close it either**, which was worth
-finding out rather than assuming: it is a true plan of the booth grid, drawn to
-scale, and it letters no hall. Its only named regions are the Art Show, Authors
-Avenue, Entrepreneurs Avenue and the Family Fun Pavilion — that last one being
-Hall K under the name Gen Con gives it — and its booth numbers are vector art
-rather than text. See `docs/next-steps.md` §8.
+What closed it is four divides — the booth numbers either side of each air
+wall, from somebody who has walked the hall. `src/data/booths.ts` holds them,
+and holds the checking with them, because a table like that reversed does not
+fail: every booth still gets a hall, every hall still has booths, and everybody
+walks confidently to the wrong end of a building four hundred metres long. The
+two rows where the schedule *does* name a hall are at opposite ends of the grid
+and both agree; read the other way round, one of them lands in the wrong hall.
 
-So a booth number resolves to an exhibitor and not to a place, and the app says
-nothing about which hall rather than guessing one.
+That took events resolving to no room from **130 to 51** of 27,467, and stands
+placed on the map from **47 to 494** of 846. Searching "Kenzer" now finds
+Exhibit Hall I. The last 127 stands are in the stretch that is Hall J *and*
+Hall K, where nothing says which — they resolve to no hall rather than to a
+coin toss between two halls at opposite ends of the same wall.
 
 ### Getting between buildings
 

@@ -90,10 +90,21 @@ describe('finding a room', () => {
     // Five rooms called Grand something, all matched the same way. Length is
     // the only thing left, and it is the right thing: the shorter name is the
     // more likely to be the whole of what somebody meant.
-    const hits = search('grand', NO_EVENTS, 20).map((hit) => hit.room.name);
-    const lengths = hits.map((name) => name.length);
+    //
+    // Within a score, not across it — the same query also reaches rooms
+    // through the publishers standing in them, and those rank after every room
+    // that matched on a name of its own however long that name is.
+    const hits = search('grand', NO_EVENTS, 20);
     expect(hits.length).toBeGreaterThan(2);
-    expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+    const byScore = new Map<number, number[]>();
+    for (const hit of hits) byScore.set(hit.score, [...(byScore.get(hit.score) ?? []), hit.room.name.length]);
+    expect([...byScore.values()].some((lengths) => lengths.length > 1)).toBe(true);
+    for (const lengths of byScore.values()) {
+      expect([...lengths].sort((a, b) => a - b)).toEqual(lengths);
+    }
+    // And the scores themselves only ever go one way down the list.
+    const scores = hits.map((hit) => hit.score);
+    expect([...scores].sort((a, b) => a - b)).toEqual(scores);
   });
 
   it('offers both buildings that number a room the same', () => {
@@ -205,7 +216,7 @@ describe('finding an event', () => {
     // reaches `byRoom` — and this asserts it end to end, from the feed to what
     // somebody sees, since that is the property that actually matters.
     const events = feed([
-      event({ title: 'Catan Somewhere', roomText: 'Booth #1229', locationText: 'ICC' }),
+      event({ title: 'Catan Somewhere', roomText: 'Georgia Street Entrance', locationText: 'ICC' }),
       event({ title: 'Catan In A Hall', roomText: 'Exhibit Hall B' }),
     ]);
     expect(search('catan', events).map((hit) => hit.event?.title)).toEqual(['Catan In A Hall']);

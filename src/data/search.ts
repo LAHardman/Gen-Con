@@ -18,6 +18,7 @@
 import { ROOMS, VENUES_BY_ID, type Room } from './venues';
 import { roomIdForEvent, type ConEvent, type EventIndex } from './events';
 import { EXHIBITORS, type Exhibitor } from './exhibitors';
+import { hallForBooth } from './booths';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -82,18 +83,21 @@ function startsWord(haystack: string, needle: string) {
  * both, and reading them the same way is what keeps "Hall B" meaning the same
  * thing in a schedule and in a stand list.
  *
- * 47 of the 846 locations resolve, and the 573 that do not are all in the
- * exhibit hall. That is not a matcher failure: the label is `Exhibit Hall :
- * Booth 1637` and there are eleven exhibit halls, so nothing in it says which.
- * See `scripts/fetch-exhibitors.mjs` for why the coordinates cannot say either.
+ * The exhibit hall needs the extra step. Its labels are `Exhibit Hall : Booth
+ * 1637` and there are eleven exhibit halls, so nothing in the words says which
+ * — but the number does, once you know where the air walls are (`booths.ts`).
+ * That places 446 of the 573 stands; the rest are in the stretch where J and K
+ * have not been told apart, and they stay unplaced rather than guess.
  */
 export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
   const [building, ...within] = exhibitor.area.split(' : ');
-  return roomIdForEvent({
+  const named = roomIdForEvent({
     locationText: building,
     roomText: within.join(' '),
     tableText: exhibitor.spot,
   } as unknown as ConEvent);
+  if (named) return named;
+  return exhibitor.area === 'Exhibit Hall' ? hallForBooth(exhibitor.booth) : null;
 }
 
 interface RoomKeys {

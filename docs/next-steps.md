@@ -429,7 +429,7 @@ could not otherwise be asked.
 
 ---
 
-## 7. Booths — the stand list is here, the halls are not
+## 7. Booths — done, and the last piece was not in any file
 
 Gen Con publishes who is at which booth, unauthenticated and paginated:
 
@@ -438,52 +438,65 @@ https://www.gencon.com/api/v1/exhibitor_profiles?page=N&per_page=100
 ```
 
 `scripts/fetch-exhibitors.mjs` reads it into `src/data/exhibitors.ts` — **846
-locations, 780 exhibitors, 794 of them numbered**, one row per *place* rather
+locations, 780 exhibitors, 794 of them numbered** — one row per *place* rather
 than per exhibitor, since a publisher with four booths, a demo hall and a
 meeting room is six places somebody might be looking for.
 
-**What it bought.** 47 of those locations name a room the map draws, and they
-name it in the same words the schedule does, so the same matcher reads both:
-Halls A–E, the Level 1 and Level 2 meeting-room blocks, the Sagamore Ballroom
-and Lucas Oil's West Club Lounge. Typing "Asmodee" now finds Hall E and Room
-233. Exhibitor names rank *below* a room's own names, so "hall b" still finds
-Exhibit Hall B rather than the thirteen publishers standing in it.
-
-**What it did not buy, and this was the point of the exercise.** The other 573
-are `Exhibit Hall : Booth 1637`, and there are eleven exhibit halls. The plan
-was to solve the `lg`/`lt` coordinates each location carries into latitude and
-longitude and read the hall off the geometry. That is not possible, and it is
-worth writing down why rather than leaving it as a to-do:
-
-`gencon.com/map` is `L.CRS.Simple` over a tile pyramid at `/lg/tiles/v1/`, and
-**those tiles are a star field**. The plan is vector overlay, laid out area by
-area, each area revealed at its own zoom, with the areas sitting beside one
-another rather than where the buildings are. Three measurements say so:
+**The hall was the hard half, and no source has it.** 573 of those rows say
+`Exhibit Hall : Booth 1637`, and there are eleven exhibit halls. Three sources
+were checked and none of them says which:
 
 ```
-lt band        exhibit-hall booths -7.6..34.8, ICC rooms and halls -42..-5.6
-               adjacent strips, not one building
-aspect         booth cloud 78.2 x 42.4 units = 1.84, surveyed halls = 1.49
-best fit       laid on the halls each of the eight ways a rectangle can be,
-               the best puts 72% of booths inside a hall. A plan of the same
-               rooms would put 100%.
+the schedule      `Exhibit Hall Booth #1229`, twice in 27,467 events naming
+                  a hall outright and never otherwise
+the map API       `lg`/`lt` coordinates on a tile pyramid whose tiles are a
+                  star field — laid out area by area, not a plan. The booth
+                  cloud is aspect 1.84 against 1.49 for the halls it would
+                  have to be, and laid on them each of the eight ways a
+                  rectangle can be, the best fit puts 72% of booths inside a
+                  hall where a real plan would put all of them
+the printed map   a true plan of the grid, drawn to scale, that letters no
+                  hall at all (§8)
 ```
 
-The coordinates *are* internally faithful — the booths of one aisle share an
-`lg` to within a unit and the aisles step by 2.65 — so what is missing is only
-the link to the ground, which is the whole of what a route needs.
+**What closed it was somebody who has walked the hall.** Four divides, as booth
+numbers either side of an air wall:
 
-Two control points exist and are not enough: the schedule itself writes
-`Exhibit Hall J : Booth #174` and `Exhibit Hall G` / `Booth #2667`. Two points
-fit four parameters with nothing left to check them against, and the fit they
-give covers only the south-east third of the halls — so it is wrong, and two
-more control points would not prove the next one right either.
+| between | and | is the wall between |
+|---|---|---|
+| 500s | 600s | J and K, above · I, below |
+| 1300s | 1400s | I · H |
+| 2200s | 2300s | H · G |
+| 2723 | 2727 | G · F — the only one inside an aisle rather than between two |
 
-**What would close it** is a source that states the hall: Gen Con's own printed
-exhibit-hall map with the letters over the booth grid, or an aisle-to-hall
-range published anywhere. Until one turns up, a booth number resolves to an
-exhibitor and not to a place, and the 41 events at booths #1229 and #1853 stay
-in the unmatched report where they belong.
+That is knowledge, not a derivation, so it is checked rather than trusted. The
+schedule names a hall exactly twice in 27,467 events — `Exhibit Hall J : Booth
+#174` and `Exhibit Hall G` with `Booth #2667` — and both agree with the table.
+They are the check worth having because they had no part in writing it: read
+the other way round, with I below the 500s rather than above, booth 174 lands
+in Hall I and the schedule says J. There is one reading of these divides the
+data supports.
+
+A third confirmation fell out of it: a row reading `Exhibit Hall G` in its words
+and `Booth #2667` in its table resolves to Hall G both ways.
+
+**What it bought.**
+
+```
+events resolving to no room     130 → 51   of 27,467
+stand locations placed on the map  47 → 494  of 846
+exhibit-hall stands placed          0 → 446  of 573
+```
+
+The 79 exhibit-hall events that used to be the largest group of unmatched are
+all placed. Searching a publisher now takes you to the hall: "Kenzer" finds
+Exhibit Hall I.
+
+**What is still not known, and is left as such.** Where Hall J ends and Hall K
+begins. The first stretch is J *and* K together and nothing says where the wall
+is, so its 127 stands resolve to no hall — a coin toss would send half of them
+to the wrong end of a building 400 m long, and would look exactly like knowing.
+One more divide closes it.
 
 ---
 
@@ -492,48 +505,36 @@ in the unmatched report where they belong.
 Everything below has been measured rather than estimated, and none of it is
 waiting on more code.
 
-**Booth to hall — the map I predicted would close it does not.** §7 said the
-gap would close given "Gen Con's own printed exhibit-hall map with the letters
-over the booth grid". That map exists —
-`files.gencon.com/2026.exhibithallmap.pdf`, blocked by this environment's
-egress policy but supplied by hand — and it was read. **It does not letter the
-halls.** That prediction was wrong and this is the correction.
+**Booth to hall — closed, by somebody who has walked the hall.** See §7. Four
+divides did it; one more, between Halls J and K, would place the last 127
+stands.
 
-What the document actually is: one page, a two-page programme spread. The upper
-three-quarters is a true plan of the booth grid, drawn to scale, one continuous
-run of aisles numbered from the 100s at the left to the 3000s at the right. The
-lower quarter is the exhibitor index — name, leader dots, booth number — which
-is the same information `exhibitors.ts` already holds, and a "Sponsor Locations
+The printed map is not that source and it is worth writing down why, because
+§7 predicted it would be. It was fetched by hand — `files.gencon.com` is
+refused by this environment's egress policy, the gateway answering 403 to the
+CONNECT before any request is made — and read. **It letters no hall.** It is
+one page, a two-page programme spread: the upper three quarters a true plan of
+the booth grid drawn to scale, the lower quarter the exhibitor index, which is
+the same information `exhibitors.ts` already holds, plus a "Sponsor Locations
 Outside Exhibit Hall" block giving hall letters for about thirty *demo spaces*,
-which is the same information again (`ICC : Hall B` and friends).
+which is the same information again.
 
-Four things are worth knowing before anybody opens it again:
+Three things about it, so nobody opens it hoping for more:
 
   - **The booth numbers on the plan are vector art, not text.** Its text layer
-    holds 1,914 items and every one of them is either the index or one of a
-    dozen big labels. Reading the grid means OCR, which is `plan-labels.py`'s
-    job and about two thousand small numbers of it.
-  - **The only lettered regions are ART SHOW & AUTHORS AVENUE, ENTREPRENEURS
-    AVENUE, FAMILY FUN PAVILION and the EXHIBITOR SERVICES DESK**, plus five
-    EXHIBIT HALL ENTRANCE arrows. No hall letter appears anywhere.
-  - **One of those is a hall.** Gen Con calls Hall K "Family Fun" and
-    `venues.ts` follows it, so the shaded Family Fun Pavilion block — roughly
-    booths 1801–2215 — is Hall K. That is one hall of eleven, and neither of
-    the two booth numbers the schedule leaves unmatched (#1229, #1853) is in
-    it.
-  - **The plan and the hall rectangles disagree about where things are, and
-    that is unresolved.** The schedule places booth 174 in Hall J, and 174 is
-    at the extreme left of the plan; the Family Fun Pavilion, which is Hall K,
-    is centre-right. `venues.ts` has J and K adjacent at the east end of the
-    building. Two halls that share a wall are not at opposite ends of their own
-    plan, so one of those three things is wrong and no fit should be attempted
-    until it is known which.
-
-**What would actually close it** is a statement, from anywhere, of which halls
-an aisle range falls in — the exhibitor portal, a floor-plan sheet with the air
-walls lettered, or Gen Con asked directly. Failing that, OCR of the plan gives
-booth *positions*, which combined with a hall arrangement that can be trusted
-would give the answer geometrically. Neither half is in hand.
+    holds 1,914 items and every one is the index or one of a dozen big labels,
+    so reading the grid means OCR of two thousand small numbers.
+  - **The only lettered regions are the Art Show, Authors Avenue, Entrepreneurs
+    Avenue and the Family Fun Pavilion**, plus the Exhibitor Services Desk and
+    five entrance arrows.
+  - **The plan and `venues.ts` disagree about where the halls are.** The
+    schedule puts booth 174 in Hall J and 174 is at the extreme left of the
+    plan; the Family Fun Pavilion, which `venues.ts` calls Hall K, is
+    centre-right — yet `venues.ts` has J and K adjacent at the east end. Two
+    halls that share a wall are not at opposite ends of their own plan. The
+    divides in §7 do not depend on resolving this, but any *geometric* fit
+    would, so nobody should attempt one until it is known which of the three is
+    wrong.
 
 **Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
 the Escape Room and Circle Centre are single-room venues Gen Con does not

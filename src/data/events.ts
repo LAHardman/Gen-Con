@@ -12,6 +12,7 @@
  */
 
 import { ROOMS, VENUES, type Room, type Venue } from './venues';
+import { boothIn, hallForBooth } from './booths';
 
 export interface ConEvent {
   id: string;
@@ -166,6 +167,13 @@ export function venueIdForEvent(event: ConEvent): string | null {
  * always beats a shorter, more generic one ("Hall"). A venue whose interior
  * isn't broken out on the map resolves to its single room, so its events still
  * land on the right building.
+ *
+ * A booth number is the one thing here that names a room without naming it.
+ * `Exhibit Hall Booth #1229` says nothing a key could match — the convention
+ * centre has eleven exhibit halls and the text picks none of them — but the
+ * number itself does, once you know where the air walls are (`booths.ts`).
+ * Tried after the text, so a row that names its hall outright is still read
+ * that way: `Exhibit Hall J : Booth #174` is J because it says J.
  */
 export function roomIdForEvent(event: ConEvent): string | null {
   const venueId = venueIdForEvent(event);
@@ -176,6 +184,12 @@ export function roomIdForEvent(event: ConEvent): string | null {
   const within = normalise([event.roomText, event.tableText].filter(Boolean).join(' '));
   const matched = within ? bestMatch(within, candidates) : null;
   if (matched) return matched.id;
+
+  // A stand in the exhibit hall, which only its number places.
+  if (venueId === 'icc') {
+    const hall = hallForBooth(boothIn([event.roomText, event.tableText].filter(Boolean).join(' ')));
+    if (hall) return hall;
+  }
 
   // Nothing inside the building matched: fall back to the building itself when
   // the map draws it as one room, and otherwise leave the event unmatched so

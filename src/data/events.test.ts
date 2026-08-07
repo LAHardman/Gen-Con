@@ -171,27 +171,40 @@ describe('finding the room inside the building', () => {
     expect(roomIdForEvent(at('ICC', 'somewhere unrecognised'))).toBeNull();
   });
 
+  it('places a stand by its booth number, which is all the source gives it', () => {
+    // `Exhibit Hall Booth #1229` names no hall and there are eleven, so this
+    // used to be 79 of the 130 unmatched events. The number places it once you
+    // know where the air walls are (`booths.ts`), and the schedule's own two
+    // hall-naming rows are what confirm the table is not back to front.
+    expect(roomIdForEvent(at('ICC', 'Exhibit Hall Booth #1229'))).toBe('hall-i');
+    expect(roomIdForEvent(at('ICC', 'Exhibit Hall', 'Booth #2411'))).toBe('hall-g');
+    // Where the words do name a hall, the words win: a row that says J is J,
+    // whatever a table of numbers would have made of it.
+    expect(roomIdForEvent(at('ICC', 'Exhibit Hall J : Booth #174'))).toBe('hall-j');
+    // And the source agreeing with itself, which is the check worth having:
+    // this row names Hall G in its words and 2667 in its table.
+    expect(roomIdForEvent(at('ICC', 'Exhibit Hall G', 'Booth #2667'))).toBe('hall-g');
+  });
+
   it('leaves a room it cannot place unmatched rather than guessing the building', () => {
     /*
-     * 130 events of 27,467 resolve to no room — 0.47% — and every one of them
-     * is a place the map has not got rather than a matcher failure:
+     * 51 events of 27,467 resolve to no room — 0.19%, down from 130 — and
+     * every one of them is a place the map has not got rather than a matcher
+     * failure:
      *
-     *   79  the convention centre's "Exhibit Hall" and "Exhibit Hall Booth
-     *       #1229" — the source does not say which hall, and there are eleven
      *   40  the seven venues above that are not on the map at all
      *   11  foyers and concourse spots no room is authored for: "North Plaza",
      *       "Georgia Street Entrance", "3rd Floor Foyer"
      *
-     * Guessing a hall for the first group would put a booth in the wrong one of
-     * eleven, which reads exactly like a right answer.
+     * Guessing a building for those would read exactly like a right answer.
      */
-    expect(roomIdForEvent(at('ICC', 'Exhibit Hall'))).toBeNull();
-    expect(roomIdForEvent(at('ICC', 'Exhibit Hall Booth #1229'))).toBeNull();
     expect(roomIdForEvent(at('ICC', 'Georgia Street Entrance'))).toBeNull();
     expect(roomIdForEvent(at('Stadium', 'North Plaza'))).toBeNull();
     expect(roomIdForEvent(at('JW', '3rd Floor Foyer'))).toBeNull();
+    // A booth with no number is not a stand. This one is real.
+    expect(roomIdForEvent(at('ICC', 'Floor next to Hoosier Concourse Info Booth'))).toBeNull();
     // The building is still known, which is what the report prints.
-    expect(venueIdForEvent(at('ICC', 'Exhibit Hall'))).toBe('icc');
+    expect(venueIdForEvent(at('ICC', 'Georgia Street Entrance'))).toBe('icc');
   });
 
   it('reads the table field as well as the room', () => {
