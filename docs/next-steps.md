@@ -509,8 +509,8 @@ stand locations placed on the map  47 → 621  of 846
 exhibit-hall stands placed          0 → 573  of 573
 ```
 
-Placing Community Row, the Makers Market and the Block Party — see §8 — took
-the stand total on to **709 of 846**.
+Placing Community Row, the Makers Market, the Block Party and the three blocks
+of tables in Hall I — see §8 — took the stand total on to **846 of 846**.
 
 The 79 exhibit-hall events that used to be the largest group of unmatched are
 all placed, and so is every stand in the hall. Searching a publisher now takes
@@ -567,18 +567,8 @@ Three things about it, so nobody opens it hoping for more:
     geometric fit is now attemptable — though it still needs the two thousand
     small numbers OCR'd first.
 
-**Three areas still unplaced — waiting on somebody who has walked them.** The
-Art Show (90 stands), Authors Avenue (39) and the Entertainers Spotlight (8).
-All three are lettered on Gen Con's printed exhibit-hall plan, in one block
-bounded by the 600s on its left and the 1100s on its right — and 600–1399 is
-Hall I, so the plan reads as putting all three in Hall I. That is a *reading*
-rather than a telling, which is the whole reason it has not been applied: the
-same plan letters no hall anywhere, so the inference rests on booth numbers
-that are vector art rather than text. One sentence from somebody who has been
-there closes it.
-
-Three others are closed, and are worth writing down because none of them was
-in any file:
+**Every stand is placed — 846 of 846.** The last six areas took six separate
+answers, and none of them was in any file:
 
   - **Community Row** — Sagamore Ballroom hallway, ICC Level 2. Its four
     Educator Row tables are the same run: the stand list numbers Community Row
@@ -593,6 +583,18 @@ in any file:
     the edge of the party, and the connector above comes down to the ground at
     the north-east corner of this block — the two agree, which is the only
     independent check there is on the extent.
+  - **Art Show, Authors Avenue and the Entertainers Spotlight** — 137 tables,
+    all three in Exhibit Hall I. The printed plan draws them as one block
+    between the 600s and the 1100s and letters no hall on it, which would have
+    made this a reading of vector art. It is not: 18 rows of the schedule read
+    `Exhibit Hall I` in the room and `Authors Avenue` in the table, which
+    places the middle of the block from a source that had no part in reading
+    the plan. Found by grepping the feed for the three names — worth doing
+    before assuming a field is silent, since this one had been searched for
+    halls and not for these.
+  - **The stadium field** — four publisher demo spaces filed under an area of
+    one word, `Field`. A reading rather than a telling, and the only one left:
+    there is exactly one Field on the campus.
 
 **Three floors with nothing walkable — waiting on a plan.** The Indiana Rep,
 the Escape Room and Circle Centre are single-room venues Gen Con does not

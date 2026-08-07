@@ -724,10 +724,21 @@ export const ROOMS: Room[] = [
     level: 'Level 1',
     rect: { x: 284, y: 174, width: 66, height: 114 },
     plan: ['HALL I'],
-    aliases: ['Hall I', 'Exhibit Hall I'],
+    aliases: [
+      'Hall I',
+      'Exhibit Hall I',
+      // Three lettered areas the printed plan draws as one block inside this
+      // hall, all of them tables rather than stands. The schedule writes the
+      // middle one out — `Exhibit Hall I` / `Authors Avenue`, on 18 rows — and
+      // it is the anchor for the other two.
+      'Art Show',
+      'Authors Avenue',
+      'Authors Ave',
+      'Entertainers Spotlight',
+    ],
     description:
-      'Often converted into event space rather than booths: large scheduled play areas and tournament banks.',
-    highlights: ['Tournament banks', 'Scheduled play', 'Table seating'],
+      'Booths 600–1399, and the corner of the exhibit hall that is tables rather than stands: the Art Show’s 90 tables, Authors Avenue’s 39 for book signings, and the Entertainers Spotlight. The rest is often converted into event space — large scheduled play areas and tournament banks.',
+    highlights: ['Art Show & Authors Avenue', 'Booths 600–1399', 'Tournament banks'],
   },
   {
     id: 'hall-j',

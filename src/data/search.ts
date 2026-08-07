@@ -121,6 +121,14 @@ export function roomIdForExhibitor(exhibitor: Exhibitor): string | null {
  *                   telling: four publishers with a demo space each, an area
  *                   that is one word, and exactly one Field on the campus.
  *
+ * And three that are all inside Exhibit Hall I, which the printed plan draws
+ * as one block of tables between the 600s and the 1100s. That plan letters no
+ * hall — but the schedule does, once: 18 rows read `Exhibit Hall I` in the
+ * room and `Authors Avenue` in the table, which places the middle of the block
+ * and so places the block. Being here rather than resolved through Hall I's
+ * aliases is the point: the matcher works down from a building and none of
+ * these three names one.
+ *
  * Everything else that resolves does so through a room's own aliases, which is
  * where a new one should go if it can — `Community Row` and `Educator Row` are
  * both aliases of the hallway they share, not entries here.
@@ -129,6 +137,9 @@ const AREA_ROOMS: Record<string, string> = {
   'Makers Market': 'makers-market',
   'Block Party': 'block-party-street',
   Field: 'lucas-oil-field',
+  'Art Show': 'hall-i',
+  'Authors Ave': 'hall-i',
+  'Entertainers Spotlight': 'hall-i',
 };
 
 interface RoomKeys {

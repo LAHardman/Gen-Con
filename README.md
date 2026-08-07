@@ -389,9 +389,8 @@ places it crosses — between 331 and 339, and between 429 and 439 — and booth
 That took events resolving to no room from **130 to 51** of 27,467, and stands
 placed on the map from **47 to 621** of 846 — every one of the 573 in the
 exhibit hall. Searching "Kenzer" now finds Exhibit Hall I. Placing Community
-Row, the Makers Market and the Block Party took it to **709**; what is left is
-the Art Show, Authors Avenue and the Entertainers Spotlight, which nobody has
-said the location of.
+Row, the Makers Market, the Block Party and Hall I's three blocks of tables
+took it to **846 of 846** — every stand Gen Con lists.
 
 ### Getting between buildings
 

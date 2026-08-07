@@ -120,6 +120,13 @@ describe('where the map and the stand list agree', () => {
       'Makers Market': ['makers-market'],
       'Block Party': ['block-party-street'],
       Field: ['lucas-oil-field'],
+      // Three lettered blocks of tables inside Exhibit Hall I. The schedule
+      // says so for the middle one, in among 27,467 events that name a hall
+      // twice otherwise: `Exhibit Hall I` in the room, `Authors Avenue` in the
+      // table, 18 times.
+      'Art Show': ['hall-i'],
+      'Authors Ave': ['hall-i'],
+      'Entertainers Spotlight': ['hall-i'],
     });
     for (const ids of found.values()) for (const id of ids) expect(ROOMS_BY_ID[id], id).toBeDefined();
   });
@@ -177,6 +184,23 @@ describe('searching for a publisher rather than a room', () => {
     expect(ids('sun king')).toEqual(['block-party-street']);
   });
 
+  it('takes the three blocks of tables in Exhibit Hall I to Exhibit Hall I', () => {
+    // The printed plan draws these as one block between the 600s and the
+    // 1100s and letters no hall on it. What settles it is the schedule: 18
+    // rows read `Exhibit Hall I` in the room and `Authors Avenue` in the
+    // table, which places the middle of the block from a source that had no
+    // part in reading the plan.
+    for (const query of ['art show', 'authors avenue', 'entertainers spotlight']) {
+      expect(ids(query)[0], query).toBe('hall-i');
+    }
+    // And through the people at the tables, which is what somebody types.
+    for (const area of ['Art Show', 'Authors Ave', 'Entertainers Spotlight']) {
+      const rows = EXHIBITORS.filter((e) => e.area === area);
+      expect(rows.length, area).toBeGreaterThan(5);
+      for (const row of rows) expect(roomIdForExhibitor(row), row.name).toBe('hall-i');
+    }
+  });
+
   it('keeps Community Row and Educator Row together, because the tables are one run', () => {
     // Two names, one corridor. The stand list numbers them 1 to 19 straight
     // through and files 16–19 under the second name, so splitting them would
@@ -190,14 +214,30 @@ describe('searching for a publisher rather than a room', () => {
     expect(ids('educator row')).toContain('community-row');
   });
 
-  it('offers nothing for a stand that is not in the exhibit hall at all', () => {
-    // The Art Show, Authors Avenue, the Entertainers Spotlight: real places
-    // nobody has said where, so their stands reach nothing rather than reaching
-    // whatever is nearest.
-    const elsewhere = EXHIBITORS.find(
-      (e) => e.area === 'Art Show' && !roomIdForExhibitor(e) && e.name.length > 8,
-    )!;
-    expect(elsewhere).toBeDefined();
-    expect(search(elsewhere.name.slice(0, 8).toLowerCase(), NO_EVENTS)).toEqual([]);
+  it('offers nothing for a stand in an area nobody has placed', () => {
+    // This used to be asserted against the Art Show, which was one of six areas
+    // that reached no room. All 846 locations resolve now, so there is no real
+    // row left to assert it on — and the guarantee still has to hold, because
+    // the way it breaks is the *next* area Gen Con invents. A stand in one
+    // reaches nothing rather than reaching whatever is nearest, which would put
+    // somebody in a hall their exhibitor is not in and look like an answer.
+    const invented = {
+      name: 'Zzyzx Trading Post',
+      kind: 'Exhibitor',
+      area: 'Riverside Pavilion',
+      spot: 'Table 4',
+    } as (typeof EXHIBITORS)[number];
+    expect(roomIdForExhibitor(invented)).toBeNull();
+    expect(search('zzyzx', NO_EVENTS)).toEqual([]);
+  });
+
+  it('leaves no stand at all unplaced, which is the whole of the job', () => {
+    // Counted rather than sampled: the number is the deliverable. It went 47,
+    // 494, 621, 846 as the halls, the cross wall, the three unlettered places
+    // and Hall I's tables were worked out, and every one of those steps was a
+    // sentence from somebody who has walked the building.
+    const unplaced = EXHIBITORS.filter((e) => !roomIdForExhibitor(e));
+    expect(unplaced.map((e) => `${e.area} · ${e.name}`)).toEqual([]);
+    expect(EXHIBITORS).toHaveLength(846);
   });
 });
