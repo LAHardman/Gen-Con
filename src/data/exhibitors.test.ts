@@ -8,10 +8,14 @@
  * has under a different name simply never matches, which looks exactly like an
  * exhibitor who is not there.
  *
- * The last group is the point of the final test here. 47 of the 846 locations
- * name a room the map draws, and it matters that they name it the *same way*
- * the schedule does — because the same matcher reads both, and if it stops
+ * The last group is the point of the final test here. Every location names a
+ * room the map draws, and it matters that they name it the *same way* the
+ * schedule does — because the same matcher reads both, and if it stops
  * agreeing with itself nothing says so.
+ *
+ * Nothing here asserts how many stands Gen Con lists. A scheduled workflow
+ * pulls this table every month and that number moves every time; a check that
+ * fails on it teaches everyone to bump the number and stop reading.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -291,7 +295,7 @@ describe('searching for a publisher rather than a room', () => {
 
   it('offers nothing for a stand in an area nobody has placed', () => {
     // This used to be asserted against the Art Show, which was one of six areas
-    // that reached no room. All 846 locations resolve now, so there is no real
+    // that reached no room. Every location resolves now, so there is no real
     // row left to assert it on — and the guarantee still has to hold, because
     // the way it breaks is the *next* area Gen Con invents. A stand in one
     // reaches nothing rather than reaching whatever is nearest, which would put
@@ -307,12 +311,17 @@ describe('searching for a publisher rather than a room', () => {
   });
 
   it('leaves no stand at all unplaced, which is the whole of the job', () => {
-    // Counted rather than sampled: the number is the deliverable. It went 47,
-    // 494, 621, 846 as the halls, the cross wall, the three unlettered places
-    // and Hall I's tables were worked out, and every one of those steps was a
-    // sentence from somebody who has walked the building.
+    // Listed rather than counted, and that is the point: the assertion is that
+    // the unplaced list is *empty*, which stays true however many stands Gen
+    // Con lists. It went 47, 494, 621 and then all of them as the halls, the
+    // cross wall, the three unlettered places and Hall I's tables were worked
+    // out, and every one of those steps was a sentence from somebody who has
+    // walked the building.
     const unplaced = EXHIBITORS.filter((e) => !roomIdForExhibitor(e));
     expect(unplaced.map((e) => `${e.area} · ${e.name}`)).toEqual([]);
-    expect(EXHIBITORS).toHaveLength(846);
+    // A floor rather than the count. The scheduled refresh pulls this table
+    // from Gen Con every month and the number moves every time; what would be
+    // alarming is most of it going missing.
+    expect(EXHIBITORS.length).toBeGreaterThan(800);
   });
 });

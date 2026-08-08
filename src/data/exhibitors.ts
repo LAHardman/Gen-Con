@@ -6,13 +6,22 @@
  * a demo hall and a meeting room is six places somebody might be looking for.
  *
  * `area` and `spot` are Gen Con's own words, split on the colons it writes
- * them with. What is NOT here is a position: the coordinates their map carries
- * are laid out area by area on a star field rather than on a plan, so they do
- * not convert to latitude and longitude, and nothing in the source says which
- * of Exhibit Halls A-K a booth number is in. See the script for the
- * measurements.
+ * them with. What is NOT here is a position, and nothing in the source says
+ * which of Exhibit Halls A-K a booth number is in — `booths.ts` decides that
+ * from the number.
  *
- * Source: Gen Con LLC, 2026-08-06.
+ * The source *does* carry a position, which this deliberately drops. Each
+ * location's `navigateTo` holds a coordinate on Gen Con's own interactive
+ * map, and those are a real plan of the floor rather than the star field this
+ * file used to claim: aisle number runs with one axis at r=0.977 and position
+ * along an aisle with the other at r=0.950, and one similarity transform lays
+ * all 569 of them on to the building to a median of 1.6 m against the placement
+ * read off the printed map. They are left out because the printed map is the
+ * better source — it gives every stand's footprint and the ones nobody has
+ * taken, which this API has no way to express — but if that map is ever not
+ * published, this is where the booths can come from instead.
+ *
+ * Source: Gen Con LLC.
  */
 
 export interface Exhibitor {
@@ -350,7 +359,6 @@ export const EXHIBITORS: Exhibitor[] = [
   { name: 'Gemhammer and Sons', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 566', booth: '566', level: 1 },
   { name: 'Genius Games', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 935', booth: '935', level: 1 },
   { name: 'Geoff Pascual', kind: 'Makers', area: 'Makers Market', spot: 'Booth 7103', booth: '7103', level: 0 },
-  { name: 'GET GNOMED!', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 557', booth: '557', level: 1 },
   { name: 'Ghost Galaxy', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 1843', booth: '1843', level: 1 },
   { name: 'Ghostfire Gaming', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 2935', booth: '2935', level: 1 },
   { name: 'Gila RPGs', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 268', booth: '268', level: 1 },

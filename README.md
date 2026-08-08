@@ -1262,6 +1262,22 @@ and an event page's row labels with the field each one maps to:
 npm run fetch:events -- --inspect
 ```
 
+## Next year
+
+Two of the three data sources refresh on their own: the schedule is imported at
+build time every Monday and never committed, and the stand list is re-pulled
+from Gen Con's API on the 1st of each month by `.github/workflows/refresh.yml`,
+which opens a pull request only when something actually moved.
+
+The exhibit hall's booths are the annual manual step, because they are read off
+a PDF that has to be fetched by hand — two commands, both of which refuse to
+write an answer they cannot stand behind. You do not have to remember when it
+is due: a new Gen Con's booth numbers against last year's map fail the monthly
+refresh's checks, and the pull request says why.
+
+`docs/next-steps.md` §10 has the commands, and the short list of hand-sourced
+things that will go stale without telling you.
+
 ## Layout
 
 ```

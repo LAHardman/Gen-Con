@@ -72,7 +72,13 @@ describe('the divides themselves', () => {
     const stretch = EXHIBITORS.filter(
       (stand) => stand.area === 'Exhibit Hall' && Number(stand.booth) < 600,
     );
-    expect(stretch).toHaveLength(127);
+    // A floor, not the count. Gen Con owns this number and it moves whenever an
+    // exhibitor signs up or drops out — the scheduled refresh exists to pull
+    // exactly that — so pinning it means a red build for a non-reason, and the
+    // repair anyone reaches for is to bump the number, which is how a check
+    // gets trained out of being read. What is worth asserting is that the
+    // filter is not vacuous; the loop under it is the actual test.
+    expect(stretch.length).toBeGreaterThan(100);
     for (const stand of stretch) {
       expect(['hall-j', 'hall-k'], `${stand.name} at ${stand.booth}`).toContain(
         hallForBooth(stand.booth),

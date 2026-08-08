@@ -1,0 +1,144 @@
+# Keeps the committed Gen Con data current, as a pull request rather than as a
+# commit to the default branch.
+#
+# WHAT THIS DOES AND DOES NOT COVER. The schedule is not here: `deploy.yml`
+# imports it at build time every Monday and never commits it, so it needs
+# nothing from this. What this refreshes is `src/data/exhibitors.ts`, which is
+# a committed file and until now was only ever updated by somebody remembering
+# to run the script.
+#
+# The exhibit hall's booths are not here either, and cannot be: they are read
+# off Gen Con's printed map, which is a PDF published once a year on a host
+# that has to be fetched by hand. `docs/next-steps.md` §9 has the two commands.
+# What this workflow does instead is *notice* — a new year's exhibitors against
+# last year's booth numbers drops the agreement rate in `booth-plan.test.ts`
+# below its floor, the check below fails, and the pull request says so. That is
+# the reminder that the map needs re-reading.
+#
+# MONTHLY, not yearly. Exhibitors sign up all through the year and the stand
+# list moves the whole time, so a yearly run would be both too late and too
+# rare to trust. Monthly also means the roll-over to a new Gen Con is picked up
+# within a month of whenever Gen Con does it, which is not a date this can know
+# in advance. It costs eight API requests.
+#
+# ONE-TIME SETUP: repository Settings -> Actions -> General -> Workflow
+# permissions, and tick "Allow GitHub Actions to create and approve pull
+# requests". Without it the last step fails with a 403 on an account whose
+# default is read-only, and nothing else here gives a clue why.
+
+name: Refresh Gen Con data
+
+on:
+  schedule:
+    # 07:00 UTC on the 1st. Nothing here is urgent and their server is not ours.
+    - cron: '0 7 1 * *'
+  workflow_dispatch:
+
+# Enough to push a branch and open a pull request against it. Deliberately not
+# enough to write to the default branch.
+permissions:
+  contents: write
+  pull-requests: write
+
+# One refresh at a time. Two would race on the same branch.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The script sorts its rows and stamps no date into what it writes, so an
+      # unchanged Gen Con produces a byte-identical file and this run stops at
+      # the next step. That property is the whole reason this can be scheduled.
+      - name: Pull the stand list
+        id: pull
+        run: |
+          npm run fetch:exhibitors 2>&1 | tee /tmp/pull.log
+          {
+            echo 'summary<<EOF'
+            grep -E '(locations,|^[[:space:]]+[0-9]+[[:space:]])' /tmp/pull.log | head -12 || true
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stop unless something moved
+        id: changed
+        run: |
+          if git diff --quiet -- src/data/exhibitors.ts; then
+            echo 'Gen Con has not changed the stand list since the last refresh.'
+            echo 'any=false' >> "$GITHUB_OUTPUT"
+          else
+            git diff --stat -- src/data/exhibitors.ts
+            echo 'any=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      # Not a gate. A failure here is the most useful thing this workflow can
+      # produce — it is how a new year announces itself — so it is recorded and
+      # carried into the pull request rather than stopping it from being opened.
+      - name: Check
+        id: check
+        if: steps.changed.outputs.any == 'true'
+        continue-on-error: true
+        run: npm run check 2>&1 | tail -40
+
+      - name: Open or update the pull request
+        if: steps.changed.outputs.any == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
+          PASSED: ${{ steps.check.outcome }}
+          SUMMARY: ${{ steps.pull.outputs.summary }}
+        run: |
+          set -euo pipefail
+          BRANCH=data/refresh-exhibitors
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add src/data/exhibitors.ts
+          git commit -m 'Refresh the stand list from Gen Con'
+          # Force, because this branch is a rolling snapshot of one generated
+          # file rather than a history worth keeping.
+          git push --force -u origin "$BRANCH"
+
+          if [ "$PASSED" = 'success' ]; then
+            VERDICT='`npm run check` passed on this data.'
+          else
+            VERDICT='**`npm run check` failed on this data, and that is the interesting part.**
+          The usual cause is a new Gen Con: the stand list has rolled over to
+          numbers this year'"'"'s booth map has never seen, so the agreement rate in
+          `booth-plan.test.ts` falls through its floor. The fix is to re-read the
+          map — `docs/next-steps.md` §9 — not to lower the floor.'
+          fi
+
+          BODY="Scheduled refresh of \`src/data/exhibitors.ts\` from Gen Con's exhibitor API.
+
+          \`\`\`
+          ${SUMMARY}
+          \`\`\`
+
+          ${VERDICT}
+
+          Nothing else is regenerated here. The schedule imports itself at build
+          time and is never committed; the booths come from the printed map and
+          need a person once a year.
+
+          ---
+          _Generated by [Claude Code](https://claude.ai/code)_"
+
+          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --body "$BODY"
+            echo "Updated the open pull request."
+          else
+            gh pr create --base "$BASE" --head "$BRANCH" \
+              --title 'Refresh the stand list from Gen Con' --body "$BODY"
+          fi

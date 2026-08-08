@@ -794,3 +794,96 @@ own geometry would remove the fit entirely. Short of that, the six numbers
 `exhibitors.ts` does not recognise are the remaining reading failures — three
 of them four-digit numbers in the 2000s that came out three digits — and each
 one is a stand in the wrong place.
+
+---
+
+## 10. Keeping it current, year on year
+
+Most of this data is Gen Con's and changes annually. What follows is what
+refreshes itself, what does not, and what will go stale without saying so.
+
+### Refreshes itself
+
+| what | how | when |
+|---|---|---|
+| The schedule (`public/events.json`) | `deploy.yml` imports it at build time and never commits it | every Monday, and on every deploy |
+| The stand list (`src/data/exhibitors.ts`) | `refresh.yml` re-runs `fetch:exhibitors` and opens a pull request if it changed | the 1st of each month |
+
+The stand list refresh is a pull request rather than a commit because a bad
+year is not obvious: Gen Con's API returning half a table, or a table for a
+convention that has not been laid out yet, both look exactly like data.
+
+It is monthly rather than yearly on purpose. Exhibitors sign up all through the
+year, so a yearly pull would be stale for eleven months of it — and nothing
+here can know the date Gen Con rolls over to the next convention, so the only
+way to catch it is to keep looking.
+
+Two properties make this safe to schedule, and both are easy to lose:
+
+  - **`fetch-exhibitors.mjs` sorts its rows and stamps no date into what it
+    writes.** An unchanged Gen Con therefore produces a byte-identical file and
+    no pull request. It used to write `Source: Gen Con LLC, <today>`, which
+    would have opened an empty pull request every month for ever.
+  - **No test asserts how many stands Gen Con lists.** Two did — `toHaveLength(846)`
+    and `toHaveLength(127)` — and both would have failed on the first refresh
+    that worked correctly. A check that cries wolf on every legitimate change
+    gets bumped rather than read, so these now assert a floor, and the
+    assertions that carry the meaning (*nothing is unplaced*) are untouched.
+
+### Needs a person, once a year
+
+**The exhibit hall's booths.** They are read off Gen Con's printed exhibit hall
+map, a PDF published once a year, and `files.gencon.com` does not resolve from
+CI. So when the new one appears:
+
+```
+node scripts/read-booth-map.mjs <the new PDF>   # -> src/data/booth-plan.ts
+node scripts/fit-booths.mjs                     # -> src/data/booth-place.ts
+```
+
+Both refuse to write an answer they cannot stand behind — the reader wants 95%
+agreement with `exhibitors.ts`, the fit wants its silhouette, containment,
+aisle and no-overlap checks — so the failure mode is a script that stops and
+says why, not a map that is quietly wrong.
+
+The one step neither can do is `DIGITS`: which cluster is which digit is read
+off a picture by a person. Run the reader with `--digits` to write that picture
+out. Expect to redo it whenever the glyphs going in change, because the
+clustering reorders under them.
+
+**You will be told when this is due.** A new Gen Con's booth numbers against
+last year's map drops the agreement rate through the floor in
+`booth-plan.test.ts`, the monthly refresh's check goes red, and the pull request
+says so in as many words. That is the reminder.
+
+### Will go stale silently
+
+These are hand-sourced, from somebody who has walked the building, and nothing
+in the repository can tell you they have gone out of date:
+
+  - `HALL_DIVIDES` and `ACROSS_THE_AISLES` in `booths.ts` — the booth numbers
+    either side of each air wall. If Gen Con re-letters or re-walls the exhibit
+    hall, every stand still gets a hall and everybody walks confidently to the
+    wrong end of a building four hundred metres long.
+  - The booth ranges written into room prose in `venues.ts` — `Booths 1400–2299`
+    and so on. Prose, so nothing checks them.
+  - `RESOLVED` in `offsite.ts` — four venues geocoded by hand.
+
+### If the printed map ever stops being published
+
+The booths can come from the API instead. Every exhibitor location carries a
+`navigateTo` holding a coordinate on Gen Con's own interactive map, and those
+are a real plan: aisle number runs with one axis at r=0.977 and position along
+an aisle with the other at r=0.950. One similarity transform lays all 569 of
+them on to the building at a **median of 1.6 m** against the placement read off
+the printed map, 98% within 6 m, and it wants a rotation of 179.0° where the
+printed map wants 180° — two independent sources agreeing.
+
+That is a fallback rather than the primary source, because it gives a point per
+*let* stand and the printed map gives every stand's footprint and the ones
+nobody has taken. But it needs no PDF and no person, and it is already being
+downloaded by `fetch-exhibitors.mjs` on the way past.
+
+It is also worth recording that this repository claimed the opposite for
+months — that those coordinates "sit on a star field rather than a plan" —
+and that the claim was never measured.
