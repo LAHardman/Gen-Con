@@ -1049,9 +1049,21 @@ attribution; check you are allowed to redistribute a plan before adding one.
 
 ## Event schedule
 
-Events come from the third-party [Gen Con event database](https://gencon.eventdb.us/).
+Events come from Gen Con's own catalogue API, `/api/event_search`.
 `npm run fetch:events` pulls them into `public/events.json`; the app loads that
 file and attaches each event to a room on the map.
+
+They used to come from a third-party site with no API, one HTML page per event:
+27,000 requests, a cache and a lock and a resume protocol to survive it, and
+every field picked back out of somebody else's markup. Gen Con publishes the
+same catalogue as JSON, with `location`, `room_name` and `table_number` as
+named fields — which is exactly what the room matcher needs. Same 27,467
+events, same 27,417 of them resolving to a room, in about 1,100 requests.
+
+The endpoint pages 25 at a time and stops at 10,000 records, so it is fetched in
+five `day[]` slices; those slices sum to exactly the total the unsliced query
+reports, and the fetcher checks that identity on every run rather than trusting
+it.
 
 The app reads a generated file rather than calling the site directly for two
 reasons: a browser can't fetch it cross-origin, and a local file keeps the

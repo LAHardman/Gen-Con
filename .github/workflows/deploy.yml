@@ -10,8 +10,6 @@
 #
 # The schedule is imported here rather than committed, so the repository stays
 # free of a large generated file and the published site refreshes on its own.
-# Event detail pages are cached between runs, so only the first run pays the
-# full cost of fetching them.
 
 name: Check and deploy
 
@@ -25,9 +23,9 @@ on:
   # Refresh the schedule without pushing anything.
   workflow_dispatch:
     inputs:
-      event_pages:
-        description: 'Event pages to fetch this run (locations come from these)'
-        default: '4000'
+      request_delay:
+        description: 'Milliseconds between requests to Gen Con'
+        default: '150'
   # Weekly top-up. Cheap once the cache is warm: only events the cache has
   # never seen are fetched.
   schedule:
@@ -85,28 +83,17 @@ jobs:
 
       - run: npm ci
 
-      # Restore the event-page cache from whichever earlier run saved it last.
-      - name: Restore imported event pages
-        uses: actions/cache/restore@v4
-        with:
-          path: .cache
-          key: event-details-${{ github.run_id }}
-          restore-keys: event-details-
-
-      # The source is one person's hobby site, so this is bounded and polite:
-      # a capped number of pages per run, spaced out, resuming from the cache.
-      # A failure here is not fatal — the app treats a missing schedule as a
-      # normal state and still works as a map.
+      # Gen Con's own catalogue API: about 1,100 requests, roughly nine minutes,
+      # no cache and no resume protocol because there is nothing to resume — it
+      # either completes or it fails, and it refuses to write a short schedule.
+      #
+      # A failure here is not fatal. The app treats a missing schedule as a
+      # normal state and still works as a map, and everybody who already has the
+      # app keeps the copy they have: the worker only caches a response it can
+      # see is good.
       - name: Import the schedule
         continue-on-error: true
-        run: npm run fetch:events -- --limit ${{ inputs.event_pages || 4000 }} --delay 200
-
-      - name: Save imported event pages
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: .cache
-          key: event-details-${{ github.run_id }}
+        run: npm run fetch:events -- --delay ${{ inputs.request_delay || 150 }}
 
       - run: npm run build
 

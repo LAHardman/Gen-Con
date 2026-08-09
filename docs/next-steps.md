@@ -813,6 +813,11 @@ The stand list refresh is a pull request rather than a commit because a bad
 year is not obvious: Gen Con's API returning half a table, or a table for a
 convention that has not been laid out yet, both look exactly like data.
 
+Both sources are now Gen Con's own. The schedule used to come from
+`gencon.eventdb.us` — one person's hobby site, scraped from HTML — which was
+flagged here as the single point of failure in the whole chain. §13 is how that
+was closed.
+
 It is monthly rather than yearly on purpose. Exhibitors sign up all through the
 year, so a yearly pull would be stale for eleven months of it — and nothing
 here can know the date Gen Con rolls over to the next convention, so the only
@@ -1028,3 +1033,90 @@ returned first. Removing the entire `try`/`catch` from the source did not fail a
 single test. It was only caught by mutating the source to see which tests
 noticed — which is the only thing that distinguishes a test that checks
 something from a test that runs something.
+
+---
+
+## 13. The schedule, from Gen Con instead of from a scrape
+
+This began as a different question — whether the app could pull events straight
+from Gen Con when the site hosting it is down — and the answer to that one is
+**no, and not for a reason any amount of code fixes.**
+
+### Why the direct pull is impossible
+
+A browser may not read a cross-origin response unless the server says it may,
+and Gen Con's does not:
+
+```
+Overpass (control)      Access-Control-Allow-Origin: *
+gencon.com/api/...      no such header
+gencon.eventdb.us       no such header
+```
+
+The control matters. Everything external is unreachable from the sandbox this
+was tested in, so a browser fetch failing proves nothing on its own — Overpass
+returning the header through the same code path is what makes the absence of it
+on Gen Con's endpoints evidence rather than noise.
+
+There is no way round it from inside the app. A CORS proxy is a server, so
+"works when the server is down" would then mean "works when a different server
+is up". Redundancy needs a second origin; it cannot be conjured from none.
+
+### What the question turned up instead
+
+Gen Con has a catalogue API, and the app was not using it.
+`/api/event_search` returns structured JSON with `start_date`, `end_date`,
+`location`, `room_name` and `table_number` — the last three being exactly what
+the room matcher needs and exactly what the scraper had to recover from prose.
+
+The obstacle is a 10,000-record window: it pages 25 at a time and stops at page
+400, against a catalogue of 27,467. `day[]` slices it, and the slices are exact:
+
+```
+day 29  Wednesday     191
+day 30  Thursday    8,046
+day 31  Friday      8,241
+day  1  Saturday    7,805
+day  2  Sunday      3,184
+                   ------
+                   27,467   = what the unsliced query reports
+```
+
+That identity is the method, so the fetcher checks it on every run and refuses
+to write if it stops holding — a slice that grows past 10,000 would silently
+return a partial schedule, and a partial schedule looks exactly like a complete
+one.
+
+### What changed, measured against the feed it replaced
+
+```
+                    scraped        API
+events               27,467     27,467
+resolved to a room   27,417     27,417
+with roomText        27,467     27,467
+with tableText       24,864     24,864
+requests            ~27,000     ~1,100
+```
+
+Identical, which is the point — the same events found in the same rooms, from
+Gen Con rather than from a third party, in four percent of the requests. The one
+real difference was `2026-07-29T09:00:00.000-04:00`: the milliseconds are always
+zero and cost 220 KB across the catalogue, on a file a phone downloads before it
+can show a single session, so they are trimmed.
+
+`scripts/lib/parse-events.mjs` and its 26 tests went with the scraper. Nothing
+referenced them any more, and dead code with a passing test suite is worse than
+dead code without one, because it looks maintained.
+
+### What this does and does not buy
+
+It does **not** make the app work when the host is down — §12 already covers
+that, and the answer there is the cached copy plus durable storage.
+
+What it removes is the most likely reason for the schedule to be *wrong or
+missing in the first place*: a third party's HTML changing shape, or their site
+going away. The events now come from the same organisation that runs the
+convention, through an interface meant to be read by programs.
+
+The remaining honest gap is unchanged: a first visit during an outage has no
+local copy and nowhere to get one. That still needs a second origin.
