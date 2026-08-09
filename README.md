@@ -1262,6 +1262,29 @@ and an event page's row labels with the field each one maps to:
 npm run fetch:events -- --inspect
 ```
 
+## As an app on a phone
+
+It installs. Open the published site in Safari or Chrome on a phone and add it
+to the home screen: it launches without browser chrome (`display: standalone`),
+keeps working with no signal after one visit with one, and picks up new builds
+on its own.
+
+  - **The icon** is a PNG as well as an SVG, because iOS does not read SVG for
+    `apple-touch-icon` and falls back to a screenshot of the page — which on a
+    phone means the app has no icon. `public/icon-180.png` is the one iOS uses,
+    opaque and square-cornered because iOS applies its own mask.
+  - **Offline** is `public/sw.js`: the app stale-while-revalidate, the map tiles
+    cache-first and capped. The first visit needs a network; none after it does.
+  - **Updating itself** is `src/registerServiceWorker.ts`. Every time the app is
+    brought back to the foreground it asks whether there is a new build, and
+    reloads once if there is. Measured in Chromium: about ten seconds from
+    resume to running the new build.
+
+The reason the check is on resume rather than on load is that an installed app
+is resumed from the app switcher, which is not a navigation — and a navigation
+is the only thing that would otherwise trigger the browser's own check. Without
+it somebody can carry a build from before the convention started all week.
+
 ## Next year
 
 Two of the three data sources refresh on their own: the schedule is imported at

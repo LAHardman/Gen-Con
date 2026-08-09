@@ -17,7 +17,11 @@
     <meta name="apple-mobile-web-app-title" content="Gen Con Trip" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icon.svg" />
+    <!-- PNG, because iOS does not read SVG here and silently falls back to a
+         screenshot of the page — on a phone the icon *is* the app. Opaque and
+         square-cornered on purpose: iOS applies its own mask, so a rounded
+         transparent one comes out rounded twice. -->
+    <link rel="apple-touch-icon" href="./icon-180.png" />
 
     <title>Gen Con Trip</title>
   </head>

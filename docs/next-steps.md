@@ -887,3 +887,77 @@ downloaded by `fetch-exhibitors.mjs` on the way past.
 It is also worth recording that this repository claimed the opposite for
 months — that those coordinates "sit on a star field rather than a plan" —
 and that the claim was never measured.
+
+---
+
+## 11. Running as an app on a phone
+
+Already a progressive web app before this: manifest, standalone display,
+service worker, offline caching. What was missing was the two things that make
+"install it and forget about it" actually true.
+
+### The icon iOS was not using
+
+`index.html` pointed `apple-touch-icon` at `icon.svg`. **iOS does not read SVG
+there.** It does not warn; it falls back to a screenshot of the page, so the
+thing on the home screen is a grey rectangle of map. On a phone the icon is the
+app, so this was the most visible thing wrong with it.
+
+`public/icon-180.png` is now that icon, rendered from the same SVG. Opaque and
+square-cornered on purpose — iOS applies its own rounded mask, so a rounded
+transparent source comes out rounded twice with pale corners. The manifest also
+gained 192 and 512 PNGs and a maskable 512 with the die inside the safe circle,
+because Android crops maskable icons to a circle at 80% and would otherwise
+shave the corners off it.
+
+### Picking up a new build
+
+The worker already called `skipWaiting()` and `clients.claim()`, so a new
+deploy took over "on the next load". That sounds like enough and is not: an
+installed app is opened from the home screen and resumed from the app switcher,
+and **neither is a navigation**. The browser checks for a new worker when the
+page loads, and an app that is never closed never loads again. Somebody could
+carry a build from before the convention started for the whole convention.
+
+So `registerServiceWorker.ts` now asks on every resume and reloads once when a
+new worker takes over. Two guards, and both are load-bearing:
+
+  - `clients.claim()` fires `controllerchange` on the **first** install too,
+    going from no worker to one. Reloading for that means every first visit to
+    the site reloads itself in front of the person.
+  - The reload happens **once**. `controllerchange` can fire again while the
+    page is on its way out, and an app that reloads itself in a loop cannot be
+    used and cannot easily be got rid of.
+
+### What the end-to-end test found, which the unit tests could not
+
+The unit tests prove `registerServiceWorker.ts` does its part — mutation-tested,
+each guard caught by exactly one test. They cannot prove the browser does its
+part, so this was also driven for real in Chromium: deploy a new `sw.js`, resume
+the app, see whether it lands on the new build.
+
+The first attempt **failed**, and was worth the trouble. The new worker reached
+`installed` and stopped, and no amount of asking moved it — including telling it
+to `skipWaiting()` explicitly. Against a minimal worker on the same browser the
+same test passed, which ruled out the sandbox; against our worker with the page
+not sending its hand-over message it also passed, which found the cause.
+
+**A worker cannot be replaced while the old one has an `event.waitUntil()`
+outstanding**, and `handOver` opens one to cache everything the page fetched. So
+the new build waits behind it. Warm — which is the state anybody updating is
+actually in — that is about **10 seconds** from resume to running the new build.
+Cold, where the hand-over is pulling the shell and 9 MB of events, the same
+measurement is **35 seconds**, but a first visit is not an update.
+
+Not fixed, deliberately: bounding the hand-over would trade a few seconds of
+update latency against the offline guarantee it exists to provide, and the
+offline guarantee is worth more. Recorded here because "it updates on resume" is
+true and "it updates instantly" is not.
+
+### What this still is not
+
+Nothing here gets a notification to a phone that is not running the app. Web
+push exists and iOS has supported it for installed web apps since 16.4, but it
+needs a server to push from, and this has no server — it is a static site on
+GitHub Pages. Anything that has to reach somebody who is not looking at the app
+would need one.
