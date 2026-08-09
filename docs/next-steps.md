@@ -975,10 +975,19 @@ Driven rather than reasoned about, against the built app in Chromium, with a
 server that could be told to break in two different ways.
 
 ```
-server up            177 rooms · 27,467 events · search   (the baseline)
-server answers 500   177 rooms · 27,467 events · search
-server gone entirely 177 rooms · 27,467 events · search
+server up             177 rooms · 27,467 events · search   (the baseline)
+server answers 500    177 rooms · 27,467 events · search
+server gone entirely  177 rooms · 27,467 events · search
+cold start, no server 177 rooms · 27,467 events · search
 ```
+
+The last row is the one that answers the question people actually ask, and the
+first three do not quite. They reload a page that is *already open*, which
+leaves room to wonder how much was surviving in memory. For the last one the
+browser is shut down completely between the two halves and the server is stopped
+in between, so nothing survives but what was written to disk — and then the app
+is opened cold, against nothing. It comes up whole, and **zero requests fail**,
+because the worker answers from the cache before the network is tried at all.
 
 Both outages, because they are not the same failure. A host that is **gone**
 refuses the connection and every fetch rejects, which is the same shape as
@@ -1019,11 +1028,15 @@ deliberately. Three things worth knowing about it:
 
 ### The one case nothing here can help with
 
-**A first visit during an outage.** There is no local copy yet and no server to
-get one from. The only fix for that is a second place to get the app, which is
-infrastructure rather than code: the same `dist` published to a second static
-host under a second name. Worth considering only if the app is ever load-bearing
-for somebody's week.
+**Getting the app on to a device that has never had it**, once the host is gone.
+There is no local copy yet and nowhere to fetch one. Everything above protects a
+phone that has already been here once; nothing protects a new phone, a cleared
+browser, or a friend who wants a copy.
+
+There is no code fix. The options are all "somewhere else to get it from": a
+second static host, or a copy of the built app saved to the device as a file and
+opened directly. The second needs no server ever again, and no account — it is
+also the only one that survives the repository itself disappearing.
 
 ### A mistake in the tests, recorded because it nearly shipped
 
