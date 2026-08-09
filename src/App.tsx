@@ -10,6 +10,7 @@ import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
+import { useFollowedRoute } from './hooks/useFollowedRoute';
 import { useDeviceLocation } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
 import { isHappeningAt } from './data/events';
@@ -18,7 +19,6 @@ import {
   pinPlace,
   placeRoom,
   roomPlace,
-  routeBetween,
   type NavEnd,
   type NavPlace,
 } from './data/navigation';
@@ -62,10 +62,12 @@ export default function App() {
   const usingDevice = nav?.from?.kind === 'device' || nav?.to?.kind === 'device';
   const device = useDeviceLocation(!!usingDevice);
 
-  const route = useMemo(
-    () => (nav?.from && nav.to ? routeBetween(nav.from, nav.to, device.fix) : null),
-    [nav?.from, nav?.to, device.fix],
-  );
+  // Held rather than recomputed on every fix, so the line does not rearrange
+  // under somebody walking it correctly. `useFollowedRoute` measures each fix
+  // against the route it already has and only asks for a new one when they are
+  // genuinely off it — see the note there.
+  const followed = useFollowedRoute(nav?.from, nav?.to, device.fix);
+  const route = followed.route;
 
   useEffect(() => {
     try {
@@ -343,6 +345,7 @@ export default function App() {
             covered={!!openRoom}
             device={device}
             route={route}
+            progress={followed.progress}
             events={eventSearchIndex}
             onEdit={setEditing}
             onSet={handleSetNavPlace}

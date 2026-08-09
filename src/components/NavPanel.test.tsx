@@ -277,3 +277,50 @@ describe('escape', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('while somebody is walking it', () => {
+  // The route is held steady and the numbers count down. A figure that stays at
+  // "320 m" until you arrive is the app not watching, and it is exactly what
+  // this looked like before `useFollowedRoute` existed.
+  const walk = {
+    legs: [{ kind: 'walk' as const, points: [], metres: 320, text: 'along' }],
+    metres: 320,
+    minutes: 5,
+    indoors: true,
+    viaStairs: false,
+  };
+  const route = {
+    from: null, to: null, fromAt: { lat: 0, lng: 0 }, toAt: { lat: 0, lng: 0 },
+    metres: 320, straightMetres: 320, walk, minutes: 5,
+    floorChange: null, venueChange: null, arrived: false,
+  } as never;
+
+  it('shows what is left, not what it started as', () => {
+    setup({
+      route,
+      progress: { offMetres: 3, alongMetres: 250, remainingMetres: 70, onRoute: true },
+    });
+    expect(screen.getByText(/left/)).toBeTruthy();
+    expect(screen.getByText('70 m')).toBeTruthy();
+    // 70 m at 70 m/min.
+    expect(screen.getByText('1 min')).toBeTruthy();
+  });
+
+  it('shows the whole route again when the fix has wandered off it', () => {
+    // Counting down from a position somebody is not at would be worse than not
+    // counting down at all.
+    setup({
+      route,
+      progress: { offMetres: 140, alongMetres: 250, remainingMetres: 70, onRoute: false },
+    });
+    expect(screen.getByText(/to walk/)).toBeTruthy();
+    expect(screen.getAllByText('320 m').length).toBeGreaterThan(0);
+    expect(screen.getByText('5 min')).toBeTruthy();
+  });
+
+  it('shows the whole route when there is no position at all', () => {
+    setup({ route, progress: null });
+    expect(screen.getAllByText('320 m').length).toBeGreaterThan(0);
+    expect(screen.getByText(/to walk/)).toBeTruthy();
+  });
+});

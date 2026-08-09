@@ -1,3 +1,5 @@
+import type { Progress } from '../data/progress';
+import { walkingMinutes } from '../utils/geo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   formatDistance,
@@ -25,6 +27,8 @@ interface Props {
   covered: boolean;
   device: DeviceLocation;
   route: RouteSummary | null;
+  /** Where along it the device is, while a route is being followed. */
+  progress?: Progress | null;
   /** Prepared once per feed by the app, and shared with the header's search. */
   events: EventSearchIndex;
   onEdit: (end: NavEnd | null) => void;
@@ -50,6 +54,7 @@ export function NavPanel({
   covered,
   device,
   route,
+  progress,
   events,
   onEdit,
   onSet,
@@ -226,19 +231,36 @@ export function NavPanel({
 
       {deviceNote && <p className="nav__note nav__note--device">{deviceNote}</p>}
 
-      {route && !editing && (
+      {route && !editing && (() => {
+        /*
+         * Following, rather than merely routed: there is a walk, a position on
+         * it, and that position is actually on it. Somebody whose fix has
+         * wandered gets the whole route's numbers back rather than a countdown
+         * measured from a place they are not.
+         */
+        const walking = !!progress?.onRoute && !!route.walk;
+        const left = walking
+          ? walkingMinutes(progress!.remainingMetres)
+          : route.minutes;
+        return (
         <div className="nav__summary">
           {route.arrived ? (
             <p className="nav__distance">You are already there.</p>
           ) : (
             <>
+              {/*
+                * While a route is being followed, what is left to walk — not
+                * what it was when it started. Somebody halfway down a hall
+                * wants the number to have moved; a figure that stays at "320 m"
+                * until they arrive is the app not watching.
+                */}
               <p className="nav__distance">
-                <strong>{formatDistance(route.metres)}</strong>
-                {route.walk ? ' to walk' : ' in a straight line'}
-                {route.minutes !== null && (
+                <strong>{formatDistance(walking ? progress!.remainingMetres : route.metres)}</strong>
+                {walking ? ' left' : route.walk ? ' to walk' : ' in a straight line'}
+                {left !== null && (
                   <>
                     {' · '}
-                    <strong>{route.minutes} min</strong>
+                    <strong>{left} min</strong>
                   </>
                 )}
               </p>
@@ -273,7 +295,8 @@ export function NavPanel({
             </>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {route && !editing && !route.arrived && (
         <p className="nav__note">
