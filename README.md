@@ -1320,6 +1320,10 @@ refresh's checks, and the pull request says why.
 `docs/next-steps.md` §10 has the commands, and the short list of hand-sourced
 things that will go stale without telling you.
 
+To take GitHub out of the serving path entirely — private repository, GitHub
+Pages switched off, app still building and still updating — `docs/cloudflare.md`
+is the step-by-step. It is about twenty minutes and costs nothing.
+
 There is also `worker/` — a Cloudflare Worker that serves `events.json` with
 CORS from a second origin, for the one case a cache cannot cover: a device that
 has never opened the app, after the site it would have come from is gone. It is

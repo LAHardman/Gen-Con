@@ -18,7 +18,8 @@
     "fetch:events": "node scripts/fetch-events.mjs",
     "fetch:pavements": "node scripts/fetch-pavements.mjs",
     "fetch:exhibitors": "node scripts/fetch-exhibitors.mjs",
-    "events:sample": "node scripts/make-sample-events.mjs"
+    "events:sample": "node scripts/make-sample-events.mjs",
+    "build:pages": "npm run fetch:events && npm run build"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

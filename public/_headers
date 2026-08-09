@@ -1,0 +1,23 @@
+# Cloudflare Pages and Netlify read this; other hosts ignore it.
+
+# The hashed assets. Their names change whenever their contents do, so they can
+# be cached hard and forever — this is the whole point of putting a hash in a
+# filename, and without it a returning phone re-downloads 191 KB it already has.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The schedule, which is regenerated on a schedule and is 2.2 MB. Revalidated
+# rather than cached hard, because a stale one is wrong in a way somebody
+# notices — but the service worker answers from its own cache first anyway, so
+# this only governs the fetch that refreshes it.
+/events.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Never the worker itself. A service worker cached by the browser is a build
+# nobody can replace: the update check fetches this file, and if an old copy
+# comes back the app is stuck on that version until the cache expires.
+/sw.js
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache

@@ -91,6 +91,26 @@ jobs:
         continue-on-error: true
         run: npm run check 2>&1 | tail -40
 
+      # Cloudflare Pages rebuilds on a push, so a merged pull request already
+      # triggers one. This is for the months where nothing changed and the
+      # schedule should still be refreshed. Inert until the hook is configured.
+      #
+      # Checked in the body rather than in `if:`, because the `secrets` context
+      # is not available to a step's `if` and the condition would be silently
+      # false for ever.
+      - name: Ask Cloudflare Pages to rebuild
+        if: always()
+        continue-on-error: true
+        env:
+          HOOK: ${{ secrets.PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo 'No PAGES_DEPLOY_HOOK set; nothing to trigger.'
+            exit 0
+          fi
+          code=$(curl -sS -X POST "$HOOK" -o /dev/null -w '%{http_code}')
+          echo "Cloudflare answered $code"
+
       - name: Open or update the pull request
         if: steps.changed.outputs.any == 'true'
         env:

@@ -1,8 +1,10 @@
-# Netlify and Cloudflare Pages read this file; other hosts ignore it.
+# Netlify reads this; Cloudflare Pages reads it too, but *not* for proxying.
 #
-# The event database sends no CORS headers, so a browser can't read it from
-# this app's origin. Forwarding a same-origin path to it is what lets the room
-# dialog re-check that its events haven't moved since the schedule was
-# imported. Without this the app still works — the check just reports that it
-# couldn't reach the source. See src/hooks/useLocationCheck.ts.
-/eventdb/*  https://gencon.eventdb.us/:splat  200
+# There used to be a rule here forwarding /eventdb/* to gencon.eventdb.us, so
+# the room dialog could re-check that its events had not moved. It does not work
+# on Cloudflare Pages: a `200` rewrite there may only point at paths inside the
+# same project, and forwarding to another host is silently ignored — so the
+# check reported itself unavailable and nothing said why.
+#
+# `functions/gencon/[[path]].js` does that job now, which works on Cloudflare
+# and is where the one place worth proxying is written down.

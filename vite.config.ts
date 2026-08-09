@@ -16,7 +16,7 @@ import react from '@vitejs/plugin-react';
  * Netlify a redirect to `https://gencon.eventdb.us/:splat`, on Cloudflare
  * Pages a function, on nginx a `proxy_pass`.
  */
-export const EVENT_DB_PROXY = '/eventdb';
+export const GENCON_PROXY = '/gencon';
 
 // `base: './'` keeps the build portable: it works when served from a domain
 // root, from a sub-path (GitHub Pages), or from a native shell's file:// bundle.
@@ -74,10 +74,12 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      [EVENT_DB_PROXY]: {
-        target: 'https://gencon.eventdb.us',
+      // The same path `functions/gencon/[[path]].js` serves on Cloudflare
+      // Pages, so the live check behaves the same in development as deployed.
+      [GENCON_PROXY]: {
+        target: 'https://www.gencon.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(new RegExp(`^${EVENT_DB_PROXY}`), ''),
+        rewrite: (path) => path.replace(new RegExp(`^${GENCON_PROXY}`), ''),
       },
     },
   },

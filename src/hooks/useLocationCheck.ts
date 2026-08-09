@@ -19,8 +19,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { eventEndMs, type ConEvent } from '../data/events';
 
-/** Kept in step with `EVENT_DB_PROXY` in vite.config.ts. */
-const PROXY = '/eventdb';
+/**
+ * Gen Con's API on this app's own origin. Kept in step with `GENCON_PROXY` in
+ * vite.config.ts, which serves the same path in development, and with
+ * `functions/gencon/[[path]].js`, which serves it on Cloudflare Pages.
+ *
+ * A same-origin path, because Gen Con sends no CORS headers and a browser
+ * therefore cannot ask them directly. Where the path is not configured — a
+ * plain static host with no way to proxy — the check reports `unavailable` and
+ * the dialog says so, rather than pretending everything was confirmed.
+ */
+const PROXY = '/gencon';
 
 /** Enough to notice a room being emptied, few enough to be a polite request. */
 const MAX_CHECKS = 6;
@@ -48,22 +57,23 @@ const IDLE: LocationCheck = { status: 'idle', checked: 0, moved: [] };
  * using the browser's own parser rather than pulling a DOM library into the
  * bundle for it.
  */
-function readLocation(html: string) {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  const found: Record<string, string> = {};
-
-  for (const row of doc.querySelectorAll('tr')) {
-    const cells = row.querySelectorAll('td, th');
-    if (cells.length < 2) continue;
-    const label = (cells[0].textContent ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-    const value = (cells[1].textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (label === 'location' || label === 'room') found[label] = value;
-  }
-
-  // A page that yielded neither label didn't parse; treat that as unreadable
-  // rather than as an event with no location, which would read as a move.
-  if (!('location' in found) && !('room' in found)) return null;
-  return { locationText: found.location ?? '', roomText: found.room ?? '' };
+function readLocation(body: unknown, id: string) {
+  // Searching a game code can match more than one record — a code is a string
+  // like any other to a search engine — so the one with this exact code is
+  // picked rather than the first that came back.
+  const records = (body as { records?: Array<{ _source?: Record<string, unknown> }> })?.records;
+  if (!Array.isArray(records)) return null;
+  const found = records
+    .map((record) => record?._source)
+    .find((source) => source && (source.game_code === id || String(source.id) === id.replace(/^\D+/, '')));
+  if (!found) return null;
+  // An event with neither field did not parse. Treating that as "no location"
+  // would report every checked event as having moved.
+  if (found.location === undefined && found.room_name === undefined) return null;
+  return {
+    locationText: String(found.location ?? ''),
+    roomText: String(found.room_name ?? ''),
+  };
 }
 
 /** Trailing/leading space and case differ between pulls without meaning anything. */
@@ -105,9 +115,9 @@ export function useLocationCheck(roomId: string, events: ConEvent[], nowMs: numb
       for (const event of upcoming) {
         if (cancelled) return;
         try {
-          const response = await fetch(`${PROXY}/event.php?GameCode=${encodeURIComponent(event.id)}`);
+          const response = await fetch(`${PROXY}/api/event_search?search=${encodeURIComponent(event.id)}`);
           if (!response.ok) throw new Error(String(response.status));
-          const live = readLocation(await response.text());
+          const live = readLocation(await response.json(), event.id);
           if (!live) continue;
           checked += 1;
           if (!same(live.locationText, event.locationText) || !same(live.roomText, event.roomText)) {
