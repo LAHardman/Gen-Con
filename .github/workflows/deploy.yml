@@ -95,7 +95,29 @@ jobs:
         continue-on-error: true
         run: npm run fetch:events -- --delay ${{ inputs.request_delay || 150 }}
 
+      # Push the snapshot to the mirror, if one is configured. Inert until the
+      # EVENTS_MIRROR_URL variable and EVENTS_MIRROR_TOKEN secret are set, and
+      # never fatal — a mirror that cannot be reached is not a reason to stop
+      # publishing the app.
+      - name: Send the schedule to the mirror
+        if: vars.EVENTS_MIRROR_URL != ''
+        continue-on-error: true
+        run: |
+          if [ ! -s public/events.json ]; then
+            echo 'No schedule was imported this run; leaving the mirror as it is.'
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/mirror.out -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer ${{ secrets.EVENTS_MIRROR_TOKEN }}" \
+            -H 'Content-Type: application/json' \
+            --data-binary @public/events.json \
+            "${{ vars.EVENTS_MIRROR_URL }}")
+          echo "mirror answered $code: $(cat /tmp/mirror.out)"
+          [ "$code" = '200' ]
+
       - run: npm run build
+        env:
+          VITE_EVENTS_MIRROR: ${{ vars.EVENTS_MIRROR_URL }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

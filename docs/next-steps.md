@@ -1133,3 +1133,66 @@ convention, through an interface meant to be read by programs.
 
 The remaining honest gap is unchanged: a first visit during an outage has no
 local copy and nowhere to get one. That still needs a second origin.
+
+---
+
+## 14. A mirror for the schedule, on somebody else's free tier
+
+`worker/` is a Cloudflare Worker that serves `events.json` with CORS. It closes
+the one hole §12 could not: **a device that has never opened the app**, once the
+site it would have come from is gone. No cache helps that device, because it has
+no cache.
+
+Nothing here is deployed. It needs an account and a login, which is the one part
+that cannot be done for you — `worker/wrangler.toml` carries the six commands.
+
+### A correction, since the first design was wrong
+
+The suggestion this came from was that the worker call Gen Con's API itself and
+hand the app one aggregated file. **It cannot.** The catalogue is about 1,100
+requests and a Worker on the free plan is capped at **50 subrequests per
+invocation** — not per second, per invocation. There is no arrangement of that
+design that fits.
+
+So the aggregation stays in GitHub Actions, where it already works and where no
+such limit exists, and the worker is a dumb static server: the deploy `PUT`s each
+snapshot, the worker serves it.
+
+Which turns out to be the better shape anyway. A worker that talked to Gen Con
+would be useless the moment Gen Con changed anything; one that holds a snapshot
+keeps serving it **whether or not GitHub Actions still runs, GitHub Pages still
+serves, or Gen Con's API still exists**. The failure mode is a schedule that gets
+old, which is a great deal better than one that is gone.
+
+### What it refuses
+
+The thing it stores may be the last copy anybody ever sees, so:
+
+  - **No secret configured means closed, not open.** A worker deployed without
+    its secret rejects every upload. Treating "no secret" as "no check" is how a
+    mirror becomes anybody's to overwrite.
+  - **A short feed is refused rather than stored.** A fetch that half worked
+    produces a feed that parses, has the right shape, and is missing most of the
+    convention. Here that would overwrite the last good copy in existence, so
+    anything under a thousand events is turned away and the good one kept.
+
+### How the app uses it
+
+Only when the bundled copy cannot be had at all — a network failure or a 5xx,
+which are different failures and only one of them throws. It is a fallback and
+not a race, so an ordinary load costs exactly what it did before, and a phone
+with no signal is not made to wait on a second host that is equally unreachable.
+
+Inert unless `VITE_EVENTS_MIRROR` was set at build time, so no third-party URL is
+baked into a build that has not asked for one.
+
+### What "free in perpetuity" is worth
+
+Nobody can promise it. Cloudflare's free plan has been stable and generous for
+years, which is why it is the one suggested — 100,000 requests a day and 1 GB of
+KV against one 8.5 MB write a week — and it needs no card. Deno Deploy changed
+its own free tier in 2025, which is the argument against picking it.
+
+But the durability here does not rest on that promise. It rests on the worker
+having no dependencies: once a snapshot is in KV, serving it requires nothing
+else in the world to keep working.

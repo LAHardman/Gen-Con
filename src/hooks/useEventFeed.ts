@@ -19,13 +19,32 @@ const EMPTY_INDEX: EventIndex = {
 };
 
 /**
+ * A second place to get the schedule, if one has been configured.
+ *
+ * Empty unless `VITE_EVENTS_MIRROR` was set at build time, so the whole
+ * fallback is inert by default and no third-party URL is baked into a build
+ * that has not asked for one. `worker/` is what serves it.
+ */
+const MIRROR = (import.meta.env.VITE_EVENTS_MIRROR ?? '').trim();
+
+/**
  * Loads the generated event feed.
  *
  * A missing file is a normal state, not an error: the app is useful as a map
  * before anyone has run `npm run fetch:events`, so it reports "absent" and the
  * UI explains how to populate it.
+ *
+ * THE MIRROR IS A FALLBACK, NOT A RACE. The bundled copy is tried first and
+ * alone; the mirror is only reached for when that fails outright, which means
+ * the ordinary path costs exactly what it did before and a phone with no signal
+ * does not sit waiting on a second host that is equally unreachable.
+ *
+ * It is worth having for one narrow case, and it is worth being clear that it
+ * is narrow: a device that has *never* opened the app cannot be helped by any
+ * cache, and if the site it would have come from is gone, this is the only
+ * thing left that can hand it a schedule.
  */
-export function useEventFeed(url = './events.json'): EventFeedState {
+export function useEventFeed(url = './events.json', mirror = MIRROR): EventFeedState {
   const [state, setState] = useState<{
     status: FeedStatus;
     feed: EventFeed | null;
@@ -35,15 +54,28 @@ export function useEventFeed(url = './events.json'): EventFeedState {
   useEffect(() => {
     let cancelled = false;
 
+    const load = async (from: string) => {
+      const response = await fetch(from, { cache: 'no-cache' });
+      if (!response.ok && response.status !== 404) throw new Error(`HTTP ${response.status}`);
+      return response;
+    };
+
     (async () => {
       try {
-        const response = await fetch(url, { cache: 'no-cache' });
+        let response: Response;
+        try {
+          response = await load(url);
+        } catch (reason) {
+          // The bundled copy could not be fetched at all — the host is down, or
+          // gone. Anybody who has opened the app before is being served from
+          // cache and never reaches here; this is for the device that has not.
+          if (!mirror) throw reason;
+          response = await load(mirror);
+        }
         if (response.status === 404) {
           if (!cancelled) setState({ status: 'absent', feed: null, error: null });
           return;
         }
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
         const contentType = response.headers.get('content-type') ?? '';
         if (!contentType.includes('json')) {
           // A dev server that rewrites unknown paths to index.html will answer
@@ -69,7 +101,7 @@ export function useEventFeed(url = './events.json'): EventFeedState {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, mirror]);
 
   const index = useMemo(
     () => (state.feed ? indexEvents(state.feed.events) : null),

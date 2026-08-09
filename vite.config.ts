@@ -95,7 +95,7 @@ export default defineConfig({
     // The scripts are plain JavaScript and are tested where they live, next to
     // the code, rather than being given hand-written declarations to be
     // importable from `src`.
-    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs', 'worker/**/*.test.mjs'],
     // A stubbed geolocation or timer in one file must not leak into the next.
     restoreMocks: true,
     unstubGlobals: true,

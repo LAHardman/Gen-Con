@@ -1,0 +1,40 @@
+# Cloudflare Worker config for the schedule mirror.
+#
+# SETTING IT UP, which is the part nobody else can do for you — it needs an
+# account and a login:
+#
+#   1. npm i -g wrangler && wrangler login
+#   2. wrangler kv namespace create SCHEDULE
+#      Put the id it prints into `id` below.
+#   3. openssl rand -hex 32                     # the upload secret
+#      wrangler secret put UPLOAD_SECRET        # paste it in
+#   4. wrangler deploy
+#   5. Add the same secret to the repository as the EVENTS_MIRROR_TOKEN action
+#      secret, and the worker's URL as the EVENTS_MIRROR_URL variable, so the
+#      deploy starts uploading each new snapshot to it.
+#   6. Rebuild the app with VITE_EVENTS_MIRROR set to
+#      https://<name>.<subdomain>.workers.dev/events.json so it knows to fall
+#      back to it.
+#
+# WHAT IT COSTS. Nothing, at this size, and by a wide margin: the free plan is
+# 100,000 requests a day and 1 GB of KV, against one 8.5 MB write a week and a
+# handful of reads. No card is required for the free plan.
+#
+# "In perpetuity" is not a thing anybody can promise. Cloudflare's free tier has
+# been stable and generous for years, which is why it is the one suggested here,
+# but no free service guarantees it will stay free — Deno Deploy changed its own
+# free tier in 2025. What makes this durable is not the promise, it is that the
+# worker stops depending on anything: once a snapshot is in KV it is served
+# whether or not GitHub, this repository, or Gen Con still exist.
+
+name = "gencon-schedule-mirror"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# The snapshot lives here. 8.5 MB against a 25 MB per-value limit.
+[[kv_namespaces]]
+binding = "SCHEDULE"
+id = "replace-with-the-id-wrangler-prints"
+
+# UPLOAD_SECRET is deliberately not here. It is set with `wrangler secret put`
+# so it never reaches the repository.

@@ -1320,6 +1320,12 @@ refresh's checks, and the pull request says why.
 `docs/next-steps.md` §10 has the commands, and the short list of hand-sourced
 things that will go stale without telling you.
 
+There is also `worker/` — a Cloudflare Worker that serves `events.json` with
+CORS from a second origin, for the one case a cache cannot cover: a device that
+has never opened the app, after the site it would have come from is gone. It is
+not deployed; §14 and `worker/wrangler.toml` have the six commands, and the app
+ignores it entirely unless `VITE_EVENTS_MIRROR` is set.
+
 ## Layout
 
 ```
