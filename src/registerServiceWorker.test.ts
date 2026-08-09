@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { registerServiceWorker } from './registerServiceWorker';
+import { keepStorage, registerServiceWorker } from './registerServiceWorker';
 
 type Listener = (event?: unknown) => void;
 
@@ -172,5 +172,53 @@ describe('picking up a new build', () => {
     await sw.settle();
     expect(() => sw.resume()).not.toThrow();
     await sw.settle();
+  });
+});
+
+describe('keeping the offline copy', () => {
+  const storage = (impl: Partial<StorageManager> | undefined) => {
+    vi.stubGlobal('navigator', { serviceWorker: { register: vi.fn(), addEventListener: vi.fn() }, storage: impl });
+  };
+
+  it('asks for durable storage, because best effort is what gets deleted', async () => {
+    // The whole point. Everything cached is best-effort by default and the
+    // browser may drop the origin when the device is short of space — which is
+    // survivable only if the site is still there to re-download from.
+    const persist = vi.fn(() => Promise.resolve(true));
+    storage({ persisted: () => Promise.resolve(false), persist } as never);
+    await expect(keepStorage()).resolves.toBe(true);
+    expect(persist).toHaveBeenCalled();
+  });
+
+  it('does not ask again once it has been granted', async () => {
+    const persist = vi.fn(() => Promise.resolve(true));
+    storage({ persisted: () => Promise.resolve(true), persist } as never);
+    await expect(keepStorage()).resolves.toBe(true);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it('carries on when the browser says no', async () => {
+    // A refusal changes nothing: the app keeps the cache it already had, on the
+    // terms it already had it. What it must not do is throw on the way past.
+    storage({ persisted: () => Promise.resolve(false), persist: () => Promise.resolve(false) } as never);
+    await expect(keepStorage()).resolves.toBe(false);
+  });
+
+  it('carries on where the API does not exist', async () => {
+    storage(undefined);
+    await expect(keepStorage()).resolves.toBe(false);
+  });
+
+  it('carries on when asking throws', async () => {
+    // Some browsers reject this in a private window rather than returning
+    // false. `persist` has to be present or the guard above returns first and
+    // this passes without ever reaching the throw — which is how it was
+    // written the first time, and the mutation that removed the `try` did not
+    // fail a single test.
+    storage({
+      persisted: () => Promise.reject(new Error('nope')),
+      persist: () => Promise.resolve(true),
+    } as never);
+    await expect(keepStorage()).resolves.toBe(false);
   });
 });

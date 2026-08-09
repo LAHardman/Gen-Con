@@ -961,3 +961,70 @@ push exists and iOS has supported it for installed web apps since 16.4, but it
 needs a server to push from, and this has no server — it is a static site on
 GitHub Pages. Anything that has to reach somebody who is not looking at the app
 would need one.
+
+---
+
+## 12. Surviving the server going away
+
+Driven rather than reasoned about, against the built app in Chromium, with a
+server that could be told to break in two different ways.
+
+```
+server up            177 rooms · 27,467 events · search   (the baseline)
+server answers 500   177 rooms · 27,467 events · search
+server gone entirely 177 rooms · 27,467 events · search
+```
+
+Both outages, because they are not the same failure. A host that is **gone**
+refuses the connection and every fetch rejects, which is the same shape as
+being offline. A host that is **broken** answers 500 to everything, which is
+worse: a worker that cached what it was handed would overwrite a working app
+with an error page and never recover from it. `sw.js` already checked
+`response.ok` before caching, so that hole was closed before this — but it is
+the difference between an app that survives an outage and one an outage
+destroys permanently, so it is now measured rather than assumed.
+
+What is *not* in that screenshot is the basemap: the building plans are vector
+and live in the JavaScript bundle, so they always draw, but the tiles behind
+them are a third-party CDN and only appear if they were cached first.
+
+### What was actually missing
+
+Nothing about the strategies. **The storage they live in.** Everything the
+worker caches is *best effort* by default, which is a term of art: the browser
+may delete the whole origin's storage when the device is short of space,
+without asking and without telling anybody. Eight megabytes of schedule plus a
+tile cache is exactly the large, idle storage a browser looks at first — and it
+is precisely the copy that is the whole answer when the site is not there to
+re-download from.
+
+`keepStorage()` now asks for durable storage, which is only cleared
+deliberately. Three things worth knowing about it:
+
+  - It is asked for on **every load**, not once, because a browser weighs how
+    much an app is used and a first visit is the least likely moment to be
+    granted. `persisted()` makes that free once it has been.
+  - **The browser decides.** Chrome and Safari grant it silently to an app that
+    has been installed or used enough; a fresh profile is refused, which is what
+    the test above sees. Installing the app to the home screen is the thing that
+    earns it. A refusal changes nothing — the app keeps the cache it had, on the
+    terms it had it.
+  - It is not a promise that the data is permanent. Somebody clearing site data
+    still clears it.
+
+### The one case nothing here can help with
+
+**A first visit during an outage.** There is no local copy yet and no server to
+get one from. The only fix for that is a second place to get the app, which is
+infrastructure rather than code: the same `dist` published to a second static
+host under a second name. Worth considering only if the app is ever load-bearing
+for somebody's week.
+
+### A mistake in the tests, recorded because it nearly shipped
+
+`keepStorage`'s "carries on when asking throws" test passed without ever
+reaching the throw: the stub had no `persist`, so the guard on the line above
+returned first. Removing the entire `try`/`catch` from the source did not fail a
+single test. It was only caught by mutating the source to see which tests
+noticed — which is the only thing that distinguishes a test that checks
+something from a test that runs something.

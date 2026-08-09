@@ -1275,6 +1275,13 @@ on its own.
     opaque and square-cornered because iOS applies its own mask.
   - **Offline** is `public/sw.js`: the app stale-while-revalidate, the map tiles
     cache-first and capped. The first visit needs a network; none after it does.
+  - **A dead server** is the same thing from the other end, and it is tested:
+    with the host answering 500 to everything, and again with it switched off
+    entirely, the app still comes up with all 177 rooms, all 27,467 events and
+    working search. `keepStorage()` asks the browser to make that copy durable
+    rather than best-effort, so it is not the first thing deleted when the phone
+    runs short of space — installing the app is what persuades Chrome and Safari
+    to grant it. §12 of `docs/next-steps.md` has the measurements.
   - **Updating itself** is `src/registerServiceWorker.ts`. Every time the app is
     brought back to the foreground it asks whether there is a new build, and
     reloads once if there is. Measured in Chromium: about ten seconds from

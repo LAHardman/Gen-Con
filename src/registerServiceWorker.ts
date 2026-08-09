@@ -46,8 +46,40 @@
 /** Where the worker is served from, relative so the app works under a subpath. */
 const WORKER = './sw.js';
 
+/**
+ * Ask the browser not to throw the offline copy away.
+ *
+ * Everything cached here is *best effort* by default, which is a term of art:
+ * the browser may delete the whole origin's storage when the device is short of
+ * space, without asking and without telling anybody. That is survivable when it
+ * only costs a re-download. It is not survivable when the site it would be
+ * re-downloaded from is the thing that has gone away — and eight megabytes of
+ * schedule plus a tile cache is exactly the kind of large, idle storage a
+ * browser looks at first.
+ *
+ * `persist()` moves the origin to durable storage, which is only cleared if
+ * somebody clears it deliberately. Chrome and Safari grant it silently to an
+ * installed app; Firefox may ask. Asked for on every load rather than once,
+ * because a browser weighs how much the app is used and a first visit is the
+ * least likely moment to be granted — `persisted()` makes that free once it has
+ * been.
+ *
+ * A refusal changes nothing: the app keeps the cache it already had, on the
+ * terms it already had it.
+ */
+export async function keepStorage(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 export function registerServiceWorker(enabled = import.meta.env.PROD) {
   if (!enabled || !('serviceWorker' in navigator)) return;
+  void keepStorage();
   // Captured before registering, because `clients.claim()` fires
   // `controllerchange` on the very first install too — going from no worker to
   // one. That is not a new version arriving, and reloading for it would mean
