@@ -2,13 +2,16 @@
  * Event schedule data and the machinery that ties it to rooms on the map.
  *
  * Events are loaded at runtime from `public/events.json`, which is produced by
- * `npm run fetch:events` from the third-party Gen Con event database at
- * https://gencon.eventdb.us/. Two reasons the app reads a generated file rather
- * than calling that site directly:
+ * `npm run fetch:events` from Gen Con's own catalogue API. Two reasons the app
+ * reads a generated file rather than calling that API directly:
  *
- *  - A browser cannot fetch it cross-origin; the site is not set up to allow it.
+ *  - A browser cannot: Gen Con sends no `Access-Control-Allow-Origin`, so the
+ *    response is unreadable cross-origin. Nothing in the app can change that.
  *  - Convention centre Wi-Fi is famously bad, and a file that ships with the app
  *    keeps the schedule working when the network doesn't.
+ *
+ * The file is columns rather than objects — see `expandFeed` — which is what
+ * makes it 2.2 MB on a phone instead of 8.9 MB.
  */
 
 import { ROOMS, VENUES, type Room, type Venue } from './venues';
@@ -61,6 +64,80 @@ export interface EventFeed {
   };
   year?: number;
   events: ConEvent[];
+}
+
+/* ----------------------------------------------------------------- unpacking */
+
+/**
+ * The feed as it arrives on the wire, which is columns rather than objects.
+ *
+ * A schedule written as 27,467 objects is mostly the same few strings repeated:
+ * five distinct age requirements cost 0.85 MB, 22 buildings cost 0.62 MB, and
+ * every start time is written out as a 25-character timestamp each time it
+ * occurs. Written as a table of distinct values plus a column of indexes it is
+ * 8.87 MB down to 2.03 MB, and 0.99 MB down to 0.48 MB gzipped — which is what
+ * a phone stores and what it downloads over convention wifi.
+ */
+interface PackedFeed {
+  format: string;
+  source: EventFeed['source'];
+  year?: number;
+  count: number;
+  keys: Record<string, Array<string | number>>;
+  columns: Record<string, Array<number | string | null>>;
+}
+
+/**
+ * Either shape, as `EventFeed`.
+ *
+ * Both, deliberately and for as long as it costs nothing: a phone that cached
+ * the old shape must keep working, and the mirror may be holding a snapshot
+ * written before this existed. A reader that only understood the new one would
+ * turn a stale cache into a broken app, which is the opposite of the point.
+ */
+export function expandFeed(raw: unknown): EventFeed {
+  const feed = raw as Partial<PackedFeed> & Partial<EventFeed>;
+  if (Array.isArray(feed?.events)) return feed as EventFeed;
+  if (feed?.format !== 'columns-1' || !feed.columns || !feed.keys) {
+    throw new Error(`unknown feed format: ${String(feed?.format)}`);
+  }
+
+  const { keys, columns, count } = feed as PackedFeed;
+  const at = (field: string, row: number) => {
+    const index = columns[field]?.[row];
+    if (typeof index !== 'number' || index < 0) return undefined;
+    const value = keys[field]?.[index];
+    return value === undefined ? undefined : value;
+  };
+  const text = (field: string, row: number) => {
+    const value = at(field, row);
+    return value === undefined ? undefined : String(value);
+  };
+  const plain = (field: string, row: number) => {
+    const value = columns[field]?.[row];
+    return value === null || value === undefined ? undefined : value;
+  };
+
+  const events: ConEvent[] = [];
+  for (let row = 0; row < count; row += 1) {
+    const duration = at('durationMinutes', row);
+    events.push({
+      id: `${text('idPrefix', row) ?? ''}${plain('idNumber', row) ?? ''}`,
+      title: String(plain('title', row) ?? ''),
+      type: text('type', row),
+      gameSystem: text('gameSystem', row),
+      locationText: text('locationText', row) ?? '',
+      roomText: text('roomText', row),
+      tableText: text('tableText', row),
+      start: text('start', row) ?? '',
+      end: text('end', row),
+      durationMinutes: typeof duration === 'number' ? duration : undefined,
+      cost: plain('cost', row) as number | undefined,
+      ticketsAvailable: plain('ticketsAvailable', row) as number | undefined,
+      ageRequirement: text('ageRequirement', row),
+    });
+  }
+  return { source: feed.source as EventFeed['source'], year: feed.year, events };
 }
 
 /* ------------------------------------------------------------------ matching */

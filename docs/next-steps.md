@@ -1196,3 +1196,68 @@ its own free tier in 2025, which is the argument against picking it.
 But the durability here does not rest on that promise. It rests on the worker
 having no dependencies: once a snapshot is in KV, serving it requires nothing
 else in the world to keep working.
+
+---
+
+## 15. Making the schedule smaller, and what cannot be made smaller
+
+### On the phone: 8.9 MB to 2.2 MB
+
+A schedule written as 27,467 objects is mostly the same few strings over and
+over. Measured, before changing anything:
+
+```
+ageRequirement   0.85 MB      5 distinct values
+locationText     0.62 MB     22 distinct values
+type             0.36 MB     19 distinct values
+roomText         0.82 MB    442 distinct values
+tableText        0.44 MB    264 distinct values
+gameSystem       0.69 MB  1,845 distinct values
+start + end      1.92 MB  ~1,080 distinct timestamps, each written out in full
+title            1.11 MB   nearly all distinct  <- the actual payload
+```
+
+So each repetitive field is now a table of its distinct values plus a column of
+indexes into it, and the field names are written once instead of 27,467 times.
+
+```
+                raw       gzipped
+before        8.86 MB     0.97 MB
+after         2.17 MB     0.49 MB
+```
+
+The remaining 2.17 MB is 0.80 MB of titles and the ids, costs and ticket counts,
+which is close to the floor without throwing information away. `expandFeed` in
+`events.ts` is the reader, and it still reads the old shape — a phone holding a
+cached copy of that has to keep working, or the optimisation breaks the very
+thing it was meant to protect.
+
+**A bug this found, worth recording.** The unit test for the reader was written
+from the reader, so when `ageRequirement` was encoded but never decoded, the
+test agreed with the omission and passed. What caught it was round-tripping all
+27,467 real events through the writer and back and comparing every field: 27,467
+mismatches, one field, immediately obvious. The test now asserts the *set of
+keys* rather than a hand-listed subset.
+
+### The calls: about 1,100, and that is the floor
+
+Not for want of looking. Tested against the API:
+
+  - `per_page` is accepted and ignored — every page is 25.
+  - Paging stops at page 400, a 10,000-record window.
+  - No sort parameter, so "newest first" is not available.
+  - No updated-since filter, so an incremental refresh is not possible: every
+    refresh is the whole catalogue.
+  - No bulk export anywhere on the site.
+
+The filter mechanism does work — `day[]=30` and `search=dragon` both change the
+result — so this is what the API offers rather than a failure to find the right
+parameter names.
+
+What is left is *how often*, not *how many*, and weekly is already right: the
+catalogue moves continuously as events sell out, and a fetch is nine minutes of
+somebody else's server once a week.
+
+Concurrency would cut the nine minutes to two or three and was deliberately not
+done. It reduces the wall clock and not the load, on a server that belongs to
+somebody else and is being asked for its entire catalogue by a hobby project.

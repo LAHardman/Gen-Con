@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { indexEvents, type EventFeed, type EventIndex } from '../data/events';
+import { expandFeed, indexEvents, type EventFeed, type EventIndex } from '../data/events';
 
 export type FeedStatus = 'loading' | 'ready' | 'absent' | 'error';
 
@@ -84,7 +84,7 @@ export function useEventFeed(url = './events.json', mirror = MIRROR): EventFeedS
           return;
         }
 
-        const feed = (await response.json()) as EventFeed;
+        const feed = expandFeed(await response.json());
         if (!Array.isArray(feed?.events)) throw new Error('feed has no events array');
         if (!cancelled) setState({ status: 'ready', feed, error: null });
       } catch (error) {
