@@ -37,6 +37,19 @@ export interface ConEvent {
   ticketsAvailable?: number;
   ageRequirement?: string;
   /**
+   * Which room this is in, decided when the feed was written.
+   *
+   * The matcher is a string scan over every room on the campus, and it was
+   * being run 27,467 times on a phone to produce 121 distinct answers. The
+   * build knows the same thing — it has the same `venues.ts` and calls the same
+   * matcher — so it works it out once and writes it down.
+   *
+   * Optional because an older feed has none and because an event the writer
+   * could not place has none either. `roomIdForEvent` is still the authority
+   * and is still what runs when this is missing.
+   */
+  roomId?: string;
+  /**
    * Link back to the event on the source site.
    *
    * Absent from the generated feed, and derived by `eventUrl` instead — it is
@@ -98,7 +111,7 @@ interface PackedFeed {
 export function expandFeed(raw: unknown): EventFeed {
   const feed = raw as Partial<PackedFeed> & Partial<EventFeed>;
   if (Array.isArray(feed?.events)) return feed as EventFeed;
-  if (feed?.format !== 'columns-1' || !feed.columns || !feed.keys) {
+  if ((feed?.format !== 'columns-1' && feed?.format !== 'columns-2') || !feed.columns || !feed.keys) {
     throw new Error(`unknown feed format: ${String(feed?.format)}`);
   }
 
@@ -135,6 +148,9 @@ export function expandFeed(raw: unknown): EventFeed {
       cost: plain('cost', row) as number | undefined,
       ticketsAvailable: plain('ticketsAvailable', row) as number | undefined,
       ageRequirement: text('ageRequirement', row),
+      // Absent in `columns-1`, and absent in any event the writer could not
+      // place, so `indexEvents` still falls back to working it out.
+      roomId: text('roomId', row),
     });
   }
   return { source: feed.source as EventFeed['source'], year: feed.year, events };
@@ -338,7 +354,9 @@ export function indexEvents(events: ConEvent[]): EventIndex {
     if (Number.isNaN(Date.parse(event.start))) continue;
     days.add(dayKey(event.start));
 
-    const roomId = roomIdForEvent(event);
+    // Written into the feed where the build could work it out; computed here
+    // for an older feed, or an event the build could not place.
+    const roomId = event.roomId ?? roomIdForEvent(event);
     if (!roomId) {
       // No room, but perhaps an address. Tried second and never first: an
       // event in Exhibit Hall B belongs in the hall, not on a pin outside it.

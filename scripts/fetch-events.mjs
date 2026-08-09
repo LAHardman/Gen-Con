@@ -145,9 +145,14 @@ export function shape(source) {
  * `expandFeed` in `src/data/events.ts` is the other half, and reads both this
  * and the old shape — a phone with the old one cached must keep working.
  */
-function pack(events, source) {
-  const DICT = ['idPrefix', 'type', 'gameSystem', 'locationText', 'roomText', 'tableText', 'start', 'end', 'ageRequirement', 'durationMinutes'];
-  const of = (event, field) => (field === 'idPrefix' ? event.id.replace(/[0-9]+$/, '') : event[field]);
+function pack(events, source, roomOf) {
+  const DICT = ['idPrefix', 'type', 'gameSystem', 'locationText', 'roomText', 'tableText', 'start', 'end', 'ageRequirement', 'durationMinutes', 'roomId'];
+  const of = (event, field) => {
+    if (field === 'idPrefix') return event.id.replace(/[0-9]+$/, '');
+    // Worked out here rather than on the phone. See the note by `roomId` below.
+    if (field === 'roomId') return roomOf(event) ?? undefined;
+    return event[field];
+  };
   const keys = {};
   const lookup = {};
   for (const field of DICT) {
@@ -162,7 +167,7 @@ function pack(events, source) {
   return {
     // Named so the reader can tell the two apart without guessing, and so a
     // third shape later is a version bump rather than an archaeology problem.
-    format: 'columns-1',
+    format: 'columns-2',
     source,
     year: Number(events[0].start.slice(0, 4)),
     count: events.length,
@@ -235,7 +240,15 @@ async function main() {
   }
 
   usable.sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
-  const feed = pack(usable, { ...SOURCE, fetchedAt: new Date().toISOString() });
+  // Which room each event is in, decided here instead of 27,467 times on a
+  // phone. The matcher is `events.ts`'s own and the room table is `venues.ts`'s
+  // own, both from this same checkout — so the answer cannot drift from what
+  // the app would have worked out itself, and the app still falls back to
+  // computing it for any event that has none.
+  const { roomIdForEvent } = await import(join(ROOT, 'src/data/events.ts'));
+  const feed = pack(usable, { ...SOURCE, fetchedAt: new Date().toISOString() }, roomIdForEvent);
+  const placed = feed.columns.roomId.filter((i) => i >= 0).length;
+  console.log(`rooms worked out here rather than on the phone: ${placed.toLocaleString('en')} of ${usable.length.toLocaleString('en')}`);
 
   await mkdir(dirname(OUTPUT), { recursive: true });
   await writeFile(OUTPUT, `${JSON.stringify(feed)}\n`);

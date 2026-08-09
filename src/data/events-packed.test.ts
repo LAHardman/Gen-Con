@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { expandFeed, type ConEvent } from './events';
+import { expandFeed, indexEvents, type ConEvent } from './events';
 
 const source = { name: 'Gen Con event catalogue', url: 'https://www.gencon.com/events', fetchedAt: '2026-08-09T00:00:00Z' };
 
@@ -99,7 +99,7 @@ describe('reading the packed feed', () => {
     const { events } = expandFeed(packed);
     expect(Object.keys(events[0]).sort()).toEqual([
       'ageRequirement', 'cost', 'durationMinutes', 'end', 'gameSystem', 'id',
-      'locationText', 'roomText', 'start', 'tableText', 'ticketsAvailable', 'title', 'type',
+      'locationText', 'roomId', 'roomText', 'start', 'tableText', 'ticketsAvailable', 'title', 'type',
     ]);
   });
 
@@ -113,6 +113,51 @@ describe('reading the packed feed', () => {
     const feed = expandFeed(packed);
     expect(feed.year).toBe(2026);
     expect(feed.source.url).toBe('https://www.gencon.com/events');
+  });
+});
+
+describe('the room the build already worked out', () => {
+  // The matcher is a string scan over every room on the campus, run once per
+  // event to produce 121 distinct answers. The build knows the same thing, so
+  // it writes it down and the phone reads it.
+  const withRooms = {
+    ...packed,
+    format: 'columns-2',
+    keys: { ...packed.keys, roomId: ['hall-f', 'sagamore-ballroom'] },
+    columns: { ...packed.columns, roomId: [0, 1, -1] },
+  };
+
+  it('reads the room straight off the feed', () => {
+    const { events } = expandFeed(withRooms);
+    expect(events[0].roomId).toBe('hall-f');
+    expect(events[1].roomId).toBe('sagamore-ballroom');
+  });
+
+  it('leaves it unset where the build could not place the event', () => {
+    // -1 means the writer found no room either. The reader must not invent one,
+    // because `indexEvents` treats an unset id as "work it out" and a wrong one
+    // as gospel.
+    expect(expandFeed(withRooms).events[2].roomId).toBeUndefined();
+  });
+
+  it('indexes by the written room rather than re-deriving it', () => {
+    // The point of the whole exercise: an event carrying a room goes straight
+    // into that room's bucket without the matcher running at all. Asserted with
+    // a room the *text* would never match, so a fallback to the matcher would
+    // put it somewhere else and be obvious.
+    const odd = {
+      ...withRooms,
+      keys: { ...withRooms.keys, roomId: ['lucas-oil-field', 'sagamore-ballroom'] },
+    };
+    const index = indexEvents(expandFeed(odd).events);
+    expect(index.byRoom.get('lucas-oil-field')?.length).toBe(1);
+  });
+
+  it('still works out a room for a feed that carries none', () => {
+    // `columns-1`, and any event the build could not place. The matcher is
+    // still the authority; this only skips work it has already done.
+    const index = indexEvents(expandFeed(packed).events);
+    expect([...index.byRoom.keys()].length).toBeGreaterThan(0);
   });
 });
 
