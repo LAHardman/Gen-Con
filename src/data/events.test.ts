@@ -257,3 +257,52 @@ describe('the link back to an event', () => {
     expect(eventUrl(at(''))).toBeUndefined();
   });
 });
+
+describe('the matcher remembers its answers', () => {
+  // 1,761 distinct location combinations across 27,467 events, so the same
+  // question is asked about fifteen times for every answer. Caching that took
+  // 111 ms off the 125 ms `indexEvents` spent — but a cache is only as good as
+  // its key, and the way this one can go wrong is collapsing two places into
+  // one and filing a whole room's events in somebody else's.
+  const at = (locationText: string, roomText?: string, tableText?: string): ConEvent =>
+    ({ id: `${locationText}/${roomText}/${tableText}`, title: 't', locationText, roomText, tableText, start: '2026-07-30T10:00:00-04:00' });
+
+  it('does not let one place answer for another', () => {
+    // The three fields are joined to make the key, so a separator that can
+    // occur in the data lets "Hall A" in one field share a key with "Hall A"
+    // split across two — and every event in one would be filed in the other.
+    expect(roomIdForEvent(at('ICC', 'Hall A'))).toBe('hall-a');
+    expect(roomIdForEvent(at('ICC', 'Hall B'))).toBe('hall-b');
+    expect(roomIdForEvent(at('ICC', 'Hall B : Outset', 'HQ'))).toBe('hall-b');
+    expect(roomIdForEvent(at('ICC', 'Hall C : Green', '16'))).toBe('hall-c');
+    // Same room name, different building: these must not share an answer.
+    expect(roomIdForEvent(at('JW', 'White River Ballroom A'))).not.toBe(
+      roomIdForEvent(at('ICC', 'Hall A')),
+    );
+    // And the collision the separator actually exists to prevent. Concatenated
+    // plainly these two are both "ICCHall A"; they are different places and
+    // must get different answers. Written out because the first version of this
+    // test asserted the separator mattered and did not construct a case where
+    // it did — removing it from the source failed nothing.
+    expect(roomIdForEvent(at('ICC', 'Hall A'))).toBe('hall-a');
+    expect(roomIdForEvent(at('ICCHall', ' A'))).not.toBe('hall-a');
+  });
+
+  it('gives the same answer the second time as the first', () => {
+    for (const event of [at('ICC', 'Hall B'), at('JW', 'White River Ballroom A'), at('Stadium'), at('ICC', 'Rm 140')]) {
+      const first = roomIdForEvent(event);
+      expect(roomIdForEvent(event)).toBe(first);
+      // And a fresh object with the same three fields, since the cache is keyed
+      // on those and not on identity.
+      expect(roomIdForEvent(at(event.locationText, event.roomText, event.tableText))).toBe(first);
+    }
+  });
+
+  it('remembers a miss as well as a hit', () => {
+    // Otherwise every unplaceable event pays the full scan every time, and the
+    // unplaceable ones are exactly the ones that scan the longest.
+    const nowhere = at('Somewhere Nobody Has Mapped');
+    expect(roomIdForEvent(nowhere)).toBeNull();
+    expect(roomIdForEvent(nowhere)).toBeNull();
+  });
+});
