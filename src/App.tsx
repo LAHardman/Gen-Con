@@ -18,6 +18,7 @@ import { buildEventSearchIndex } from './data/search';
 import {
   pinPlace,
   placeRoom,
+  placeSpot,
   roomPlace,
   type NavEnd,
   type NavPlace,
@@ -257,6 +258,23 @@ export default function App() {
   }, []);
 
   const selectedRoom = selectedRoomId ? ROOMS_BY_ID[selectedRoomId] : undefined;
+
+  /*
+   * What the header's search measures its results from.
+   *
+   * Where a route is being planned that is its starting point, since that is
+   * what somebody has just said they care about. Otherwise it is the room they
+   * have open or selected — the place they are looking at, which is the only
+   * thing the app knows about where they are while nothing has asked the
+   * browser. Nothing turns the device's positioning on for this: geolocation
+   * costs battery and is a question worth asking, and annotating a search list
+   * is not a reason to ask it.
+   */
+  const searchFrom = useMemo(() => {
+    if (nav?.from) return placeSpot(nav.from, device.fix);
+    const room = openRoom ?? selectedRoom;
+    return room ? { roomId: room.id } : null;
+  }, [nav?.from, device.fix, openRoom, selectedRoom]);
   const picking = !!editing && pickOnMap;
 
   const openRoomEvents = openRoom ? (index?.byRoom.get(openRoom.id) ?? []) : [];
@@ -282,7 +300,7 @@ export default function App() {
           </div>
         </div>
 
-        <SearchBar events={eventSearchIndex} onPick={handlePickSearchResult} />
+        <SearchBar events={eventSearchIndex} from={searchFrom} onPick={handlePickSearchResult} />
 
         <div className="app__tools">
           <div className="app__basemaps" role="group" aria-label="Basemap style">

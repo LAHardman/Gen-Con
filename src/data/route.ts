@@ -614,14 +614,29 @@ export function walkBetween(from: Anchor, to: Anchor): Walk | null {
  */
 const WORTH_STAYING_IN = 1.25;
 
-function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
-  const start = anchorNode('start', from);
-  const end = anchorNode('end', to);
+/** An end of a route: an id to call it by, and where it stands. */
+interface End {
+  id: string;
+  anchor: Anchor;
+}
 
+interface Graph {
+  nodes: Map<string, Node>;
+  edges: Map<string, Edge[]>;
+}
+
+/**
+ * The campus with some ends dropped into it.
+ *
+ * Split out of `search` because the expensive half of a route is this — copying
+ * the graph, and joining each end to everything on its own floor — and it is
+ * the half that does not care how many ends there are. One graph holding a
+ * hundred and fifty doorways costs about what one holding two costs, which is
+ * what makes an all-pairs table buildable at all. See `metresBetweenAll`.
+ */
+function graphWith(ends: End[], coveredOnly: boolean): Graph {
   const campus = campusGraph();
   const nodes = new Map(campus.nodes);
-  nodes.set(start.id, start);
-  nodes.set(end.id, end);
 
   const edges = new Map<string, Edge[]>();
   const add = (a: string, b: string, edge: Omit<Edge, 'to'>) => {
@@ -636,14 +651,14 @@ function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
     add(a, b, edge);
   }
 
-  // What the two ends themselves reach: everything on their own floor, and —
-  // where an end stands outdoors rather than on a floor somebody drew — the
-  // pavements. Without the second, the device could only ever be given a
-  // bearing.
-  const ours = [start, end];
+  // What the ends themselves reach: everything on their own floor, and — where
+  // one stands outdoors rather than on a floor somebody drew — the pavements.
+  // Without the second, the device could only ever be given a bearing.
+  const ours = ends.map((end) => anchorNode(end.id, end.anchor));
+  for (const node of ours) nodes.set(node.id, node);
   for (let i = 0; i < ours.length; i += 1) {
     const anchor = ours[i];
-    // The other end is joined once, from the first of the pair to hold it.
+    // Each other end is joined once, from the first of the pair to hold it.
     for (const other of [...campus.nodes.values(), ...ours.slice(i + 1)]) {
       const walk = walkEdge(anchor, other);
       if (walk) add(anchor.id, other.id, walk);
@@ -653,25 +668,33 @@ function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
     }
   }
 
-  /*
-   * Dijkstra, over a heap.
-   *
-   * This used to scan the whole frontier for its minimum, which was the right
-   * shape when the graph was forty portals. The pavements bring seven hundred
-   * junctions, and a scan per step made that quadratic — about a fifth of a
-   * second a route, on the phone that is holding the map.
-   */
-  const cost = new Map<string, number>([[start.id, 0]]);
+  return { nodes, edges };
+}
+
+/**
+ * Dijkstra, over a heap.
+ *
+ * This used to scan the whole frontier for its minimum, which was the right
+ * shape when the graph was forty portals. The pavements bring seven hundred
+ * junctions, and a scan per step made that quadratic — about a fifth of a
+ * second a route, on the phone that is holding the map.
+ *
+ * `stopAt` is an optimisation and only that: with it the search stops as soon
+ * as one destination is settled, and without it every node in the graph gets
+ * its true cost. The costs it does report are the same either way.
+ */
+function cheapest(edges: Map<string, Edge[]>, startId: string, stopAt?: string) {
+  const cost = new Map<string, number>([[startId, 0]]);
   const cameBy = new Map<string, { from: string; edge: Edge }>();
   const done = new Set<string>();
   const queue = new Frontier();
-  queue.push(start.id, 0);
+  queue.push(startId, 0);
 
   for (;;) {
     const here = queue.pop();
     if (here === null) break;
     if (done.has(here)) continue;
-    if (here === end.id) break;
+    if (here === stopAt) break;
     done.add(here);
 
     const best = cost.get(here)!;
@@ -683,6 +706,69 @@ function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
       queue.push(edge.to, next);
     }
   }
+
+  return { cost, cameBy };
+}
+
+/**
+ * How far it is from each of these places to every other, in metres.
+ *
+ * BUILD TIME ONLY. Nothing in the app calls this; `scripts/build-distances.mjs`
+ * does, and ships the answer as a table. It is here rather than in the script
+ * because it has to be the *same* router — a table built by a second
+ * implementation of the same idea is a table that disagrees with the route it
+ * is supposed to be predicting, and it would disagree silently.
+ *
+ * Two graphs and two Dijkstras per place rather than one, because
+ * `walkBetween`'s answer is the shorter of the two searches under
+ * `WORTH_STAYING_IN` and this has to give the same answer it would.
+ *
+ * The one thing it does not reproduce is `routeBetween`'s fallback to a
+ * straight line for a route made only of outdoor legs. That happens for a place
+ * with no floor drawn *and* no pavement within reach, which on this campus is
+ * nowhere; where it did happen the table would read a little long, which is the
+ * safe direction for an estimate to be wrong in.
+ */
+export function metresBetweenAll(places: End[]): Map<string, Map<string, number>> {
+  const shortest = graphWith(places, false);
+  const covered = graphWith(places, true);
+
+  const out = new Map<string, Map<string, number>>();
+  for (const place of places) {
+    const byAnything = cheapest(shortest.edges, place.id).cost;
+    const byCover = cheapest(covered.edges, place.id).cost;
+    const row = new Map<string, number>();
+    for (const other of places) {
+      if (other.id === place.id) continue;
+      const open = byAnything.get(other.id);
+      const inside = byCover.get(other.id);
+      const best =
+        inside === undefined
+          ? open
+          : open === undefined
+            ? inside
+            : inside <= open * WORTH_STAYING_IN
+              ? inside
+              : open;
+      if (best !== undefined) row.set(other.id, best);
+    }
+    out.set(place.id, row);
+  }
+  return out;
+}
+
+function search(from: Anchor, to: Anchor, coveredOnly: boolean): Walk | null {
+  const { nodes, edges } = graphWith(
+    [
+      { id: 'start', anchor: from },
+      { id: 'end', anchor: to },
+    ],
+    coveredOnly,
+  );
+  const start = nodes.get('start')!;
+  const end = nodes.get('end')!;
+
+  const { cost, cameBy } = cheapest(edges, start.id, end.id);
 
   if (!cost.has(end.id)) return null;
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { hitLabel, search, type EventSearchIndex, type SearchHit } from '../data/search';
+import { hitLabel, hitSpot, search, type EventSearchIndex, type SearchHit } from '../data/search';
 import { formatTimeRange } from '../data/events';
+import { formatRough, roughMinutes, type Spot } from '../data/nearby';
 
 interface Props {
   /**
@@ -9,13 +10,18 @@ interface Props {
    * keystroke is not, and doing it twice over is worse still.
    */
   events: EventSearchIndex;
+  /**
+   * Where to measure from, when anything says. Null while nothing does, and the
+   * results carry no time rather than a time from nowhere.
+   */
+  from?: Spot | null;
   /** Take the map to this room and open it. */
   onPick: (hit: SearchHit) => void;
 }
 
 const RESULT_LIMIT = 8;
 
-export function SearchBar({ events, onPick }: Props) {
+export function SearchBar({ events, from, onPick }: Props) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
@@ -23,6 +29,13 @@ export function SearchBar({ events, onPick }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const hits = useMemo(() => search(query, events, RESULT_LIMIT), [query, events]);
+
+  // How far each one is, read out of the table rather than routed: eight real
+  // routes would be a second of work per keystroke. See `nearby.ts`.
+  const away = useMemo(
+    () => (from ? hits.map((hit) => roughMinutes(from, hitSpot(hit))) : hits.map(() => null)),
+    [hits, from],
+  );
 
   useEffect(() => setActive(0), [query]);
 
@@ -115,6 +128,9 @@ export function SearchBar({ events, onPick }: Props) {
                 >
                   <span className="search__hit-main">{title}</span>
                   <span className="search__hit-sub">{`${detail}${when}`}</span>
+                  {away[position] !== null && (
+                    <span className="search__hit-away">{formatRough(away[position]!)}</span>
+                  )}
                 </button>
               </li>
             );

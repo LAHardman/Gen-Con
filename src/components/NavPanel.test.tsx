@@ -324,3 +324,60 @@ describe('while somebody is walking it', () => {
     expect(screen.getByText(/to walk/)).toBeTruthy();
   });
 });
+
+describe('how far away each candidate is', () => {
+  const typeInto = (label: string, text: string) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
+  const option = (name: RegExp) =>
+    within(screen.getByRole('listbox')).getByRole('option', { name });
+  /* Read off its own element. A row's whole text ends "… Level 1" then "2 min",
+     which concatenates to "12 min" — a trap that let an earlier version of
+     these assertions pass while comparing nonsense. */
+  const away = (name: RegExp) =>
+    within(option(name)).queryByText(/^(\d+ min|you are here)$/)?.textContent ?? '';
+  const minutes = (name: RegExp) => Number(/^(\d+) min$/.exec(away(name))?.[1]);
+
+  it('measures a destination from the start that is already chosen', () => {
+    setup({ from: HALL_B, to: null, editing: 'to' });
+    typeInto('Choose a destination', 'exhibit hall');
+    // Hall A is next door to Hall B; the Sagamore is upstairs and along.
+    expect(minutes(/Exhibit Hall A/)).toBeLessThan(6);
+    cleanup();
+    setup({ from: HALL_B, to: null, editing: 'to' });
+    typeInto('Choose a destination', 'sagamore');
+    expect(minutes(/Sagamore Ballroom/)).toBeGreaterThan(1);
+  });
+
+  it('measures a start from the destination, not from the start being replaced', () => {
+    // The end being edited is the one about to be thrown away, so measuring
+    // from it would answer a question nobody asked — and would answer it
+    // differently depending on what was there before.
+    setup({ from: SAGAMORE, to: HALL_B, editing: 'from' });
+    typeInto('Choose a starting point', 'exhibit hall a');
+    const fromHallB = minutes(/Exhibit Hall A/);
+    cleanup();
+    setup({ from: SAGAMORE, to: { kind: 'room', roomId: 'westin-grand-ballroom' }, editing: 'from' });
+    typeInto('Choose a starting point', 'exhibit hall a');
+    expect(minutes(/Exhibit Hall A/)).toBeGreaterThan(fromHallB);
+  });
+
+  it('says nothing while the other end is still unchosen', () => {
+    setup({ from: null, to: null, editing: 'to' });
+    typeInto('Choose a destination', 'sagamore');
+    expect(away(/Sagamore Ballroom/)).toBe('');
+  });
+
+  it('says nothing while "my location" has had no fix', () => {
+    // The end is chosen but the browser has not answered yet, and a time
+    // measured from a position nobody has is a made-up number.
+    setup({ from: DEVICE, to: null, editing: 'to', device: { status: 'locating', fix: null } });
+    typeInto('Choose a destination', 'sagamore');
+    expect(away(/Sagamore Ballroom/)).toBe('');
+  });
+
+  it('measures from where the device says it is once it has said', () => {
+    setup({ from: DEVICE, to: null, editing: 'to', device: READY });
+    typeInto('Choose a destination', 'sagamore');
+    expect(minutes(/Sagamore Ballroom/)).toBeGreaterThan(0);
+  });
+});

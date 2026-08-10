@@ -23,6 +23,7 @@ import { PLANNED_BOOTHS } from './booth-plan';
 import { ADDRESSES } from './addresses';
 import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
 import { pinPlace, roomPlace, type NavPlace } from './navigation';
+import type { Spot } from './nearby';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -78,6 +79,21 @@ const BOOTH_SIZE = new Map(PLANNED_BOOTHS.map((stand) => [stand.booth, stand]));
 /** Where a hit takes you — the one thing every consumer actually wants. */
 export function hitPlace(hit: SearchHit): NavPlace {
   return hit.pin ? pinPlace(hit.pin) : roomPlace(hit.room!);
+}
+
+/**
+ * A hit as the distance table wants it — see `nearby.ts`.
+ *
+ * A stand's room is already its hall: `roomOf` sends every exhibit-hall
+ * exhibitor through `hallForBooth`, which is the right answer for a walking
+ * time as well as for a route. Nobody walks to a booth; they walk to the hall
+ * and then look for the aisle.
+ */
+export function hitSpot(hit: SearchHit): Spot {
+  return {
+    roomId: hit.room?.id ?? null,
+    at: hit.pin ? { lat: hit.pin.lat, lng: hit.pin.lng } : null,
+  };
 }
 
 /** What a hit is called, and the line under it. */

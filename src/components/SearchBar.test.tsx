@@ -19,7 +19,7 @@
  * since the wiring between them is the part being asserted.
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SearchBar } from './SearchBar';
@@ -30,9 +30,9 @@ afterEach(cleanup);
 /** Rooms are searchable with no event feed at all, which is what a clone has. */
 const EVENTS = buildEventSearchIndex(null);
 
-function setup() {
+function setup(from: { roomId?: string | null } | null = null) {
   const onPick = vi.fn();
-  render(<SearchBar events={EVENTS} onPick={onPick} />);
+  render(<SearchBar events={EVENTS} from={from} onPick={onPick} />);
   const input = screen.getByRole('combobox') as HTMLInputElement;
   return {
     onPick,
@@ -212,5 +212,54 @@ describe('picking one', () => {
     fireEvent.change(input, { target: { value: 'catan' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onPick.mock.calls[0][0].room.id).toBe('hall-b');
+  });
+});
+
+/*
+ * How far away a result says it is, read off its own element.
+ *
+ * Never off the row's whole text: that ends "… Level 1" and then "2 min",
+ * which concatenates to "12 min" — a trap that let an earlier version of these
+ * assertions pass while comparing numbers that did not exist.
+ */
+const away = (option: HTMLElement) =>
+  within(option).queryByText(/^(\d+ min|you are here)$/)?.textContent ?? '';
+
+describe('how far away each result is', () => {
+  it('says nothing when nothing says where you are', () => {
+    // The header search has no starting point until a route is being planned
+    // or a room is open, and a time measured from nowhere would be a made-up
+    // number beside a real one.
+    const { type } = setup();
+    type('hall');
+    expect(screen.queryByText(/min$/)).toBeNull();
+  });
+
+  it('puts a time against each one once there is somewhere to measure from', () => {
+    const { type } = setup({ roomId: 'westin-grand-ballroom' });
+    type('hall');
+    expect(options().length).toBeGreaterThan(0);
+    for (const option of options()) expect(away(option)).toMatch(/^\d+ min$/);
+  });
+
+  it('says you are already there rather than putting a minute on it', () => {
+    const { type } = setup({ roomId: 'hall-a' });
+    type('exhibit hall a');
+    expect(away(options()[0])).toBe('you are here');
+  });
+
+  it('gives each result its own answer rather than one number for the list', () => {
+    // The one that proves it is measuring rather than printing a constant.
+    // From Hall A, Hall B is next door and Hall G is the far corner of the
+    // floor, reached round the outside of Hall H.
+    const { type } = setup({ roomId: 'hall-a' });
+    type('exhibit hall');
+    const minutes = (name: string) =>
+      Number(
+        /^(\d+) min$/.exec(
+          away(options().find((option) => option.textContent?.startsWith(name))!),
+        )?.[1],
+      );
+    expect(minutes('Exhibit Hall B')).toBeLessThan(minutes('Exhibit Hall G'));
   });
 });

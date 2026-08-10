@@ -19,6 +19,7 @@
 import { ROOMS, ROOMS_BY_ID, VENUES_BY_ID, roomBounds, roomShapes, type Room } from './venues';
 import { roomEntrance } from './walkable';
 import { walkBetween, type Anchor, type Walk } from './route';
+import type { Spot } from './nearby';
 import { distanceMetres, walkingMinutes, type LatLng } from '../utils/geo';
 import type { Pin } from './offsite';
 
@@ -152,6 +153,22 @@ export function placeAnchor(place: NavPlace, device: DeviceFix | null): Anchor |
 /** The room a place is, where it is one. */
 export function placeRoom(place: NavPlace | null): Room | undefined {
   return place?.kind === 'room' ? ROOMS_BY_ID[place.roomId] : undefined;
+}
+
+/**
+ * A place as the distance table wants it — see `nearby.ts`.
+ *
+ * Both halves where both are known, because they answer differently: a room
+ * has an exact row measured from its own doorway, and a position has to be
+ * snapped to the nearest one. Giving the table both lets it take the exact
+ * answer and fall back to the estimate only when it must.
+ */
+export function placeSpot(place: NavPlace | null, device: DeviceFix | null): Spot | null {
+  if (!place) return null;
+  return {
+    roomId: place.kind === 'room' ? place.roomId : null,
+    at: placePosition(place, device),
+  };
 }
 
 /**

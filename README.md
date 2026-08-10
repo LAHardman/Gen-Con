@@ -123,6 +123,7 @@ want to see it on a real device.
 | `npm run plans:campus` | Fetches Gen Con's own floor-plan tiles into `plans/campus/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:exhibitors` | Re-reads the stand list — who is at which booth |
+| `npm run data:distances` | Re-measures every room to every other, for the walking estimates |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
@@ -634,6 +635,47 @@ to grid the convention centre's Level 1. A route arriving mid-way is not a
 wasted warm-up — the part-built graph is kept and the route carries on from
 where the warming stopped. Measured in the running app, the first route now
 takes **70 ms**.
+
+**How far away something is, before you commit to going.** Every search result
+carries a walking time — from the room you have open, or from whichever end of
+the route is already settled. That cannot come from the router: a route costs
+**128 ms**, and eight results a keystroke would be a second of main-thread work
+each time you type a letter. So it comes from a table measured once, at build
+time, by that same router — `npm run data:distances` runs 149 single-source
+searches over one graph holding every doorway, which takes 2.7 seconds, and
+writes `src/data/distances.ts`. A lookup is an array index: **22,201 of them
+take 9 ms**.
+
+Room by room rather than by zone, and that was measured rather than assumed.
+Grouping the campus into venue-and-floor zones gives 31 of them and a 961-cell
+table, which sounds much cheaper until you look at what a zone is: the hotels
+really do collapse to one number, and the convention centre's Level 1 holds 20
+rooms spanning **1 to 5 minutes** internally. A single number for the floor
+where most of Gen Con happens would be wrong by four minutes on the walks that
+matter most. The full table is 11,026 pairs, one byte each in 16-metre steps —
+**9.3 KB gzipped**, right to eight metres, which is seven seconds' walking.
+
+Three things about what it says:
+
+- **A booth is its hall.** There is no row for stand 1229 and there should not
+  be: the halls are one open floor with air walls across them, and the walk is
+  to the hall. `hallForBooth` does that step.
+- **An extra minute, always.** The table answers "how far is that doorway from
+  this one"; somebody reading a search result is asking "how long until I am
+  there", which also contains finding the right door, reading a sign, and the
+  last stretch inside a room the size of a street. A minute is the smallest
+  unit the answer is printed in, so it is the smallest honest admission that
+  the two are not the same question. It is deliberately *not* added to the
+  route you have committed to — that one is drawn leg by leg and can be read.
+- **A position is snapped to the nearest doorway**, and the gap to it charged
+  at the same 1.3 the router charges its own unmapped outdoor lines. Standing
+  on a room's own doorway picks that room for all 149 of them; 21 m off it, the
+  estimate stays within two minutes of the real route on 98.7% of 528 sampled
+  pairs.
+
+The build refuses to write a table that disagrees with `walkBetween` on a
+sample of its own pairs, and a test re-routes eight more — the two halves of
+staleness being a room that was *added* and a room that *moved*.
 
 **A doorway is only a doorway if you can walk out of it.** The door is not in
 any of the data; what is in the data is the room's outline and the corridor

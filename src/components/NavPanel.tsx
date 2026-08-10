@@ -5,11 +5,13 @@ import {
   formatDistance,
   placeDetail,
   placeLabel,
+  placeSpot,
   type NavEnd,
   type NavPlace,
   type RouteSummary,
 } from '../data/navigation';
-import { hitLabel, hitPlace, search, type EventSearchIndex } from '../data/search';
+import { hitLabel, hitPlace, hitSpot, search, type EventSearchIndex } from '../data/search';
+import { formatRough, roughMinutes } from '../data/nearby';
 import { deviceMessage, type DeviceLocation } from '../hooks/useDeviceLocation';
 
 interface Props {
@@ -76,6 +78,27 @@ export function NavPanel({
   }, [editing, pickingOnMap]);
 
   const hits = useMemo(() => search(query, events, RESULT_LIMIT), [query, events]);
+
+  /*
+   * How far each candidate is from the end that is already settled.
+   *
+   * This is the question the panel exists to answer and could not: you had to
+   * pick a destination, wait for a route, read the time, and go back if it was
+   * not the one you wanted. Reading it off the table costs nothing, so every
+   * candidate can carry it — which is the difference between choosing and
+   * guessing-then-checking.
+   *
+   * Measured from the *other* end, so choosing a destination measures from
+   * where you are starting and choosing a start measures from where you are
+   * going. Null while that other end is not settled, and while a "my location"
+   * end has had no fix.
+   */
+  const settled = editing === 'to' ? from : to;
+  const away = useMemo(() => {
+    const spot = placeSpot(settled ?? null, device.fix);
+    if (!spot || (!spot.roomId && !spot.at)) return hits.map(() => null);
+    return hits.map((hit) => roughMinutes(spot, hitSpot(hit)));
+  }, [hits, settled, device.fix]);
 
   // Escape backs out one step at a time: first whatever is being chosen, then
   // the directions themselves — so it never throws away a route you had.
@@ -204,7 +227,7 @@ export function NavPanel({
                   {hits.length === 0 && (
                     <li className="search__empty">Nothing matches “{query.trim()}”</li>
                   )}
-                  {hits.map((hit) => {
+                  {hits.map((hit, position) => {
                     const { title, detail } = hitLabel(hit);
                     return (
                       <li key={hit.key}>
@@ -217,6 +240,9 @@ export function NavPanel({
                         >
                           <span className="search__hit-main">{title}</span>
                           <span className="search__hit-sub">{detail}</span>
+                          {away[position] !== null && (
+                            <span className="search__hit-away">{formatRough(away[position]!)}</span>
+                          )}
                         </button>
                       </li>
                     );

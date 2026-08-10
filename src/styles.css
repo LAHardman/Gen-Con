@@ -951,9 +951,14 @@ body {
 }
 
 .search__hit {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* Two columns: the name and its line, then how far away it is. Grid rather
+     than a column of flex so the time sits beside both lines and every row's
+     time lands on the same edge — a list you can scan down. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
@@ -971,6 +976,7 @@ body {
 }
 
 .search__hit-main {
+  grid-column: 1;
   font-size: 14px;
   font-weight: 600;
   /* Event titles run long; one line each keeps the list scannable. */
@@ -980,10 +986,26 @@ body {
 }
 
 .search__hit-sub {
+  grid-column: 1;
   color: var(--text-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * How far away it is, before anybody commits to going.
+ *
+ * Muted and set beside the name rather than inside its line, because it is an
+ * estimate and reads as one — the row still says what the thing *is* first.
+ */
+.search__hit-away {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
