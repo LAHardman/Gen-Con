@@ -45,9 +45,13 @@ const currentFloor = () =>
   floors().find((button) => button.getAttribute('aria-pressed') === 'true')?.textContent;
 
 function searchFor(text: string) {
-  const input = screen.getByRole('combobox');
+  // By name: the filter bar's sort control is a <select>, which is also a
+  // combobox, so the bare role now matches two things.
+  const input = screen.getByRole('combobox', { name: /search rooms and events/i });
   fireEvent.change(input, { target: { value: text } });
-  return screen.getAllByRole('option');
+  // Scoped to the results list: the filter bar's sort control is a <select>,
+  // and its <option>s carry the option role too.
+  return within(screen.getByRole('listbox')).getAllByRole('option');
 }
 
 describe('starting up', () => {

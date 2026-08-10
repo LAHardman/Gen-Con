@@ -3,28 +3,27 @@
  *
  * WHY IT IS A TIMELINE AND NOT A LIST. A list of times can be read; it cannot
  * be *seen*. What ruins a Saturday at Gen Con is not forgetting an event, it is
- * two of them that do not fit together — a four-hour game ending at two and a
- * seminar starting at two in the JW, eleven minutes' walk away. On a list those
+ * two of them that do not fit together — a four-hour game ending at one and a
+ * seminar starting at one in the JW, six minutes' walk away. On a list those
  * are two tidy rows. Drawn to scale, with the walk drawn in front of the event
  * it is a walk to, the gap is either there or it is not and you can see which
  * from across the room.
  *
- * SO THE TRAVEL BLOCK IS THE POINT of the page rather than a decoration on it.
+ * SO THE TRAVEL BAND IS THE POINT of the page rather than a decoration on it.
  * It is lighter than the event block because it is not the commitment — it is
- * what the commitment costs — and it sits immediately before the block it
- * belongs to, occupying exactly the minutes you would have to be walking.
- * Where those minutes are already spoken for by the event before, the pair is
- * marked: that is the thing worth knowing on the Wednesday rather than at two
- * o'clock on the Saturday.
+ * what the commitment costs — and it occupies exactly the minutes you would be
+ * walking, immediately before the block it leads to. Where those minutes are
+ * already spoken for by the event before, both turn amber.
  *
- * FOUR COLUMNS, ALWAYS IN THE MARKUP. Wide enough and all four are side by
- * side, which is how somebody plans; on a phone one shows at a time and the
- * day strip switches between them. The strip is always all four, so which day
- * it is stays visible whichever day is being looked at.
+ * ONE RULER FOR ALL FOUR DAYS. Every column is measured in minutes past
+ * midnight against a single axis, so ten o'clock on the Thursday is the same
+ * height as ten o'clock on the Saturday. Four separate rulers is what this was,
+ * and it made the columns incomparable — which defeats the one thing a four-day
+ * view is for: seeing that every morning is committed and every evening is not.
  *
- * THE TIMES ARE ESTIMATES AND SAY SO. They come from `nearby` — the distance
- * table plus its extra minute — not from the router. A dozen entries redrawing
- * on every tick of the clock cannot each afford a route.
+ * THE TIMES ARE ESTIMATES. They come from `nearby` — the distance table plus
+ * its extra minute — not from the router. A dozen entries redrawing on every
+ * tick of the clock cannot each afford a route.
  */
 
 import { useMemo, useState } from 'react';
@@ -37,16 +36,27 @@ import {
 } from '../data/events';
 import {
   conventionDays,
-  dayAxis,
   dayName,
-  isConventionDay,
   entryWhere,
+  isConventionDay,
+  minutesInto,
   planDay,
-  planEntry,
+  sharedAxis,
+  type DayAxis,
   type PlanEntry,
   type PlannedItem,
 } from '../data/plan';
-import { searchSessions, type EventSearchIndex } from '../data/search';
+import { searchSessions, type EventSearchIndex, type SessionHit } from '../data/search';
+import {
+  activeCount,
+  formatCost,
+  formatLength,
+  lengthMinutes,
+  type EventFilter,
+  type FilterChoices,
+  type SortKey,
+} from '../data/filters';
+import { EventFilters } from './EventFilters';
 import type { Plan } from '../hooks/usePlan';
 
 interface Props {
@@ -54,9 +64,12 @@ interface Props {
   /** The days the feed knows about. The four are picked out of these. */
   feedDays: readonly string[];
   events: EventSearchIndex;
+  choices: FilterChoices;
   nowMs: number;
   /** Show a planned entry on the map. */
   onShowRoom: (roomId: string) => void;
+  /** Open a session in full, which is where adding actually happens. */
+  onOpenEvent: (hit: SessionHit) => void;
 }
 
 /**
@@ -75,15 +88,15 @@ const SHORTEST_BLOCK = 24;
  * Room above the first hour line for its own label.
  *
  * The label is drawn above the line it names, so the topmost one hangs off the
- * top of the track and is clipped. Padding cannot fix it — absolutely
+ * top of the sheet and is clipped. Padding cannot fix it — absolutely
  * positioned children measure from the padding box — so the whole ruler is
  * pushed down by this instead.
  */
 const LABEL_ROOM = 12;
 
-const RESULT_LIMIT = 12;
+const RESULT_LIMIT = 20;
 
-export function PlanView({ plan, feedDays, events, nowMs, onShowRoom }: Props) {
+export function PlanView({ plan, feedDays, events, choices, nowMs, onShowRoom, onOpenEvent }: Props) {
   const days = useMemo(() => conventionDays(feedDays, plan.entries), [feedDays, plan.entries]);
 
   /*
@@ -107,9 +120,22 @@ export function PlanView({ plan, feedDays, events, nowMs, onShowRoom }: Props) {
   // Saturday without anything having to reset when the clock ticks.
   const shown = chosen ?? (today && days.includes(today) ? today : days[0]) ?? null;
 
+  const byDay = useMemo(() => days.map((day) => planDay(plan.entries, day)), [days, plan.entries]);
+  const nowMinutes =
+    today && days.includes(today) && offsetMinutes !== null
+      ? minutesInto(nowMs, today, offsetMinutes)
+      : null;
+  const axis = useMemo(() => sharedAxis(byDay, nowMinutes), [byDay, nowMinutes]);
+
   return (
     <section className="plan" aria-label="Your schedule">
-      <PlanSearch plan={plan} events={events} />
+      <PlanSearch
+        plan={plan}
+        events={events}
+        choices={choices}
+        feedDays={feedDays}
+        onOpenEvent={onOpenEvent}
+      />
 
       {days.length === 0 ? (
         <p className="plan__empty">
@@ -142,26 +168,76 @@ export function PlanView({ plan, feedDays, events, nowMs, onShowRoom }: Props) {
             ))}
           </div>
 
-          <div className="plan__columns">
+          {/* Headings for the wide layout, where all four columns are on screen
+              at once and the day strip above is hidden. */}
+          <div className="plan__heads" aria-hidden="true">
             {days.map((day) => (
-              <DayColumn
+              <h3
                 key={day}
-                day={day}
-                shown={day === shown}
-                today={day === today}
-                entries={plan.entries}
-                nowMs={nowMs}
-                offsetMinutes={offsetMinutes ?? 0}
-                onRemove={plan.remove}
-                onShowRoom={onShowRoom}
-              />
+                className={`plan__head${day === today ? ' plan__head--today' : ''}`}
+              >
+                {dayName(day)}
+                <span className="plan__head-count">{countOn(plan.entries, day)}</span>
+                {day === today && <span className="plan__now-tag">today</span>}
+              </h3>
             ))}
           </div>
+
+          {!axis ? (
+            <p className="plan__empty">Nothing planned yet. Search above to add something.</p>
+          ) : (
+            <div className="plan__grid">
+              <div
+                className="plan__sheet"
+                style={{ height: `${axis.minutes * PER_MINUTE + LABEL_ROOM * 2}px` }}
+              >
+                {/* One ruler, behind all four columns. That is the shared axis. */}
+                <div className="plan__hours" aria-hidden="true">
+                  {axis.hours.map((at) => (
+                    <div key={at} className="plan__hour" style={{ top: `${atMinute(axis, at)}px` }}>
+                      <span className="plan__hour-label">{clockAt(at)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="plan__columns">
+                  {days.map((day, index) => (
+                    <DayColumn
+                      key={day}
+                      day={day}
+                      shown={day === shown}
+                      today={day === today}
+                      items={byDay[index]}
+                      axis={axis}
+                      offsetMinutes={offsetMinutes ?? 0}
+                      nowMinutes={day === today ? nowMinutes : null}
+                      onRemove={plan.remove}
+                      onShowRoom={onShowRoom}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>
   );
 }
+
+/** Where a minute past midnight sits on the sheet. */
+const atMinute = (axis: DayAxis, minute: number) =>
+  (minute - axis.fromMinutes) * PER_MINUTE + LABEL_ROOM;
+
+/**
+ * A minute past midnight, written as a clock time.
+ *
+ * The ruler is a clock rather than a date, so this formats an offset from the
+ * epoch at offset zero: "10:00 AM" then means the tenth hour and nothing else.
+ * Minutes past 1,440 wrap round, which is what a clock does — a game running to
+ * two in the morning is drawn continuing off the bottom of the day it started.
+ */
+const clockAt = (minute: number) => formatClock((minute % (24 * 60)) * 60_000, 0);
 
 const countOn = (entries: readonly PlanEntry[], day: string) => {
   const on = entries.filter((entry) => entry.start.slice(0, 10) === day).length;
@@ -174,71 +250,50 @@ function DayColumn({
   day,
   shown,
   today,
-  entries,
-  nowMs,
+  items,
+  axis,
   offsetMinutes,
+  nowMinutes,
   onRemove,
   onShowRoom,
 }: {
   day: string;
   shown: boolean;
   today: boolean;
-  entries: readonly PlanEntry[];
-  nowMs: number;
-  /** The convention's own offset, so the ruler reads as the clock on the wall. */
-
+  items: readonly PlannedItem[];
+  axis: DayAxis;
+  /** The convention's own offset, so a day's midnight is its own midnight. */
   offsetMinutes: number;
+  /** Where now sits on the shared ruler, or null on any day that is not today. */
+  nowMinutes: number | null;
   onRemove: (id: string) => void;
   onShowRoom: (roomId: string) => void;
 }) {
-  const items = useMemo(() => planDay(entries, day), [entries, day]);
-  const axis = useMemo(() => dayAxis(items, today ? nowMs : null), [items, today, nowMs]);
-  const top = (atMs: number) =>
-    ((atMs - (axis?.fromMs ?? 0)) / 60_000) * PER_MINUTE + LABEL_ROOM;
+  const top = (atMs: number) => atMinute(axis, minutesInto(atMs, day, offsetMinutes));
 
   return (
     <div
       className={`plan__column${shown ? ' plan__column--shown' : ''}${today ? ' plan__column--today' : ''}`}
       aria-label={dayName(day)}
     >
-      <h3 className="plan__column-head">
-        {dayName(day)}
-        <span className="plan__column-count">{countOn(entries, day)}</span>
-        {today && <span className="plan__now-tag">today</span>}
-      </h3>
+      {items.length === 0 && <p className="plan__empty plan__empty--column">Nothing planned</p>}
 
-      {!axis ? (
-        <p className="plan__empty">Nothing planned. Search above to add something.</p>
-      ) : (
-        <div
-          className="plan__track"
-          style={{ height: `${axis.minutes * PER_MINUTE + LABEL_ROOM * 2}px` }}
-        >
-          {axis.hours.map((at) => (
-            <div key={at} className="plan__hour" style={{ top: `${top(at)}px` }}>
-              <span className="plan__hour-label">{formatClock(at, offsetMinutes)}</span>
-            </div>
-          ))}
+      {items.map((item) => (
+        <Block key={item.entry.id} item={item} top={top} onRemove={onRemove} onShowRoom={onShowRoom} />
+      ))}
 
-          {items.map((item) => (
-            <Block key={item.entry.id} item={item} top={top} onRemove={onRemove} onShowRoom={onShowRoom} />
-          ))}
-
-          {/*
-           * The mark for the current time. Only today's column can contain it:
-           * these are absolute instants, so a Thursday ruler cannot span a
-           * Saturday afternoon — and it is `dayAxis` being given `now` only for
-           * today that keeps the other three from stretching to reach it.
-           *
-           * Drawn last so it sits over the blocks rather than under them. Its
-           * whole job is to say where you are in the day, and a line hidden
-           * behind a four-hour game says nothing.
-           */}
-          {nowMs >= axis.fromMs && nowMs <= axis.toMs && (
-            <div className="plan__now" style={{ top: `${top(nowMs)}px` }} aria-hidden="true">
-              <span className="plan__now-time">{formatClock(nowMs, offsetMinutes)}</span>
-            </div>
-          )}
+      {/*
+       * The mark for the current time, on today's column and nowhere else. The
+       * ruler is shared, so every column would put it at the same height — and
+       * a line across Thursday saying "now" would say something false.
+       *
+       * Drawn last so it sits over the blocks rather than under them: its whole
+       * job is to say where you are in the day, and a line hidden behind a
+       * four-hour game says nothing.
+       */}
+      {nowMinutes !== null && nowMinutes >= axis.fromMinutes && nowMinutes <= axis.toMinutes && (
+        <div className="plan__now" style={{ top: `${atMinute(axis, nowMinutes)}px` }}>
+          <span className="plan__now-time">{clockAt(nowMinutes)}</span>
         </div>
       )}
     </div>
@@ -323,8 +378,23 @@ function Block({
 
 /* --------------------------------------------------------------- adding */
 
-function PlanSearch({ plan, events }: { plan: Plan; events: EventSearchIndex }) {
+function PlanSearch({
+  plan,
+  events,
+  choices,
+  feedDays,
+  onOpenEvent,
+}: {
+  plan: Plan;
+  events: EventSearchIndex;
+  choices: FilterChoices;
+  feedDays: readonly string[];
+  onOpenEvent: (hit: SessionHit) => void;
+}) {
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<EventFilter>({});
+  const [sort, setSort] = useState<SortKey | undefined>(undefined);
+
   /*
    * Only the four days can be offered.
    *
@@ -336,12 +406,14 @@ function PlanSearch({ plan, events }: { plan: Plan; events: EventSearchIndex }) 
    */
   const hits = useMemo(
     () =>
-      searchSessions(query, events, RESULT_LIMIT * 3).filter((hit) =>
-        isConventionDay(hit.event.start.slice(0, 10)),
-      ).slice(0, RESULT_LIMIT),
-    [query, events],
+      searchSessions(query, events, RESULT_LIMIT * 3, filter, sort)
+        .filter((hit) => isConventionDay(hit.event.start.slice(0, 10)))
+        .slice(0, RESULT_LIMIT),
+    [query, events, filter, sort],
   );
-  const asked = query.trim().length >= 2;
+  // A filter alone is a question — "everything free on Saturday afternoon" has
+  // no word in it — so the list opens on either.
+  const asked = query.trim().length >= 2 || activeCount(filter) > 0;
 
   return (
     <div className="plan__add">
@@ -352,30 +424,44 @@ function PlanSearch({ plan, events }: { plan: Plan; events: EventSearchIndex }) 
         aria-label="Search events to add to your schedule"
         autoComplete="off"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(change) => setQuery(change.target.value)}
+      />
+
+      <EventFilters
+        filter={filter}
+        sort={sort}
+        days={feedDays.filter(isConventionDay)}
+        choices={choices}
+        onChange={setFilter}
+        onSort={setSort}
       />
 
       {asked && (
         <ul className="plan__hits" aria-label="Matching sessions">
-          {hits.length === 0 && <li className="search__empty">Nothing matches “{query.trim()}”</li>}
-          {hits.map(({ event, room, pin }) => {
-            const held = plan.planned(event.id);
+          {hits.length === 0 && <li className="search__empty">Nothing matches</li>}
+          {hits.map((hit) => {
+            const held = plan.planned(hit.event.id);
             return (
-              <li key={event.id}>
+              <li key={hit.event.id}>
                 <button
                   type="button"
                   className={`plan__hit${held ? ' plan__hit--held' : ''}`}
                   aria-pressed={held}
-                  onClick={() => plan.toggle(planEntry(event, room, pin))}
+                  onClick={() => onOpenEvent(hit)}
                 >
-                  <span className="search__hit-main">{event.title}</span>
+                  <span className="search__hit-main">{hit.event.title}</span>
                   <span className="search__hit-sub">
-                    {`${dayName(event.start.slice(0, 10))} ${formatTimeRange(event)} · ${
-                      room?.shortName ?? room?.name ?? pin?.name ?? event.locationText
-                    }`}
+                    {[
+                      `${dayName(hit.event.start.slice(0, 10))} ${formatTimeRange(hit.event)}`,
+                      formatLength(lengthMinutes(hit.event)),
+                      formatCost(hit.event.cost),
+                      hit.room?.shortName ?? hit.room?.name ?? hit.pin?.name ?? hit.event.locationText,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
                   <span className="plan__hit-mark" aria-hidden="true">
-                    {held ? '✓' : '+'}
+                    {held ? '✓' : '›'}
                   </span>
                 </button>
               </li>

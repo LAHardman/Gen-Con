@@ -14,7 +14,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildEventSearchIndex, search, type EventSearchIndex } from './search';
+import { buildEventSearchIndex, search, searchSessions, type EventSearchIndex } from './search';
+import { ROOMS_BY_ID } from './venues';
 import { indexEvents, type ConEvent } from './events';
 
 const NO_EVENTS: EventSearchIndex = { entries: [] };
@@ -270,5 +271,49 @@ describe('finding an event', () => {
 
   it('has no events at all before a feed arrives', () => {
     expect(buildEventSearchIndex(null).entries).toEqual([]);
+  });
+});
+
+describe('filtering and ordering', () => {
+  const feed: EventSearchIndex = {
+    entries: [
+      { room: ROOMS_BY_ID['hall-a'], event: { id: 'a', title: 'Catan Open', locationText: 'ICC', start: '2026-07-30T09:00:00-04:00', end: '2026-07-30T10:00:00-04:00', durationMinutes: 60, type: 'BGM', cost: 6, roomId: 'hall-a' }, title: 'catan open' },
+      { room: ROOMS_BY_ID['westin-grand-ballroom'], event: { id: 'b', title: 'Catan Masters', locationText: 'Westin', start: '2026-08-01T15:00:00-04:00', end: '2026-08-01T19:00:00-04:00', durationMinutes: 240, type: 'RPG', cost: 0, roomId: 'westin-grand-ballroom' }, title: 'catan masters' },
+    ],
+  };
+
+  it('answers a filter with no words in it at all', () => {
+    // "Everything free" is a real question with nothing to type, and refusing
+    // it until somebody types two letters would make the filters decoration.
+    expect(searchSessions('', feed, 10, { maxCost: 0 }).map((hit) => hit.event.id)).toEqual(['b']);
+    expect(searchSessions('', feed, 10)).toEqual([]);
+  });
+
+  it('narrows a typed search as well as replacing one', () => {
+    expect(searchSessions('catan', feed, 10).map((hit) => hit.event.id)).toEqual(['a', 'b']);
+    expect(searchSessions('catan', feed, 10, { types: ['RPG'] }).map((hit) => hit.event.id)).toEqual(['b']);
+  });
+
+  it('orders the whole list rather than breaking ties within it', () => {
+    // The failure that looks like a working sort: "cheapest first" applied
+    // inside each tier of how well the title matched is the old order.
+    const byCost = searchSessions('catan', feed, 10, {}, 'cost').map((hit) => hit.event.id);
+    expect(byCost).toEqual(['b', 'a']);
+    expect(searchSessions('catan', feed, 10, {}, 'length').map((hit) => hit.event.id)).toEqual(['a', 'b']);
+  });
+
+  it('drops rooms and stands from the map search while a filter is on', () => {
+    // Exhibit Hall B has no day, no cost and no length, so "free on Saturday"
+    // can be neither true nor false of it. Offering it anyway would answer a
+    // different question from the one that was asked.
+    const wide = search('hall', feed, 20);
+    expect(wide.some((hit) => hit.kind === 'room')).toBe(true);
+    const narrowed = search('hall', feed, 20, { maxCost: 0 });
+    expect(narrowed.every((hit) => hit.kind === 'event')).toBe(true);
+  });
+
+  it('answers the map search from a filter alone too', () => {
+    const hits = search('', feed, 20, { types: ['BGM'] });
+    expect(hits.map((hit) => hit.event?.id)).toEqual(['a']);
   });
 });

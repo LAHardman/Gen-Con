@@ -18,6 +18,7 @@ import type { ConEvent } from '../data/events';
 import type { EventSearchIndex } from '../data/search';
 import type { Plan } from '../hooks/usePlan';
 import { ROOMS_BY_ID } from '../data/venues';
+import { filterChoices } from '../data/filters';
 
 const THURSDAY = '2026-07-30';
 const SATURDAY = '2026-08-01';
@@ -53,14 +54,18 @@ const indexOf = (sessions: ConEvent[], roomId = 'hall-a'): EventSearchIndex => (
   })),
 });
 
+const opened = vi.fn();
+
 const show = (plan: Plan, events: EventSearchIndex = indexOf([]), nowMs = SATURDAY_AFTERNOON) =>
   render(
     <PlanView
       plan={plan}
       feedDays={FEED_DAYS}
       events={events}
+      choices={filterChoices(events.entries.map((entry) => entry.event))}
       nowMs={nowMs}
       onShowRoom={vi.fn()}
+      onOpenEvent={opened}
     />,
   );
 
@@ -73,7 +78,10 @@ const afternoon = planEntry(
   { id: 'westin-grand-ballroom' },
 );
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  opened.mockClear();
+});
 
 describe('the four days', () => {
   it('shows Thursday to Sunday and no Wednesday', () => {
@@ -185,7 +193,9 @@ describe('the day drawn to scale', () => {
     // them through `toISOString()` puts a Z on them, and every hour label reads
     // four hours out — on a page whose entire purpose is when things are.
     show(planOf([morning, afternoon]));
-    const labels = [...saturday().querySelectorAll('.plan__hour-label')].map((tick) => tick.textContent);
+    // One ruler for all four days, so the labels live above the columns rather
+    // than inside any one of them.
+    const labels = [...document.querySelectorAll('.plan__hour-label')].map((tick) => tick.textContent);
     // The morning game starts at nine and the axis opens half an hour before.
     expect(labels[0]).toMatch(/^8[:\s]/);
     expect(labels.some((label) => label?.startsWith('9'))).toBe(true);
@@ -245,13 +255,17 @@ describe('adding a session', () => {
     expect(screen.queryByText(/Wednesday/)).toBeNull();
   });
 
-  it('adds the showing that was pressed', () => {
+  it('opens the showing that was pressed rather than adding it blind', () => {
+    // A title and a room is not enough to decide by: the cost, the age limit
+    // and whether any tickets are left are all reasons not to add it, and none
+    // of them fit on a result row.
     const plan = planOf([]);
     show(plan, indexOf(sessions));
     type('painting');
     fireEvent.click(screen.getAllByRole('button', { name: /Saturday/ })[0]);
-    expect(plan.toggle).toHaveBeenCalledTimes(1);
-    expect(plan.toggle.mock.calls[0][0]).toMatchObject({ id: 'sat', roomId: 'hall-a' });
+    expect(plan.toggle).not.toHaveBeenCalled();
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(opened.mock.calls[0][0].event.id).toBe('sat');
   });
 
   it('shows what is already on the plan', () => {
@@ -267,12 +281,24 @@ describe('adding a session', () => {
     type('zzzzzz');
     expect(screen.getByText(/nothing matches/i)).toBeTruthy();
   });
+
+  it('answers a filter with no words in it at all', () => {
+    // "Everything on Saturday" is a real question and has nothing to type.
+    show(planOf([]), indexOf(sessions));
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Day' })).getByRole('button', { name: 'Saturday' }));
+    const offered = screen.getAllByRole('listitem').map((row) => row.textContent);
+    expect(offered).toHaveLength(1);
+    expect(offered[0]).toContain('Saturday');
+  });
 });
 
 describe('an empty plan', () => {
   it('still shows the four days, and says what to do', () => {
     show(planOf([]));
     expect(screen.getAllByRole('tab')).toHaveLength(4);
-    expect(within(document.querySelector('.plan__column--shown')!).getByText(/nothing planned/i)).toBeTruthy();
+    // No ruler at all with nothing to rule: one empty state rather than four.
+    expect(document.querySelector('.plan__grid')).toBeNull();
+    expect(screen.getByText(/nothing planned yet/i)).toBeTruthy();
   });
 });

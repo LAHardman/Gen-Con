@@ -904,6 +904,8 @@ body {
 
 .search {
   position: relative;
+  /* The results list and the filter panel both hang out of this over the map. */
+  z-index: 2;
   flex: 1 1 260px;
   min-width: 0;
   max-width: 420px;
@@ -1609,6 +1611,11 @@ body {
 
 .plan__add {
   position: relative;
+  /* Its own stacking context, above the sheet below it. Without this the
+     results list and the filter panel compete with the schedule's own layers,
+     and the now-line — which is deliberately drawn over everything in its
+     column — draws over the filter panel too. */
+  z-index: 5;
   flex: 0 0 auto;
 }
 
@@ -1731,22 +1738,79 @@ body {
   vertical-align: middle;
 }
 
-.plan__columns {
-  display: flex;
-  gap: 10px;
+/*
+ * One scroller holding one sheet holding one ruler, with the four columns laid
+ * over it. The scroll has to be shared: four columns that scrolled apart would
+ * put Thursday's ten o'clock beside Saturday's two, which is exactly what the
+ * shared axis exists to stop.
+ */
+.plan__grid {
+  position: relative;
+  z-index: 0;
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.plan__sheet {
+  position: relative;
+}
+
+.plan__hours {
+  position: absolute;
+  inset: 0;
+}
+
+.plan__columns {
+  position: absolute;
+  inset: 0;
+  /* Clear of the ruler's own gutter. */
+  left: 64px;
+  display: flex;
+  gap: 10px;
 }
 
 .plan__column {
+  position: relative;
   display: none;
-  flex-direction: column;
   min-width: 0;
   flex: 1 1 0;
 }
 
 .plan__column--shown {
+  display: block;
+}
+
+/* Day headings for the wide layout, aligned with the columns under them. */
+.plan__heads {
+  display: none;
+  gap: 10px;
+  padding-left: 64px;
+  flex: 0 0 auto;
+}
+
+.plan__head {
   display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.plan__head--today {
+  color: var(--text);
+}
+
+.plan__head-count {
+  font-size: 12px;
+  font-weight: 400;
 }
 
 /* Wide enough for all four at once, which is how somebody plans a convention.
@@ -1754,40 +1818,16 @@ body {
    nothing, and a control that does nothing is worse than one that is absent. */
 @media (min-width: 900px) {
   .plan__column {
-    display: flex;
+    display: block;
   }
 
   .plan__days {
     display: none;
   }
-}
 
-.plan__column-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-muted);
-  /* One column is shown on a phone and its name is already in the day strip
-     above; four columns need their own headings. */
-  display: none;
-}
-
-@media (min-width: 900px) {
-  .plan__column-head {
+  .plan__heads {
     display: flex;
   }
-}
-
-.plan__column--today .plan__column-head {
-  color: var(--text);
-}
-
-.plan__column-count {
-  font-size: 12px;
-  font-weight: 400;
 }
 
 .plan__now-tag {
@@ -1800,24 +1840,9 @@ body {
   letter-spacing: 0.04em;
 }
 
-.plan__track {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  /* The ruler's labels live in this gutter — wide enough for "10:00 AM" on one
-     line, because a wrapped time label collides with the hour below it. */
-  padding-left: 64px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.plan__column {
-  overflow-y: auto;
-}
-
 .plan__hour {
   position: absolute;
-  left: 0;
+  left: 56px;
   right: 0;
   height: 0;
   border-top: 1px solid var(--border);
@@ -1825,7 +1850,7 @@ body {
 
 .plan__hour-label {
   position: absolute;
-  left: 0;
+  left: -56px;
   top: -8px;
   width: 56px;
   color: var(--text-muted);
@@ -1840,7 +1865,7 @@ body {
  */
 .plan__block {
   position: absolute;
-  left: 64px;
+  left: 0;
   right: 0;
   display: flex;
   flex-direction: column;
@@ -1911,7 +1936,7 @@ body {
  */
 .plan__travel {
   position: absolute;
-  left: 64px;
+  left: 0;
   right: 0;
   min-height: 4px;
   padding: 0;
@@ -1963,6 +1988,11 @@ body {
   font-size: 13px;
 }
 
+.plan__empty--column {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
 /* The add button on a room's own list of sessions, which is where individual
    showings are actually read. */
 .schedule__add {
@@ -1985,4 +2015,186 @@ body {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
+}
+
+/* ------------------------------------------------------------- the filters */
+
+.filters {
+  position: relative;
+  margin-top: 6px;
+}
+
+.filters__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filters__toggle,
+.filters__clear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filters__toggle--active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.filters__count {
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.filters__sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.filters__sort select,
+.filters__range select,
+.filters__range input,
+.filters__text {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+/*
+ * Folded away until asked for: nine dimensions of filtering above a search box
+ * would bury the search box, and most searches are still somebody typing a
+ * title. Floated over what is beneath rather than pushing it down, so opening
+ * the panel never moves the results out from under a thumb.
+ */
+.filters__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  max-height: 60vh;
+  padding: 12px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.filters__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.filters__group legend {
+  padding: 0 0 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filters__values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.filters__chip {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filters__chip--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.filters__range {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.filters__range input {
+  width: 74px;
+}
+
+.filters__text {
+  width: 100%;
+}
+
+/* --------------------------------------------------------- event details */
+
+.event-dialog__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 4px 0 0;
+}
+
+.event-dialog__fact {
+  display: contents;
+}
+
+.event-dialog__fact dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.event-dialog__fact dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Gen Con's descriptions run to a paragraph and arrive over the network, so
+   this is the one part of the dialog that may be absent — see useEventNotes. */
+.event-dialog__description {
+  margin: 12px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.event-dialog__note {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }

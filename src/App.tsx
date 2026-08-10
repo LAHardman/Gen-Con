@@ -5,7 +5,8 @@ import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import { PlanView } from './components/PlanView';
-import type { SearchHit } from './data/search';
+import { EventDialog } from './components/EventDialog';
+import type { SearchHit, SessionHit } from './data/search';
 import type { Pin } from './data/offsite';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
@@ -17,6 +18,7 @@ import { useWarmCampus } from './hooks/useWarmCampus';
 import { usePlan } from './hooks/usePlan';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
+import { filterChoices } from './data/filters';
 import {
   pinPlace,
   placeRoom,
@@ -60,6 +62,12 @@ export default function App() {
   // on every change — see `usePlan` for why it lives nowhere else.
   const plan = usePlan();
 
+  // One session, opened in full. Both searches go through this rather than
+  // acting on a title and a room: whether it costs forty dollars, whether it is
+  // 21+, whether any tickets are left are all reasons not to add it, and none
+  // of them fit on a result row.
+  const [openEvent, setOpenEvent] = useState<SessionHit | null>(null);
+
   // Directions cost a second and a half the first time and 5 ms after it, and
   // that second and a half used to be spent inside the tap. Now it is spent
   // here, while the map is being looked at.
@@ -69,6 +77,17 @@ export default function App() {
   // panel search the same 27,000 titles, and lowercasing them twice per feed
   // is twice as much work as it needs to be.
   const eventSearchIndex = useMemo(() => buildEventSearchIndex(index), [index]);
+
+  /*
+   * What the filter pickers can offer, built from the feed rather than written
+   * down — see `filterChoices`. Over the search index rather than the raw feed
+   * because that is the same list the filters run against, so a picker can
+   * never offer a value that finds nothing.
+   */
+  const choices = useMemo(
+    () => filterChoices(eventSearchIndex.entries.map((entry) => entry.event)),
+    [eventSearchIndex],
+  );
 
   /*
    * Nothing asks the browser where you are until you have asked it something
@@ -370,7 +389,13 @@ export default function App() {
         {/* One search box at a time: the schedule has its own, and it looks for
             individual sessions rather than places. */}
         {tab === 'map' && (
-          <SearchBar events={eventSearchIndex} from={searchFrom} onPick={handlePickSearchResult} />
+          <SearchBar
+            events={eventSearchIndex}
+            from={searchFrom}
+            choices={choices}
+            feedDays={index?.days ?? []}
+            onPick={handlePickSearchResult}
+          />
         )}
 
         <div className="app__tools">
@@ -430,8 +455,10 @@ export default function App() {
             plan={plan}
             feedDays={index?.days ?? []}
             events={eventSearchIndex}
+            choices={choices}
             nowMs={nowMs}
             onShowRoom={handleShowPlannedRoom}
+            onOpenEvent={setOpenEvent}
           />
         )}
         {tab === 'map' && nav && (
@@ -453,6 +480,30 @@ export default function App() {
           />
         )}
       </main>
+
+      {openEvent && (
+        <EventDialog
+          event={openEvent.event}
+          room={openEvent.room}
+          pin={openEvent.pin}
+          plan={plan}
+          onClose={() => setOpenEvent(null)}
+          onShowOnMap={(roomId) => {
+            setOpenEvent(null);
+            handleShowPlannedRoom(roomId);
+          }}
+          onNavigate={(room, pin) => {
+            setOpenEvent(null);
+            setTab('map');
+            if (room) handleNavigateToRoom(room);
+            else if (pin) {
+              setNav({ from: null, to: pinPlace(pin) });
+              setEditing('from');
+              setPickOnMap(false);
+            }
+          }}
+        />
+      )}
 
       {openRoom && (
         <RoomDialog

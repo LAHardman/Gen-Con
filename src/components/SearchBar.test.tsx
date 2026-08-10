@@ -24,6 +24,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SearchBar } from './SearchBar';
 import { buildEventSearchIndex } from '../data/search';
+import { filterChoices } from '../data/filters';
 
 afterEach(cleanup);
 
@@ -32,8 +33,18 @@ const EVENTS = buildEventSearchIndex(null);
 
 function setup(from: { roomId?: string | null } | null = null) {
   const onPick = vi.fn();
-  render(<SearchBar events={EVENTS} from={from} onPick={onPick} />);
-  const input = screen.getByRole('combobox') as HTMLInputElement;
+  render(
+    <SearchBar
+      events={EVENTS}
+      from={from}
+      choices={filterChoices([])}
+      feedDays={[]}
+      onPick={onPick}
+    />,
+  );
+  // By name: the filter bar's sort control is a <select>, which is also a
+  // combobox, so the bare role now matches two things.
+  const input = screen.getByRole('combobox', { name: /search rooms and events/i }) as HTMLInputElement;
   return {
     onPick,
     input,
@@ -46,7 +57,17 @@ function setup(from: { roomId?: string | null } | null = null) {
   };
 }
 
-const options = () => screen.queryAllByRole('option');
+/*
+ * Only the results list's options.
+ *
+ * The filter bar's sort control is a <select>, and its <option>s carry the
+ * option role too — so the bare query matches five things that are not results.
+ */
+const results = () => document.getElementById('search-results');
+const options = () => {
+  const list = results();
+  return list ? within(list).queryAllByRole('option') : [];
+};
 const highlighted = () => options().find((option) => option.getAttribute('aria-selected') === 'true');
 
 describe('when the list is on screen', () => {
@@ -207,8 +228,8 @@ describe('picking one', () => {
       ]),
     } as never);
     const onPick = vi.fn();
-    render(<SearchBar events={feed} onPick={onPick} />);
-    const input = screen.getByRole('combobox');
+    render(<SearchBar events={feed} choices={filterChoices([])} feedDays={[]} onPick={onPick} />);
+    const input = screen.getByRole('combobox', { name: /search rooms and events/i });
     fireEvent.change(input, { target: { value: 'catan' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onPick.mock.calls[0][0].room.id).toBe('hall-b');

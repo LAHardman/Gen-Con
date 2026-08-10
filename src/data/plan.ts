@@ -24,7 +24,7 @@
  * that can be tested by calling it.
  */
 
-import { dayKey, eventEndMs, type ConEvent } from './events';
+import { dayKey, eventEndMs, offsetMinutesOf, type ConEvent } from './events';
 import { roughMinutes, type Spot } from './nearby';
 import { ROOMS_BY_ID, VENUES_BY_ID } from './venues';
 import type { Pin } from './offsite';
@@ -184,40 +184,81 @@ export function planDay(entries: readonly PlanEntry[], day: string): PlannedItem
 
 /* ------------------------------------------------------------- the ruler */
 
+/** Midnight at the start of a day, in the convention's own offset. */
+export function dayStartMs(day: string, offsetMinutes: number): number {
+  return Date.parse(`${day}T00:00:00Z`) - offsetMinutes * 60_000;
+}
+
 export interface DayAxis {
-  fromMs: number;
-  toMs: number;
+  /** Minutes past midnight where the ruler begins, and where it ends. */
+  fromMinutes: number;
+  toMinutes: number;
+  /** How tall the ruler is, in minutes. */
   minutes: number;
-  /** Every hour boundary inside the span, for the ruler down the side. */
+  /** Every hour boundary inside the span, as minutes past midnight. */
   hours: number[];
 }
 
-/** An hour of margin, so the first block is not jammed against the top. */
+/** Half an hour of margin, so the first block is not jammed against the top. */
 const MARGIN_MINUTES = 30;
-const HOUR = 3_600_000;
+const DAY_MINUTES = 24 * 60;
 
 /**
- * The span of clock time a day's column has to cover.
+ * ONE ruler for all four days, in minutes past midnight rather than in
+ * milliseconds.
  *
- * `now` is folded in when it falls on the day being drawn, because the marker
- * for it has to have somewhere to sit: a Saturday whose only entry is at nine
- * in the morning still has to show a line at four in the afternoon, otherwise
- * the mark is either off the end of the ruler or silently absent.
+ * Four rulers is what this used to be, and it made the four columns
+ * incomparable: Thursday's ten o'clock and Saturday's ten o'clock sat at
+ * different heights, so the one thing a four-day view is *for* — seeing that
+ * every morning is committed and every evening is not — could not be seen. In
+ * minutes past midnight, the same clock time is the same height in every
+ * column, which is the whole point.
+ *
+ * Past midnight is allowed to exceed 1,440. A game that runs from eight in the
+ * evening until two in the morning belongs on the day it started, drawn
+ * continuing off the bottom of it, rather than wrapped round to the top.
+ *
+ * `now` is folded in when today is one of the days, because the marker for it
+ * has to have somewhere to sit: a Saturday whose only entry was this morning
+ * still has to show a line at four in the afternoon.
  */
-export function dayAxis(items: readonly PlannedItem[], nowMs: number | null): DayAxis | null {
-  if (!items.length) return null;
-  const starts = items.map((item) => item.leaveByMs ?? item.startMs);
-  let fromMs = Math.min(...starts) - MARGIN_MINUTES * 60_000;
-  let toMs = Math.max(...items.map((item) => item.endMs)) + MARGIN_MINUTES * 60_000;
-  if (nowMs !== null) {
-    fromMs = Math.min(fromMs, nowMs - MARGIN_MINUTES * 60_000);
-    toMs = Math.max(toMs, nowMs + MARGIN_MINUTES * 60_000);
+export function sharedAxis(
+  days: readonly PlannedItem[][],
+  nowMinutes: number | null,
+): DayAxis | null {
+  let from = Infinity;
+  let to = -Infinity;
+
+  for (const items of days) {
+    for (const item of items) {
+      const dayStart = dayStartMs(dayKey(item.entry.start), offsetOf(item.entry.start));
+      const begins = ((item.leaveByMs ?? item.startMs) - dayStart) / 60_000;
+      const ends = (item.endMs - dayStart) / 60_000;
+      from = Math.min(from, begins - MARGIN_MINUTES);
+      to = Math.max(to, ends + MARGIN_MINUTES);
+    }
   }
-  // Out to whole hours, so the ruler's labels land on its own edges.
-  fromMs = Math.floor(fromMs / HOUR) * HOUR;
-  toMs = Math.ceil(toMs / HOUR) * HOUR;
+
+  if (nowMinutes !== null) {
+    from = Math.min(from, nowMinutes - MARGIN_MINUTES);
+    to = Math.max(to, nowMinutes + MARGIN_MINUTES);
+  }
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
+
+  // Out to whole hours, so the ruler's labels land on its own edges. Clamped at
+  // midnight below, because nothing on a day begins before the day does.
+  const fromMinutes = Math.max(0, Math.floor(from / 60) * 60);
+  const toMinutes = Math.min(DAY_MINUTES * 2, Math.ceil(to / 60) * 60);
 
   const hours: number[] = [];
-  for (let at = fromMs; at <= toMs; at += HOUR) hours.push(at);
-  return { fromMs, toMs, minutes: (toMs - fromMs) / 60_000, hours };
+  for (let at = fromMinutes; at <= toMinutes; at += 60) hours.push(at);
+  return { fromMinutes, toMinutes, minutes: toMinutes - fromMinutes, hours };
+}
+
+/** The offset a plan entry's own timestamp carries, or none. */
+const offsetOf = (iso: string) => offsetMinutesOf(iso) ?? 0;
+
+/** Where a moment sits on the shared ruler, for an entry on this day. */
+export function minutesInto(atMs: number, day: string, offsetMinutes: number): number {
+  return (atMs - dayStartMs(day, offsetMinutes)) / 60_000;
 }

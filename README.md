@@ -607,6 +607,15 @@ Where those minutes are already spoken for, both turn amber and the entry says
 so: that is worth knowing on the Wednesday rather than at one o'clock on the
 Saturday.
 
+**All four days share one ruler**, measured in minutes past midnight rather than
+in milliseconds, so ten o'clock on the Thursday is the same height as ten
+o'clock on the Saturday and the four columns scroll together. Four separate
+rulers is what this was, and it made the columns incomparable — which defeats
+the one thing a four-day view is for: seeing that every morning is committed and
+every evening is free. Minutes past 1,440 are allowed, so a game running from
+eight until two belongs to the day it started and is drawn continuing off the
+bottom of it rather than wrapped round to the top.
+
 The walking times come from the distance table above — the same estimate the
 search results show, extra minute included — not from the router. A dozen
 entries redrawing on every tick of the clock cannot each afford a 128 ms route.
@@ -629,6 +638,50 @@ dialog has a `+` on every session it lists. That distinction matters: the map's
 search deliberately collapses eight showings of one game into a single result,
 which is right for "take me there" and wrong here, where the whole question is
 which showing.
+
+Choosing one opens it in full rather than adding it. A title and a room is not
+enough to decide by: whether it costs forty dollars, whether it is 21+, whether
+any tickets are left, whether it runs six hours — all of that is in the feed,
+none of it fits on a result row, and every one of them is a reason not to add
+it. From there you can add it, show it on the map, or start directions to it.
+The **description** is the one thing not in the feed — Gen Con's descriptions
+run to a paragraph each and across 27,467 events that is several megabytes on a
+file a phone fetches before it can show anything — so it is fetched for that one
+event through the same same-origin proxy the room check uses, and its absence is
+not an error.
+
+### Filtering the catalogue
+
+Both searches filter and sort, over the same controls, because it is the same
+question asked in two places. A title search alone answers "is there a thing
+called that"; the question in front of somebody planning is narrower — what is
+on **Saturday afternoon**, runs **under three hours**, costs **nothing**, and is
+**in the convention centre**, and of those which starts soonest.
+
+Filter by day, start time, length, type, cost, tickets remaining, age, game
+system, and building or room. Sort by start, end, length or cost. A filter is a
+question in its own right, so a filter with no words typed opens the list —
+"everything free on Saturday" has nothing to type.
+
+Three things worth saying about what is there:
+
+- **There is no "tag" field in Gen Con's data.** The two fields that behave like
+  tags are the **age requirement**, which is a real five-value facet, and the
+  **game system**, which has 1,845 values and so is matched as text rather than
+  offered as a list. They are named for what they are rather than dressed up.
+- **The type names come from Gen Con's own API**, which returns `event_type` as
+  `"BGM - Board Game"` and which the importer splits. All nineteen were read
+  back off it rather than guessed — `ZED` is Isle of Misfit Events and `SPA` is
+  not a spa. A code that appears in a future feed and not in `event-kinds.ts`
+  shows as itself rather than vanishing.
+- **The pickers are built from the feed**, so a type or an age band this year's
+  catalogue does not use is never offered, and one it adds appears without
+  anybody editing a list.
+
+On the map's search, turning any filter on also drops rooms, stands and street
+addresses from the results. None of them has a day, a cost or a length, so
+"free on Saturday" can be neither true nor false of Exhibit Hall B; offering it
+anyway would answer a different question from the one asked.
 
 **Where it is kept.** `localStorage`, on the device, and nowhere else — this is
 a static site that has to keep working when the host that served it is gone, so

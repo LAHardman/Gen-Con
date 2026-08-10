@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { hitLabel, hitSpot, search, type EventSearchIndex, type SearchHit } from '../data/search';
 import { formatTimeRange } from '../data/events';
 import { formatRough, roughMinutes, type Spot } from '../data/nearby';
+import { activeCount, type EventFilter, type FilterChoices, type SortKey } from '../data/filters';
+import { EventFilters } from './EventFilters';
 
 interface Props {
   /**
@@ -15,20 +17,30 @@ interface Props {
    * results carry no time rather than a time from nowhere.
    */
   from?: Spot | null;
+  /** What the filter pickers may offer, built from the feed. */
+  choices: FilterChoices;
+  /** The days the feed knows about, for the day filter. */
+  feedDays: readonly string[];
   /** Take the map to this room and open it. */
   onPick: (hit: SearchHit) => void;
 }
 
 const RESULT_LIMIT = 8;
 
-export function SearchBar({ events, from, onPick }: Props) {
+export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<EventFilter>({});
+  const [sort, setSort] = useState<SortKey | undefined>(undefined);
+  const narrowed = activeCount(filter) > 0;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const hits = useMemo(() => search(query, events, RESULT_LIMIT), [query, events]);
+  const hits = useMemo(
+    () => search(query, events, RESULT_LIMIT, filter, sort),
+    [query, events, filter, sort],
+  );
 
   // How far each one is, read out of the table rather than routed: eight real
   // routes would be a second of work per keystroke. See `nearby.ts`.
@@ -37,7 +49,7 @@ export function SearchBar({ events, from, onPick }: Props) {
     [hits, from],
   );
 
-  useEffect(() => setActive(0), [query]);
+  useEffect(() => setActive(0), [query, filter, sort]);
 
   // Clicking the map, or anywhere else, puts the list away.
   useEffect(() => {
@@ -75,7 +87,9 @@ export function SearchBar({ events, from, onPick }: Props) {
     }
   };
 
-  const showList = open && query.trim().length >= 2;
+  // A filter alone is a question — "everything free on Saturday afternoon" has
+  // no word in it — so the list opens on either.
+  const showList = open && (query.trim().length >= 2 || narrowed);
 
   return (
     <div className="search" ref={boxRef}>
@@ -96,6 +110,18 @@ export function SearchBar({ events, from, onPick }: Props) {
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
+      />
+
+      <EventFilters
+        filter={filter}
+        sort={sort}
+        days={feedDays}
+        choices={choices}
+        onChange={(next) => {
+          setFilter(next);
+          setOpen(true);
+        }}
+        onSort={setSort}
       />
 
       {showList && (

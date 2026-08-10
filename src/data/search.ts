@@ -24,6 +24,7 @@ import { ADDRESSES } from './addresses';
 import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
 import { pinPlace, roomPlace, type NavPlace } from './navigation';
 import type { Spot } from './nearby';
+import { activeCount, compareBy, matchesFilter, NO_FILTER, type EventFilter, type SortKey } from './filters';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -120,29 +121,37 @@ export function searchSessions(
   rawQuery: string,
   events: EventSearchIndex,
   limit = 12,
+  filter: EventFilter = NO_FILTER,
+  sort?: SortKey,
 ): SessionHit[] {
   const query = normalise(rawQuery);
-  if (query.length < 2) return [];
+  const narrowed = activeCount(filter) > 0;
+  // Two characters of title, OR a filter — because "everything free on Saturday
+  // afternoon" is a real question with no word in it, and refusing to answer it
+  // until somebody types two letters would make the filters decoration.
+  if (query.length < 2 && !narrowed) return [];
 
   const found: Array<SessionHit & { score: number }> = [];
   for (const { room, pin, event, title } of events.entries) {
-    const score = title.startsWith(query)
+    const score = !query
       ? 0
-      : startsWord(title, query)
-        ? 1
-        : title.includes(query)
-          ? 2
-          : null;
+      : title.startsWith(query)
+        ? 0
+        : startsWord(title, query)
+          ? 1
+          : title.includes(query)
+            ? 2
+            : null;
     if (score === null) continue;
+    if (narrowed && !matchesFilter(event, filter, room?.id)) continue;
     found.push({ event, room, pin, score });
   }
 
-  found.sort(
-    (a, b) =>
-      a.score - b.score ||
-      Date.parse(a.event.start) - Date.parse(b.event.start) ||
-      a.event.title.localeCompare(b.event.title),
-  );
+  // An explicit order is the whole order: somebody who asked for "cheapest
+  // first" wants the cheapest first, not the cheapest within each tier of how
+  // well the title matched. Without one, closeness of match leads.
+  const order = compareBy(sort ?? 'start');
+  found.sort(sort ? (a, b) => order(a.event, b.event) : (a, b) => a.score - b.score || order(a.event, b.event));
   return found.slice(0, limit);
 }
 
@@ -524,32 +533,51 @@ function addressHits(rawQuery: string): SearchHit[] {
   return hits.sort((a, b) => a.score - b.score).slice(0, 4);
 }
 
+/**
+ * @param filter narrows the event hits — and, while it narrows anything, is
+ *   also what makes rooms, stands and addresses drop out. None of them has a
+ *   day, a cost or a length, so "free on Saturday" cannot be true or false of
+ *   Exhibit Hall B; offering it anyway would be answering a different question
+ *   from the one that was asked.
+ * @param sort orders the whole list rather than breaking ties within it.
+ *   Somebody who asked for "cheapest first" wants the cheapest first.
+ */
 export function search(
   rawQuery: string,
   events: EventSearchIndex,
   limit = 8,
+  filter: EventFilter = NO_FILTER,
+  sort?: SortKey,
 ): SearchHit[] {
   const query = normalise(rawQuery);
-  if (query.length < 2) return [];
+  const narrowed = activeCount(filter) > 0;
+  // Two characters of title, OR a filter: "everything free on Saturday
+  // afternoon" is a real question with no word in it.
+  if (query.length < 2 && !narrowed) return [];
 
   const hits: SearchHit[] = [];
 
-  for (const keys of ROOM_KEYS) {
-    const score = scoreRoom(keys, query);
-    if (score !== null) hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
+  if (!narrowed) {
+    for (const keys of ROOM_KEYS) {
+      const score = scoreRoom(keys, query);
+      if (score !== null) hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
+    }
   }
 
   // One hit per title per room, keeping the soonest session and counting the rest.
   const grouped = new Map<string, SearchHit>();
   for (const { room, pin, event, title } of events.entries) {
-    const score = title.startsWith(query)
+    const score = !query
       ? SCORE.eventTitleStart
-      : startsWord(title, query)
-        ? SCORE.eventTitleStart + 0.5
-        : title.includes(query)
-          ? SCORE.eventTitleAnywhere
-          : null;
+      : title.startsWith(query)
+        ? SCORE.eventTitleStart
+        : startsWord(title, query)
+          ? SCORE.eventTitleStart + 0.5
+          : title.includes(query)
+            ? SCORE.eventTitleAnywhere
+            : null;
     if (score === null) continue;
+    if (narrowed && !matchesFilter(event, filter, room?.id)) continue;
 
     const key = `event:${room?.id ?? pin!.id}:${title}`;
     const existing = grouped.get(key);
@@ -562,8 +590,21 @@ export function search(
   }
   hits.push(...grouped.values());
 
-  hits.push(...standHits(query));
-  hits.push(...addressHits(rawQuery));
+  if (!narrowed) {
+    hits.push(...standHits(query));
+    hits.push(...addressHits(rawQuery));
+  }
+
+  if (sort) {
+    const order = compareBy(sort);
+    // Rooms, stands and addresses have no start time to sort by, so they keep
+    // their own ranking and sit above the events an explicit order applies to.
+    hits.sort((a, b) => {
+      if (!a.event || !b.event) return (a.event ? 1 : 0) - (b.event ? 1 : 0) || a.score - b.score;
+      return order(a.event, b.event);
+    });
+    return hits.slice(0, limit);
+  }
 
   hits.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;

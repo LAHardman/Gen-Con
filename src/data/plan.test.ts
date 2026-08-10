@@ -19,13 +19,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   conventionDays,
-  dayAxis,
   dayName,
   entrySpot,
   entryWhere,
   isConventionDay,
+  minutesInto,
   planDay,
   planEntry,
+  sharedAxis,
   weekdayOf,
   type PlanEntry,
 } from './plan';
@@ -165,32 +166,71 @@ describe('the walk between two entries', () => {
   });
 });
 
-describe('the ruler down the side', () => {
+describe('the one ruler all four days share', () => {
+  const EAST = -240;
   const day = [
     entry({ id: 'a', start: `${THURSDAY}T09:00:00-04:00`, end: `${THURSDAY}T10:00:00-04:00`, roomId: 'hall-a' }),
     entry({ id: 'b', start: `${THURSDAY}T14:00:00-04:00`, end: `${THURSDAY}T15:00:00-04:00`, roomId: 'hall-a' }),
   ];
+  const saturdayEvening = entry({
+    id: 'c',
+    start: `${SATURDAY}T20:00:00-04:00`,
+    end: `${SATURDAY}T23:00:00-04:00`,
+    roomId: 'hall-a',
+  });
 
-  it('covers everything on the day, on whole hours', () => {
-    const axis = dayAxis(planDay(day, THURSDAY), null)!;
-    expect(axis.fromMs).toBeLessThanOrEqual(Date.parse(`${THURSDAY}T09:00:00-04:00`));
-    expect(axis.toMs).toBeGreaterThanOrEqual(Date.parse(`${THURSDAY}T15:00:00-04:00`));
-    expect(axis.fromMs % 3_600_000).toBe(0);
-    expect(axis.hours[0]).toBe(axis.fromMs);
-    expect(axis.hours[axis.hours.length - 1]).toBe(axis.toMs);
+  it('measures in minutes past midnight, so the same hour is the same height', () => {
+    // The whole point of one axis. Thursday's ten o'clock and Saturday's ten
+    // o'clock have to land in the same place, or the four columns cannot be
+    // compared — which is what a four-day view is for.
+    const thursdayTen = minutesInto(Date.parse(`${THURSDAY}T10:00:00-04:00`), THURSDAY, EAST);
+    const saturdayTen = minutesInto(Date.parse(`${SATURDAY}T10:00:00-04:00`), SATURDAY, EAST);
+    expect(thursdayTen).toBe(600);
+    expect(saturdayTen).toBe(600);
+  });
+
+  it('covers every day at once, on whole hours', () => {
+    const axis = sharedAxis([planDay(day, THURSDAY), planDay([saturdayEvening], SATURDAY)], null)!;
+    // 9am on the Thursday down to 11pm on the Saturday, in one ruler.
+    expect(axis.fromMinutes).toBeLessThanOrEqual(9 * 60);
+    expect(axis.toMinutes).toBeGreaterThanOrEqual(23 * 60);
+    expect(axis.fromMinutes % 60).toBe(0);
+    expect(axis.hours[0]).toBe(axis.fromMinutes);
+    expect(axis.hours[axis.hours.length - 1]).toBe(axis.toMinutes);
+  });
+
+  it('is not narrowed by the day that happens to be looked at', () => {
+    // Thursday alone stops at three; with the Saturday in it the ruler has to
+    // reach eleven, or the Saturday's blocks fall off the bottom of it.
+    const thursdayOnly = sharedAxis([planDay(day, THURSDAY)], null)!;
+    const both = sharedAxis([planDay(day, THURSDAY), planDay([saturdayEvening], SATURDAY)], null)!;
+    expect(both.toMinutes).toBeGreaterThan(thursdayOnly.toMinutes);
   });
 
   it('stretches to reach the current time, so the mark has somewhere to sit', () => {
     // A Saturday whose only entry was this morning still has to show a line at
-    // four in the afternoon. Without this the mark is off the end of the ruler.
-    const evening = Date.parse(`${THURSDAY}T22:00:00-04:00`);
-    const axis = dayAxis(planDay(day, THURSDAY), evening)!;
-    expect(axis.toMs).toBeGreaterThan(evening);
-    expect(dayAxis(planDay(day, THURSDAY), null)!.toMs).toBeLessThan(evening);
+    // ten at night. Without this the mark is off the end of the ruler.
+    const axis = sharedAxis([planDay(day, THURSDAY)], 22 * 60)!;
+    expect(axis.toMinutes).toBeGreaterThanOrEqual(22 * 60);
+    expect(sharedAxis([planDay(day, THURSDAY)], null)!.toMinutes).toBeLessThan(22 * 60);
   });
 
-  it('has nothing to draw for a day with nothing on it', () => {
-    expect(dayAxis([], Date.now())).toBeNull();
+  it('lets an event run past midnight rather than wrapping it to the top', () => {
+    // A game from eight until two belongs on the day it started, drawn
+    // continuing off the bottom — not folded round to two in the morning.
+    const late = entry({
+      id: 'late',
+      start: `${THURSDAY}T20:00:00-04:00`,
+      end: `${FRIDAY}T02:00:00-04:00`,
+      roomId: 'hall-a',
+    });
+    const axis = sharedAxis([planDay([late], THURSDAY)], null)!;
+    expect(axis.toMinutes).toBeGreaterThan(24 * 60);
+    expect(minutesInto(Date.parse(`${FRIDAY}T02:00:00-04:00`), THURSDAY, EAST)).toBe(26 * 60);
+  });
+
+  it('has nothing to draw when nothing is planned at all', () => {
+    expect(sharedAxis([[], []], null)).toBeNull();
   });
 });
 
