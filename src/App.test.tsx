@@ -13,7 +13,7 @@
  * keeps these about the map rather than about 27,000 events.
  */
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
@@ -134,5 +134,109 @@ describe('asking for directions', () => {
 
     // White River is on the 1st; Griffin Hall on the 2nd. The 2nd is drawn.
     expect(currentFloor()).toBe('2nd floor');
+  });
+});
+
+describe('how far away the search results are', () => {
+  const away = (option: HTMLElement) =>
+    within(option).queryByText(/^(\d+ min|you are here)$/)?.textContent ?? '';
+
+  /**
+   * A browser that has already been given permission, and a position to report.
+   *
+   * Both halves matter: the point of the permission query is that a *standing*
+   * grant lets a position be used without one being asked for, so a stub that
+   * only reported a position would prove nothing about the part that matters.
+   */
+  function alreadyAllowed(at: { lat: number; lng: number } | null) {
+    const geolocation = {
+      watchPosition: vi.fn((onSuccess: PositionCallback) => {
+        if (at) {
+          setTimeout(() =>
+            onSuccess({
+              coords: { latitude: at.lat, longitude: at.lng, accuracy: 25 },
+              timestamp: 0,
+            } as GeolocationPosition),
+          );
+        }
+        return 1;
+      }),
+      clearWatch: vi.fn(),
+    };
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      geolocation,
+      permissions: { query: async () => ({ state: 'granted', addEventListener() {}, removeEventListener() {} }) },
+    });
+    vi.stubGlobal('isSecureContext', true);
+    return geolocation;
+  }
+
+  /*
+   * Two ticks, not one. The permission query is a promise; granting sets state,
+   * which starts the watch; the watch reports on a timer of its own. One flush
+   * lands between the two and the position never arrives.
+   */
+  /** Where `distances.ts` says that room is entered. Somewhere real to stand. */
+  const WESTIN_GRAND_DOOR = { lat: 39.76603, lng: -86.16413 };
+
+  const settle = async () => {
+    for (let n = 0; n < 3; n += 1) await act(async () => new Promise((done) => setTimeout(done, 0)));
+  };
+
+  it('says nothing while nothing knows where you are', () => {
+    render(<App />);
+    for (const option of searchFor('ballroom')) expect(away(option)).toBe('');
+  });
+
+  it('measures from the room you have open', () => {
+    render(<App />);
+    fireEvent.pointerDown(searchFor('exhibit hall a')[0]);
+    const [first] = searchFor('wabash ballroom');
+    expect(away(first)).toMatch(/^\d+ min$/);
+  });
+
+  it('measures from where you are when no room is chosen', async () => {
+    // Standing on the Westin Grand Ballroom's own doorway, having granted
+    // location on some earlier visit. Nothing is selected and nothing prompted.
+    alreadyAllowed(WESTIN_GRAND_DOOR);
+    render(<App />);
+    await settle();
+
+    // The room being stood in reads as no walk; the Wabash is across Maryland
+    // St and through the convention centre.
+    const named = (query: string, name: string) =>
+      away(searchFor(query).find((option) => option.textContent?.startsWith(name))!);
+    expect(named('grand ballroom', 'Grand Ballroom I–V')).toBe('you are here');
+    const fromWestin = Number(/^(\d+) min$/.exec(named('wabash', 'Wabash Ballroom'))?.[1]);
+    expect(fromWestin).toBeGreaterThan(2);
+  });
+
+  it('prefers a room you have opened over where you happen to be standing', async () => {
+    // Opening a room is somebody saying "this is what I am interested in";
+    // standing somewhere is not.
+    alreadyAllowed(WESTIN_GRAND_DOOR);
+    render(<App />);
+    await settle();
+    const westin = () =>
+      away(searchFor('grand ballroom').find((option) => option.textContent?.startsWith('Grand Ballroom I–V'))!);
+    expect(westin()).toBe('you are here');
+
+    fireEvent.pointerDown(searchFor('exhibit hall a')[0]);
+    expect(westin()).toMatch(/^\d+ min$/);
+  });
+
+  it('asks for nothing when the permission was never given', async () => {
+    // The rule this whole path lives under: a venue map may use a location it
+    // has already been allowed, and may never raise the question itself.
+    const geolocation = alreadyAllowed(null);
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      geolocation,
+      permissions: { query: async () => ({ state: 'prompt', addEventListener() {}, removeEventListener() {} }) },
+    });
+    render(<App />);
+    await settle();
+    expect(geolocation.watchPosition).not.toHaveBeenCalled();
   });
 });

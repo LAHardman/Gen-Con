@@ -5,10 +5,20 @@
  * standing should follow you across the campus, and a single reading taken at
  * the exhibit hall doors is wrong by the time you have crossed the hall.
  *
- * The watch only runs while a route actually has "my location" as one of its
- * ends. Nothing here asks for permission on load: a map of a convention centre
- * has no business prompting for your position until you have asked it to take
- * you somewhere.
+ * NOTHING HERE EVER PROMPTS ON LOAD. A map of a convention centre has no
+ * business asking for your whereabouts before you have asked it for anything.
+ * The watch runs when a route has "my location" as one of its ends — which is
+ * you asking — or when `useLocationGranted` reports that the permission was
+ * already given, which is you having asked before. A permission already granted
+ * raises no dialog, so the second case adds a use of your location and never a
+ * question about it.
+ *
+ * PRECISION IS ASKED FOR ONLY WHEN IT IS NEEDED. Following somebody along a
+ * route wants GPS and a fresh reading; putting a rough walking time beside a
+ * search result does not — it is snapped to the nearest doorway and rounded to
+ * a minute, so a cell-tower fix a minute old answers it just as well. Those are
+ * very different amounts of battery to spend on a phone somebody is carrying
+ * round a convention all day, so `precise` picks between them.
  */
 
 import { useEffect, useState } from 'react';
@@ -35,7 +45,21 @@ export interface DeviceLocation {
   fix: DeviceFix | null;
 }
 
-export function useDeviceLocation(active: boolean): DeviceLocation {
+/**
+ * How hard to work for a reading.
+ *
+ * `precise` is the route-following watch: GPS, and a reading no more than ten
+ * seconds old, because the whole point is that the line keeps up with somebody
+ * walking. The other is for the walking times beside search results, which are
+ * snapped to the nearest doorway and printed to the minute — a two-minute-old
+ * fix from the network changes none of them, and costs a fraction as much.
+ */
+const HOW_HARD = {
+  precise: { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+  rough: { enableHighAccuracy: false, maximumAge: 120_000, timeout: 30_000 },
+} as const;
+
+export function useDeviceLocation(active: boolean, precise = true): DeviceLocation {
   const [state, setState] = useState<DeviceLocation>({ status: 'idle', fix: null });
 
   useEffect(() => {
@@ -81,13 +105,63 @@ export function useDeviceLocation(active: boolean): DeviceLocation {
                 fix: null,
               },
         ),
-      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+      precise ? HOW_HARD.precise : HOW_HARD.rough,
     );
 
     return () => navigator.geolocation.clearWatch(watch);
-  }, [active]);
+  }, [active, precise]);
 
   return state;
+}
+
+/**
+ * Whether this site already has permission to know where you are.
+ *
+ * The point of asking is to be able to *use* a location without *requesting*
+ * one. `permissions.query` reports the standing answer without raising
+ * anything: "granted" means somebody already said yes to this site, so reading
+ * a position now shows no dialog and surprises nobody.
+ *
+ * It follows the answer rather than sampling it, so revoking the permission in
+ * the browser's site settings turns the watch off in the same moment rather
+ * than at the next reload.
+ *
+ * Where the query does not exist this stays false and everything carries on
+ * behaving as it did — Safari only gained it in 16, and the cost of being wrong
+ * in the cautious direction is a walking time that is not shown.
+ */
+export function useLocationGranted(): boolean {
+  const [granted, setGranted] = useState(false);
+
+  useEffect(() => {
+    if (!navigator.permissions?.query) return;
+    let live = true;
+    let permission: PermissionStatus | null = null;
+    const onChange = () => {
+      if (live && permission) setGranted(permission.state === 'granted');
+    };
+
+    navigator.permissions
+      .query({ name: 'geolocation' as PermissionName })
+      .then((state) => {
+        // Unmounted before the promise settled: do not adopt the listener, or
+        // it outlives the cleanup that was supposed to remove it.
+        if (!live) return;
+        permission = state;
+        setGranted(state.state === 'granted');
+        state.addEventListener('change', onChange);
+      })
+      // A browser that has the method but refuses the name. Nothing to do but
+      // behave as though it were absent.
+      .catch(() => undefined);
+
+    return () => {
+      live = false;
+      permission?.removeEventListener('change', onChange);
+    };
+  }, []);
+
+  return granted;
 }
 
 /** What to tell someone when there is no fix to draw a route from. */

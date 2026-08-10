@@ -595,12 +595,16 @@ where are you starting from? Three answers are offered, and all three end up in
 the same place:
 
 - **Your own location**, watched rather than sampled, so the line follows you
-  across the campus instead of staying where you first stood. Nothing asks the
-  browser for a position until you press this — a venue map has no business
-  prompting for your whereabouts on load. Where the answer doesn't come, the
-  panel says why: refused, unavailable, timed out indoors, or withheld because
-  the page isn't on HTTPS, which is exactly what happens when you open the dev
-  server's LAN address on a phone.
+  across the campus instead of staying where you first stood. Nothing ever
+  *prompts* for a position on load — a venue map has no business asking that
+  before you have asked it for anything — and pressing this is the only thing
+  that raises the question. Once it has been answered, `useLocationGranted`
+  reads the standing permission with `permissions.query`, which shows no
+  dialog, and a later visit may use the position without putting the question
+  again. Where the answer doesn't come, the panel says why: refused,
+  unavailable, timed out indoors, or withheld because the page isn't on HTTPS,
+  which is exactly what happens when you open the dev server's LAN address on a
+  phone.
 - **A room you search for**, over the same index the header's search uses, so
   an event title finds the room it runs in and starts you there.
 - **A point on the map**, tapped: a room to start from that room, anywhere else
@@ -637,8 +641,9 @@ where the warming stopped. Measured in the running app, the first route now
 takes **70 ms**.
 
 **How far away something is, before you commit to going.** Every search result
-carries a walking time — from the room you have open, or from whichever end of
-the route is already settled. That cannot come from the router: a route costs
+carries a walking time — from the room you have open, from whichever end of the
+route is already settled, or, when nothing is chosen and location has already
+been allowed, from the doorway you are nearest. That cannot come from the router: a route costs
 **128 ms**, and eight results a keystroke would be a second of main-thread work
 each time you type a letter. So it comes from a table measured once, at build
 time, by that same router — `npm run data:distances` runs 149 single-source
@@ -672,6 +677,14 @@ Three things about what it says:
   on a room's own doorway picks that room for all 149 of them; 21 m off it, the
   estimate stays within two minutes of the real route on 98.7% of 528 sampled
   pairs.
+- **A room you have open wins over where you are standing.** Opening one is
+  somebody saying "this is what I am interested in"; standing somewhere is not.
+
+Following a route wants GPS and a reading ten seconds old. These times do not:
+they are snapped to a doorway and printed to the minute, so a coarse network
+fix two minutes old answers them identically. `useDeviceLocation` takes a
+`precise` flag for exactly that, because the difference is hours of battery on
+a phone carried round a convention all day.
 
 The build refuses to write a table that disagrees with `walkBetween` on a
 sample of its own pairs, and a test re-routes eight more — the two halves of

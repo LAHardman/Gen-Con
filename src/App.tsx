@@ -11,7 +11,7 @@ import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
 import { useFollowedRoute } from './hooks/useFollowedRoute';
-import { useDeviceLocation } from './hooks/useDeviceLocation';
+import { useDeviceLocation, useLocationGranted } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
@@ -59,9 +59,21 @@ export default function App() {
   // is twice as much work as it needs to be.
   const eventSearchIndex = useMemo(() => buildEventSearchIndex(index), [index]);
 
-  // Nothing asks the browser where you are until a route says "my location".
+  /*
+   * Nothing asks the browser where you are until you have asked it something
+   * first — either a route with "my location" as an end, or, on a later visit,
+   * the permission you granted for one still standing. A standing permission
+   * raises no dialog, so the second case uses your location without ever
+   * putting the question again.
+   *
+   * Only the route wants precision. The walking times beside search results are
+   * snapped to a doorway and printed to the minute, so a coarse reading two
+   * minutes old answers them exactly as well as GPS does — and costs a fraction
+   * of the battery on a phone that is out all day.
+   */
   const usingDevice = nav?.from?.kind === 'device' || nav?.to?.kind === 'device';
-  const device = useDeviceLocation(!!usingDevice);
+  const granted = useLocationGranted();
+  const device = useDeviceLocation(!!usingDevice || granted, !!usingDevice);
 
   // Held rather than recomputed on every fix, so the line does not rearrange
   // under somebody walking it correctly. `useFollowedRoute` measures each fix
@@ -273,7 +285,12 @@ export default function App() {
   const searchFrom = useMemo(() => {
     if (nav?.from) return placeSpot(nav.from, device.fix);
     const room = openRoom ?? selectedRoom;
-    return room ? { roomId: room.id } : null;
+    if (room) return { roomId: room.id };
+    // Nothing chosen, but the phone knows where it is: measure from the doorway
+    // it is nearest. A room somebody has open is still preferred over this —
+    // opening one is a deliberate "this is where I am interested", and standing
+    // somewhere is not.
+    return device.fix ? { at: device.fix.position } : null;
   }, [nav?.from, device.fix, openRoom, selectedRoom]);
   const picking = !!editing && pickOnMap;
 
