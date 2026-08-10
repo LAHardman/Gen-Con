@@ -96,6 +96,56 @@ export function hitSpot(hit: SearchHit): Spot {
   };
 }
 
+/** One session, as the schedule page wants it: this showing, not the soonest. */
+export interface SessionHit {
+  event: ConEvent;
+  /** Exactly one of these is set, as everywhere else here. */
+  room?: Room;
+  pin?: Pin;
+}
+
+/**
+ * Individual sessions matching a title, soonest first.
+ *
+ * Deliberately NOT `search`. That collapses every showing of a title in a room
+ * into one hit carrying the soonest — which is right for "take me there", and
+ * wrong for building a schedule, where the whole question is *which* showing.
+ * A game that runs eight times over four days is eight different commitments
+ * and only one of them is at two o'clock on the Saturday.
+ *
+ * Ranked by how the title matched and then by when it starts, so the sessions
+ * of one game arrive in the order somebody would choose between them.
+ */
+export function searchSessions(
+  rawQuery: string,
+  events: EventSearchIndex,
+  limit = 12,
+): SessionHit[] {
+  const query = normalise(rawQuery);
+  if (query.length < 2) return [];
+
+  const found: Array<SessionHit & { score: number }> = [];
+  for (const { room, pin, event, title } of events.entries) {
+    const score = title.startsWith(query)
+      ? 0
+      : startsWord(title, query)
+        ? 1
+        : title.includes(query)
+          ? 2
+          : null;
+    if (score === null) continue;
+    found.push({ event, room, pin, score });
+  }
+
+  found.sort(
+    (a, b) =>
+      a.score - b.score ||
+      Date.parse(a.event.start) - Date.parse(b.event.start) ||
+      a.event.title.localeCompare(b.event.title),
+  );
+  return found.slice(0, limit);
+}
+
 /** What a hit is called, and the line under it. */
 export function hitLabel(hit: SearchHit): { title: string; detail: string } {
   if (hit.kind === 'event') {

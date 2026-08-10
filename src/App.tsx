@@ -4,6 +4,7 @@ import { Legend } from './components/Legend';
 import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
+import { PlanView } from './components/PlanView';
 import type { SearchHit } from './data/search';
 import type { Pin } from './data/offsite';
 import { NavPanel } from './components/NavPanel';
@@ -13,6 +14,7 @@ import { useEventFeed } from './hooks/useEventFeed';
 import { useFollowedRoute } from './hooks/useFollowedRoute';
 import { useDeviceLocation, useLocationGranted } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
+import { usePlan } from './hooks/usePlan';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
 import {
@@ -27,7 +29,12 @@ import {
 const SOURCE_URL = 'https://gencon.eventdb.us/';
 const BASEMAP_KEY = 'genCon.basemap';
 
+/** The two things the app is: a map of the campus, and a plan for using it. */
+type Tab = 'map' | 'plan';
+const TAB_LABEL: Record<Tab, string> = { map: 'Map', plan: 'Schedule' };
+
 export default function App() {
+  const [tab, setTab] = useState<Tab>('map');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
@@ -48,6 +55,10 @@ export default function App() {
   const [pickOnMap, setPickOnMap] = useState(false);
 
   const { status, feed, index } = useEventFeed();
+
+  // Somebody's own schedule, kept on the device. Read once on load and written
+  // on every change — see `usePlan` for why it lives nowhere else.
+  const plan = usePlan();
 
   // Directions cost a second and a half the first time and 5 ms after it, and
   // that second and a half used to be spent inside the tap. Now it is spent
@@ -263,6 +274,27 @@ export default function App() {
     [editing, handleSetNavPlace],
   );
 
+  /**
+   * From a planned entry to the room it is in.
+   *
+   * The map is behind the schedule rather than unmounted, so this is a switch
+   * back to it rather than a navigation — and it opens the room's dialog,
+   * because somebody following a plan into a room wants that room's other
+   * events as much as its outline.
+   */
+  const handleShowPlannedRoom = useCallback(
+    (roomId: string) => {
+      const room = ROOMS_BY_ID[roomId];
+      if (!room) return;
+      setTab('map');
+      setSelectedRoomId(room.id);
+      showRoom(room);
+      setFocusRequest({ room, token: Date.now() });
+      setOpenRoom(room);
+    },
+    [showRoom],
+  );
+
   const handleCloseNav = useCallback(() => {
     setNav(null);
     setEditing(null);
@@ -317,7 +349,29 @@ export default function App() {
           </div>
         </div>
 
-        <SearchBar events={eventSearchIndex} from={searchFrom} onPick={handlePickSearchResult} />
+        <nav className="app__tabs" role="tablist" aria-label="Views">
+          {(['map', 'plan'] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={`app__tab${tab === id ? ' app__tab--active' : ''}`}
+              onClick={() => setTab(id)}
+            >
+              {TAB_LABEL[id]}
+              {id === 'plan' && plan.entries.length > 0 && (
+                <span className="app__tab-count">{plan.entries.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* One search box at a time: the schedule has its own, and it looks for
+            individual sessions rather than places. */}
+        {tab === 'map' && (
+          <SearchBar events={eventSearchIndex} from={searchFrom} onPick={handlePickSearchResult} />
+        )}
 
         <div className="app__tools">
           <div className="app__basemaps" role="group" aria-label="Basemap style">
@@ -371,7 +425,16 @@ export default function App() {
           level={(openVenueId && (levels[openVenueId] ?? defaultLevel(openVenueId))) ?? null}
           onPick={handlePickFloor}
         />
-        {nav && (
+        {tab === 'plan' && (
+          <PlanView
+            plan={plan}
+            feedDays={index?.days ?? []}
+            events={eventSearchIndex}
+            nowMs={nowMs}
+            onShowRoom={handleShowPlannedRoom}
+          />
+        )}
+        {tab === 'map' && nav && (
           <NavPanel
             from={nav.from}
             to={nav.to}
@@ -401,6 +464,7 @@ export default function App() {
           onClose={() => setOpenRoom(null)}
           onZoomToRoom={handleZoomToRoom}
           onNavigateToRoom={handleNavigateToRoom}
+          plan={plan}
         />
       )}
     </div>

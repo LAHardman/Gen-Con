@@ -448,20 +448,53 @@ export function eventUrl(event: ConEvent): string | undefined {
   return number ? `https://www.gencon.com/events/${number}` : undefined;
 }
 
+/**
+ * The offset a timestamp carries, in minutes east of UTC, or null for none.
+ *
+ * The convention's own offset, in other words — every timestamp in the feed
+ * ends `-04:00`, and that is what makes "Thursday" mean Thursday in
+ * Indianapolis rather than Thursday wherever the phone is. Somebody planning
+ * from California at ten on Wednesday evening is already in Thursday there.
+ */
+export function offsetMinutesOf(iso: string): number | null {
+  const match = /([+-])(\d{2}):?(\d{2})$/.exec(iso);
+  if (!match) return null;
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === '-' ? -minutes : minutes;
+}
+
+/**
+ * The day a moment falls on, at a given offset, as `dayKey` writes them.
+ *
+ * Which is how "is it Saturday yet" gets asked without a time-zone library:
+ * shift the instant by the convention's offset and read the date off the front
+ * of the ISO string, exactly as `dayKey` reads it off a feed timestamp.
+ */
+export function dayAt(atMs: number, offsetMinutes: number): string {
+  return new Date(atMs + offsetMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+/**
+ * A moment as a clock time at a given offset.
+ *
+ * Shift into UTC by the offset, then format as UTC — which reads the clock the
+ * way somebody standing there reads it. There is no timestamp to take an offset
+ * from here, which is exactly why this exists: a schedule's ruler is built from
+ * milliseconds, and formatting those through `toISOString()` would put a `Z` on
+ * them and print every hour label four hours out.
+ */
+export function formatClock(atMs: number, offsetMinutes: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(atMs + offsetMinutes * 60_000));
+}
+
 /** Formats a timestamp in the convention's own local time, not the viewer's. */
 export function formatTime(iso: string) {
-  const offsetMatch = iso.match(/([+-]\d{2}):?(\d{2})$/);
-  if (offsetMatch) {
-    // Shift into UTC by the timestamp's own offset, then format as UTC so the
-    // clock time shown is the one attendees will see on site.
-    const offsetMinutes = Number(offsetMatch[1]) * 60 + Math.sign(Number(offsetMatch[1])) * Number(offsetMatch[2]);
-    const shifted = new Date(Date.parse(iso) + offsetMinutes * 60_000);
-    return new Intl.DateTimeFormat(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZone: 'UTC',
-    }).format(shifted);
-  }
+  const offsetMinutes = offsetMinutesOf(iso);
+  if (offsetMinutes !== null) return formatClock(Date.parse(iso), offsetMinutes);
   return TIME_FORMAT.format(new Date(iso));
 }
 

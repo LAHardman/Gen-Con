@@ -587,6 +587,57 @@ draws no such icon. Rather than scatter plausible-looking dots, the map marks
 none — `AmenityKind` already allows for water, so the day a source turns up the
 entries drop straight into `src/data/amenities.ts`.
 
+### Your own schedule
+
+The **Schedule** tab is the four days of the convention — Thursday to Sunday —
+with what you have committed to on each of them, drawn to scale.
+
+**Why a timeline rather than a list.** A list of times can be read; it cannot be
+*seen*. What ruins a Saturday is not forgetting an event, it is two of them that
+do not fit together — a four-hour game ending at one and a seminar starting at
+one in the JW Marriott, six minutes' walk away. On a list those are two tidy
+rows. Drawn to scale, with the walk drawn in front of the event it is a walk to,
+the gap is either there or it is not.
+
+So each entry is two blocks. The **solid block** is the event, as long as the
+event runs. The **lighter band** immediately before it is the walk from the
+previous entry's location, occupying exactly the minutes you would be walking —
+it is lighter because it is not the commitment, it is what the commitment costs.
+Where those minutes are already spoken for, both turn amber and the entry says
+so: that is worth knowing on the Wednesday rather than at one o'clock on the
+Saturday.
+
+The walking times come from the distance table above — the same estimate the
+search results show, extra minute included — not from the router. A dozen
+entries redrawing on every tick of the clock cannot each afford a 128 ms route.
+
+**Which four days, and which one it is.** Thursday to Sunday, read off the
+weekday rather than written down as dates: Gen Con's dates move every year and
+its weekdays never have. Wednesday's Trade Day is deliberately out — 191 events
+against Thursday's 8,046 — and sessions on it are not offered in the add
+search either, because there would be no column for them to land in.
+
+Today's column is marked, and a line across it shows the current time. Both
+answer in *Indianapolis* time, taken from the offset the feed's own timestamps
+carry: somebody planning from California at ten on Wednesday evening is already
+in Thursday where they are standing, and highlighting Thursday for them would
+be a day out.
+
+**Adding things.** Two places, and both offer individual *sessions* rather than
+titles. The Schedule tab's own search looks across the whole feed; a room's
+dialog has a `+` on every session it lists. That distinction matters: the map's
+search deliberately collapses eight showings of one game into a single result,
+which is right for "take me there" and wrong here, where the whole question is
+which showing.
+
+**Where it is kept.** `localStorage`, on the device, and nowhere else — this is
+a static site that has to keep working when the host that served it is gone, so
+a schedule that lived on a server would be a schedule that stopped existing.
+Each entry stores a *copy* of the event rather than a reference to it: the feed
+is 27,467 events and is fetched, and a plan has to render before it arrives and
+whether or not it ever does. It also means Gen Con moving an event cannot
+silently empty your Saturday.
+
 ### Directions
 
 Open a room and there is an arrow in the dialog's title bar. It closes the

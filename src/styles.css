@@ -163,6 +163,10 @@ body {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  /* Leaflet's control corners are z-index 1000, and so is the header. Isolating
+     keeps everything the map area stacks — the map, its controls, the
+     directions panel, the schedule — competing only with each other. */
+  isolation: isolate;
 }
 
 .map,
@@ -1536,4 +1540,449 @@ body {
   color: var(--text-muted);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- the tabs */
+
+.app__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  flex: 0 0 auto;
+}
+
+.app__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app__tab--active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app__tab-count {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ the schedule */
+
+/*
+ * Over the map rather than instead of it. Leaflet loses track of its own size
+ * the moment its container is hidden, and remounting it throws away the view
+ * somebody had — so the map stays mounted and sized underneath this.
+ */
+.plan {
+  position: absolute;
+  inset: 0;
+  /* Over Leaflet's control corners, which are z-index 1000. The map stays
+     mounted and sized underneath this — see the note in PlanView — and its zoom
+     buttons must not show through a page that has replaced it. Contained by
+     `isolation` on .app__main, so this cannot climb over the room dialog. */
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.plan__add {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.plan__hits {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 55vh;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.plan__hit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan__hit:hover {
+  background: var(--panel-raised);
+}
+
+.plan__hit-mark {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.plan__hit--held .plan__hit-mark {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* The four days. Always all four, so which day it is stays visible whichever
+   day is being looked at. */
+.plan__days {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.plan__day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.plan__day-name {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan__day-count {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan__day--today .plan__day-count {
+  color: var(--accent);
+}
+
+.plan__day--shown {
+  border-color: var(--accent);
+  background: var(--panel-raised);
+}
+
+/* The day it actually is, which is a different question from the day being
+   read. Both can be true, and they have to be told apart. */
+.plan__day--today .plan__day-name::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.plan__columns {
+  display: flex;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.plan__column {
+  display: none;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.plan__column--shown {
+  display: flex;
+}
+
+/* Wide enough for all four at once, which is how somebody plans a convention.
+   The day strip goes with them: with every column on screen its chips switch
+   nothing, and a control that does nothing is worse than one that is absent. */
+@media (min-width: 900px) {
+  .plan__column {
+    display: flex;
+  }
+
+  .plan__days {
+    display: none;
+  }
+}
+
+.plan__column-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  /* One column is shown on a phone and its name is already in the day strip
+     above; four columns need their own headings. */
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .plan__column-head {
+    display: flex;
+  }
+}
+
+.plan__column--today .plan__column-head {
+  color: var(--text);
+}
+
+.plan__column-count {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.plan__now-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.plan__track {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* The ruler's labels live in this gutter — wide enough for "10:00 AM" on one
+     line, because a wrapped time label collides with the hour below it. */
+  padding-left: 64px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.plan__column {
+  overflow-y: auto;
+}
+
+.plan__hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.plan__hour-label {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 56px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/*
+ * The commitment. Solid, because it is the thing that is actually happening.
+ */
+.plan__block {
+  position: absolute;
+  left: 64px;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-raised);
+  overflow: hidden;
+}
+
+.plan__block-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan__block-walk--clash {
+  color: #f0b429;
+  font-weight: 600;
+}
+
+.plan__block-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan__block-where {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan__block-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.plan__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/*
+ * The walk. Lighter than the block it leads to, because it is not the
+ * commitment — it is what the commitment costs — and it occupies exactly the
+ * minutes you would have to be walking, immediately before the event starts.
+ */
+/*
+ * Drawn from the moment you would have to leave to the moment the event starts,
+ * to scale, with no text in it — see the note in PlanView. Lighter than the
+ * block it leads to, because it is not the commitment, it is what the
+ * commitment costs.
+ */
+.plan__travel {
+  position: absolute;
+  left: 64px;
+  right: 0;
+  min-height: 4px;
+  padding: 0;
+  border-radius: 6px;
+  border-left: 3px solid rgba(232, 84, 63, 0.35);
+  background: rgba(232, 84, 63, 0.1);
+  overflow: hidden;
+}
+
+/* The walk does not fit: the event before it is still running when you would
+   have to leave. Worth seeing on the Wednesday, not at two on the Saturday. */
+.plan__travel--clash {
+  border-left-color: #f0b429;
+  background: rgba(240, 180, 41, 0.16);
+}
+
+.plan__block--clash {
+  border-left-color: #f0b429;
+}
+
+/* Where you are in the day. Over the blocks, because a line hidden behind a
+   four-hour game says nothing. */
+.plan__now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px solid #4ec9b0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.plan__now-time {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  width: 56px;
+  white-space: nowrap;
+  color: #4ec9b0;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.plan__empty {
+  margin: 20px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* The add button on a room's own list of sessions, which is where individual
+   showings are actually read. */
+.schedule__add {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.schedule__add--held {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
 }

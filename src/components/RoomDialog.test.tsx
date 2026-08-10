@@ -16,10 +16,20 @@ afterEach(cleanup);
 
 const ROOM = ROOMS_BY_ID['hall-b'];
 
+/** A plan that holds nothing and records what it was asked to hold. */
+const emptyPlan = () => ({
+  entries: [],
+  planned: () => false,
+  add: vi.fn(),
+  remove: vi.fn(),
+  toggle: vi.fn(),
+});
+
 function setup() {
   const onClose = vi.fn();
   const onZoomToRoom = vi.fn();
   const onNavigateToRoom = vi.fn();
+  const plan = emptyPlan();
   render(
     <RoomDialog
       room={ROOM}
@@ -32,9 +42,10 @@ function setup() {
       onClose={onClose}
       onZoomToRoom={onZoomToRoom}
       onNavigateToRoom={onNavigateToRoom}
+      plan={plan}
     />,
   );
-  return { onClose, onZoomToRoom, onNavigateToRoom };
+  return { onClose, onZoomToRoom, onNavigateToRoom, plan };
 }
 
 describe('RoomDialog', () => {

@@ -15,6 +15,8 @@ import {
   isHappeningAt,
   type ConEvent,
 } from '../data/events';
+import { planEntry } from '../data/plan';
+import type { Plan } from '../hooks/usePlan';
 import type { FeedStatus } from '../hooks/useEventFeed';
 import { useLocationCheck } from '../hooks/useLocationCheck';
 
@@ -29,6 +31,14 @@ interface Props {
   onZoomToRoom: (room: Room) => void;
   /** Start directions with this room as the destination. */
   onNavigateToRoom: (room: Room) => void;
+  /**
+   * Somebody's schedule, so a session can be added from where it is read.
+   *
+   * This is the list of individual showings — which is the thing a schedule is
+   * made of, and the thing the header's search deliberately collapses. Adding
+   * from anywhere else means picking a session out of a group first.
+   */
+  plan: Plan;
 }
 
 export function RoomDialog({
@@ -40,6 +50,7 @@ export function RoomDialog({
   onClose,
   onZoomToRoom,
   onNavigateToRoom,
+  plan,
 }: Props) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const style = CATEGORY_STYLES[room.category];
@@ -242,6 +253,18 @@ export function RoomDialog({
                       ) : (
                         live && <span className="schedule__badge">Now</span>
                       )}
+                      <button
+                        type="button"
+                        className={`schedule__add${plan.planned(event.id) ? ' schedule__add--held' : ''}`}
+                        aria-pressed={plan.planned(event.id)}
+                        aria-label={`${plan.planned(event.id) ? 'Remove' : 'Add'} ${event.title} ${
+                          plan.planned(event.id) ? 'from' : 'to'
+                        } your schedule`}
+                        title={plan.planned(event.id) ? 'On your schedule' : 'Add to your schedule'}
+                        onClick={() => plan.toggle(planEntry(event, room))}
+                      >
+                        {plan.planned(event.id) ? '✓' : '+'}
+                      </button>
                     </li>
                   );
                 })}
