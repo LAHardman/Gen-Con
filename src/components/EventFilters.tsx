@@ -21,6 +21,7 @@ import {
   activeCount,
   facetCounts,
   formatLength,
+  placeCounts,
   NO_FILTER,
   KIND_LABEL,
   SEARCH_KINDS,
@@ -32,10 +33,11 @@ import {
 } from '../data/filters';
 import { EXHIBITORS } from '../data/exhibitors';
 import { foodChoices, foodCounts, isFood } from '../data/food';
+import { vendorChoices, vendorCounts, vendorsOf } from '../data/vendors';
 import { matchesQuery, type EventSearchIndex } from '../data/search';
 import { kindName } from '../data/event-kinds';
 import { dayName } from '../data/plan';
-import { VENUES_BY_ID } from '../data/venues';
+import { ROOMS, VENUES_BY_ID } from '../data/venues';
 
 interface Props {
   filter: EventFilter;
@@ -95,6 +97,49 @@ export function EventFilters({
   );
 
   /*
+   * The stands that are not food, and what each of their chips would leave.
+   *
+   * 802 rows against 140 options is a couple of milliseconds, so it is taken by
+   * re-filtering like the food counts rather than by the bitmask pass the
+   * 27,457 events need — and it means the same thing: what pressing it leaves.
+   */
+  const stands = useMemo(() => vendorChoices(vendorsOf('vendor')), []);
+  const standTally = useMemo(
+    () => (open && kind === 'vendor' ? vendorCounts(vendorsOf('vendor'), filter, stands) : null),
+    [open, kind, filter, stands],
+  );
+
+  /*
+   * The floors on offer, from the buildings already chosen.
+   *
+   * Gen Con's floor names disagree between buildings — "Level 1" in the
+   * convention centre, "1st floor" in the JW, "Concourse level" in the stadium
+   * — so one list of all sixteen would be sixteen strings meaning about six
+   * things. Narrowed by building first, exactly as the room picker is.
+   */
+  const levels = useMemo(() => {
+    const inside = filter.venueIds?.length
+      ? ROOMS.filter((room) => filter.venueIds!.includes(room.venueId))
+      : ROOMS;
+    return [...new Set(inside.map((room) => room.level))].sort();
+  }, [filter.venueIds]);
+
+  /*
+   * The buildings that have *rooms*, not the ones that have events.
+   *
+   * `choices.venueIds` is built from the feed, which is right for an event
+   * filter and wrong here: the Connector, Circle Centre and the Block Party
+   * hold rooms the map draws and no sessions at all, and a Places filter that
+   * could not offer them would be hiding places from a search for places.
+   */
+  const placeVenues = useMemo(() => [...new Set(ROOMS.map((room) => room.venueId))], []);
+
+  const placeTally = useMemo(
+    () => (open && kind === 'place' ? placeCounts(filter, placeVenues, levels) : null),
+    [open, kind, filter, placeVenues, levels],
+  );
+
+  /*
    * Counted only while the panel is open.
    *
    * One pass over 27,457 events is 10–40 ms depending on how much is already
@@ -114,15 +159,27 @@ export function EventFilters({
 
   /** Adds or removes one value from a list-shaped filter. */
   const toggleIn = (
-    key: 'days' | 'types' | 'ages' | 'venueIds' | 'roomIds' | 'cuisine' | 'dish' | 'dietary',
+    key:
+      | 'days'
+      | 'types'
+      | 'ages'
+      | 'venueIds'
+      | 'roomIds'
+      | 'cuisine'
+      | 'dish'
+      | 'dietary'
+      | 'standKinds'
+      | 'areas'
+      | 'levels',
     value: string,
   ) => {
     const held = filter[key] ?? [];
     set({
       [key]: held.includes(value) ? held.filter((one) => one !== value) : [...held, value],
-      // Narrowing to a building throws away a room chosen inside another one,
-      // which would otherwise leave a filter that can match nothing at all.
-      ...(key === 'venueIds' ? { roomIds: [] } : {}),
+      // Narrowing to a building throws away a room — or a floor — chosen inside
+      // another one, which would otherwise leave a filter matching nothing at
+      // all. The counts make the same promise; see `placeCounts`.
+      ...(key === 'venueIds' ? { roomIds: [], levels: [] } : {}),
     });
   };
 
@@ -227,7 +284,102 @@ export function EventFilters({
         </div>
       )}
 
-      {open && kind !== 'food' && (
+      {/*
+        * Vendors, and the three questions a stand can actually answer.
+        *
+        * Not the event panel, which is what this used to show: a stand has no
+        * day, no start time, no cost and no age limit, so every dimension on
+        * offer could only ever be false of a booth and touching any of them
+        * emptied the list. See `vendors.ts`.
+        */}
+      {open && kind === 'vendor' && (
+        <div className="filters__panel" id={id}>
+          <Group label="Sort of stand">
+            {stands.kinds.map((one) => (
+              <Chip
+                key={one}
+                on={!!filter.standKinds?.includes(one)}
+                left={standTally?.kinds.get(one)}
+                onClick={() => toggleIn('standKinds', one)}
+              >
+                {one}
+              </Chip>
+            ))}
+          </Group>
+
+          <Group label="Where">
+            {stands.areas.map((area) => (
+              <Chip
+                key={area}
+                on={!!filter.areas?.includes(area)}
+                left={standTally?.areas.get(area)}
+                onClick={() => toggleIn('areas', area)}
+              >
+                {area}
+              </Chip>
+            ))}
+          </Group>
+
+          {/* 116 tags is not a row of buttons on a phone. One at a time, for the
+              same reason the game system is a text box. */}
+          <Group label="Sells">
+            <select
+              className="filters__text"
+              aria-label="Sells"
+              value={filter.tags?.[0] ?? ''}
+              onChange={(change) => set({ tags: change.target.value ? [change.target.value] : [] })}
+            >
+              <option value="">Anything</option>
+              {stands.tags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                  {leaves(standTally?.tags.get(tag))}
+                </option>
+              ))}
+            </select>
+          </Group>
+        </div>
+      )}
+
+      {/*
+        * Places: a building, and a floor inside it.
+        *
+        * The floors are Gen Con's own words and they disagree between buildings
+        * — "Level 1" in the convention centre, "1st floor" in the JW — so they
+        * are offered from the buildings already chosen rather than as one list
+        * of sixteen strings meaning six things.
+        */}
+      {open && kind === 'place' && (
+        <div className="filters__panel" id={id}>
+          <Group label="Building">
+            {placeVenues.map((venueId) => (
+              <Chip
+                key={venueId}
+                on={!!filter.venueIds?.includes(venueId)}
+                left={placeTally?.venues.get(venueId)}
+                onClick={() => toggleIn('venueIds', venueId)}
+              >
+                {VENUES_BY_ID[venueId]?.shortName ?? VENUES_BY_ID[venueId]?.name ?? venueId}
+              </Chip>
+            ))}
+          </Group>
+
+          <Group label="Floor">
+            {levels.map((level) => (
+              <Chip
+                key={level}
+                on={!!filter.levels?.includes(level)}
+                left={placeTally?.levels.get(level)}
+                onClick={() => toggleIn('levels', level)}
+              >
+                {level}
+              </Chip>
+            ))}
+          </Group>
+        </div>
+      )}
+
+      {open && (kind === 'all' || kind === 'event') && (
         <div className="filters__panel" id={id}>
           <Group label="Day">
             {days.map((day) => (

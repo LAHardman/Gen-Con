@@ -381,4 +381,42 @@ describe('the top-level kind', () => {
     const hits = search('', feed, 60, { kind: 'food', cuisine: ['Korean'] });
     expect(hits.length).toBeGreaterThan(0);
   });
+
+  it('narrows vendors by what they are, where they are and what they sell', () => {
+    // The bug this replaced: every filter offered under Vendors was an event
+    // filter, so touching one emptied the list rather than narrowing it.
+    const artists = search('', feed, 200, { kind: 'vendor', standKinds: ['Artists'] });
+    expect(artists.length).toBeGreaterThan(0);
+    expect(artists.every((hit) => hit.exhibitor?.kind === 'Artists')).toBe(true);
+
+    const inTheHall = search('', feed, 200, { kind: 'vendor', areas: ['Exhibit Hall'] });
+    expect(inTheHall.every((hit) => hit.exhibitor?.area === 'Exhibit Hall')).toBe(true);
+
+    const boardGames = search('', feed, 200, { kind: 'vendor', tags: ['Board Games'] });
+    expect(boardGames.length).toBeGreaterThan(0);
+    for (const hit of boardGames) expect(tagsOf(hit.exhibitor!)).toContain('Board Games');
+  });
+
+  it('narrows places by building and by floor', () => {
+    const jw = search('', feed, 200, { kind: 'place', venueIds: ['jw-marriott'] });
+    expect(jw.length).toBeGreaterThan(0);
+    expect(jw.every((hit) => hit.room?.venueId === 'jw-marriott')).toBe(true);
+
+    const floors = new Set(jw.map((hit) => hit.room!.level));
+    const [floor] = [...floors];
+    const oneFloor = search('', feed, 200, { kind: 'place', venueIds: ['jw-marriott'], levels: [floor] });
+    expect(oneFloor.length).toBeGreaterThan(0);
+    expect(oneFloor.length).toBeLessThanOrEqual(jw.length);
+    expect(oneFloor.every((hit) => hit.room!.level === floor)).toBe(true);
+  });
+
+  it('drops street addresses once a place filter is on, having neither', () => {
+    // An address is not in a building and is on no floor, so "in the JW" can be
+    // neither true nor false of it — the same rule as an event filter dropping
+    // a room, one level down.
+    const loose = search('washington', feed, 200, { kind: 'place' });
+    expect(loose.some((hit) => hit.pin)).toBe(true);
+    const narrowed = search('washington', feed, 200, { kind: 'place', venueIds: ['icc'] });
+    expect(narrowed.some((hit) => hit.pin)).toBe(false);
+  });
 });

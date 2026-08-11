@@ -757,6 +757,46 @@ claim something was being held back.
 The Schedule tab carries the same row — see **Your own schedule** above for what
 happens when you pick something with no times of its own.
 
+**Each kind gets the filters that can be true of it.** This is the whole point
+of the row, and getting it wrong is invisible: Vendors and Places used to be
+shown the *event* panel, so a booth was offered a day, a ticket price and an age
+limit — dimensions that could only ever be false of it — and touching any one of
+them emptied the list. That looks exactly like a search that found nothing.
+
+| Kind | What it filters on |
+| --- | --- |
+| **Everything** | the event dimensions; any of them silences rooms, stands and addresses |
+| **Events** | day, start time, length, type, cost, tickets left, age, game system, building, room — and sort by start, end, length or cost |
+| **Food** | cuisine (12), dish (26), dietary (5) |
+| **Vendors** | sort of stand (7), where (15 areas), sells (74 tags) |
+| **Places** | building (16), floor — offered from the buildings already chosen |
+
+Every one of those numbers is read off the live catalogue rather than written
+down, so a value Gen Con stops using stops being offered and one it adds appears
+without anybody editing a list.
+
+**Vendors: what it is, where it is, what it sells.** The eight kinds are Gen
+Con's own word for the sort of stand — Exhibitors (622), Artists (90), Food &
+Drink (43), Authors (39), Makers (22), Community Groups (19), Entertainers (8),
+Sponsors (2) — and Food keeps its own panel, so Vendors is the other seven. The
+areas are also its own words, from `Exhibit Hall` (572) down to `Stadium : West
+Club Lounge` (1). The tags are a vocabulary of 116 across the catalogue, 74 of
+them outside food, from `Publisher` (347) and `Board Games` (301) down to the
+one-offs — which is not a row of buttons on a phone, so that one is a list and
+one at a time, for the same reason the game system is a text box.
+
+**Places: a building and a floor.** The floors are Gen Con's own words too, and
+they disagree between buildings — "Level 1" in the convention centre, "1st
+floor" in the JW, "Concourse level" at the stadium. One list of all sixteen
+would be sixteen strings meaning about six things, so the floor picker offers
+only the floors of the buildings already chosen, exactly as the room picker
+does. The buildings come from the *rooms* rather than from the feed: the
+Connector, Circle Centre and the Block Party hold rooms the map draws and no
+sessions at all, and a filter for places that could not offer them would be
+hiding places from a search for places. A street address has neither a building
+nor a floor, so either filter drops every address — the same rule as an event
+filter dropping a room, one level down.
+
 **Food: cuisine, dish, dietary.** Gen Con files every exhibitor under tags of
 its own and all 43 Block Party vendors carry them, but the 49 tags in use are
 three different questions wearing one coat: what kitchen it is (Korean,
@@ -1657,7 +1697,8 @@ src/
     booths.ts        Booth numbers to halls, and the aisle grid
     food.ts          Which tags are cuisine, dish or dietary — and the hours
     search.ts        Ranking rooms, stands, events and addresses against a query
-    filters.ts       The kind, the nine dimensions, and what pressing one leaves
+    filters.ts       The kind, the event dimensions, and what pressing one leaves
+    vendors.ts       What a stand is, where it is and what it sells
     plan.ts          The four days, stops, travel, lanes and the shared axis
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to

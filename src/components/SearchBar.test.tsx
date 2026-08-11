@@ -129,6 +129,44 @@ describe('the top-level kind', () => {
     expect(results()!.textContent).toContain('Arepas');
   });
 
+  it('gives each kind the filters that can be true of it', () => {
+    // The bug: Vendors and Places were shown the *event* panel, so a booth was
+    // offered a day and a ticket price — dimensions that could only ever be
+    // false of it, which emptied the list rather than narrowing it.
+    const { input } = setup();
+    fireEvent.focus(input);
+    const panel = () => document.querySelector('.filters__panel')!;
+    const legends = () => [...panel().querySelectorAll('legend')].map((one) => one.textContent);
+
+    fireEvent.click(kindButton('Vendors'));
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(legends()).toEqual(['Sort of stand', 'Where', 'Sells']);
+
+    fireEvent.click(kindButton('Places'));
+    expect(legends()).toEqual(['Building', 'Floor']);
+
+    fireEvent.click(kindButton('Events'));
+    expect(legends()).toContain('Day');
+    expect(legends()).toContain('Cost');
+  });
+
+  it('narrows rather than empties, once those filters are the right ones', () => {
+    const { input } = setup();
+    fireEvent.focus(input);
+    fireEvent.click(kindButton('Vendors'));
+    const before = options().length;
+    expect(before).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Sort of stand' })).getByRole('button', {
+        name: /^Artists/,
+      }),
+    );
+    expect(options().length).toBeGreaterThan(0);
+    expect(results()!.textContent).not.toContain('Nothing matches');
+  });
+
   it('puts the list away again when the kind goes back to everything', () => {
     // The other half: "Everything" with nothing typed is not a question, and
     // answering it would be the whole campus under the search box.

@@ -27,6 +27,7 @@ import type { Spot } from './nearby';
 import {
   activeCount,
   compareBy,
+  inChosenPlace,
   isAsking,
   matchesFilter,
   NO_FILTER,
@@ -34,6 +35,7 @@ import {
   type SortKey,
 } from './filters';
 import { isFood, matchesFood } from './food';
+import { matchesVendor } from './vendors';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -489,6 +491,15 @@ function standHits(query: string, keep: (stand: Exhibitor) => boolean = () => tr
 }
 
 /**
+ * Whether a place filter has been asked at all.
+ *
+ * The two dimensions a *place* has are its building and its floor — see
+ * `inChosenPlace`. An address has neither, so either one drops every address:
+ * the same rule as an event filter dropping a room, one level down.
+ */
+const inAnyPlace = (filter: EventFilter) => !!(filter.venueIds?.length || filter.levels?.length);
+
+/**
  * Addresses downtown, so that somewhere the map draws nothing is still a place.
  *
  * Ranked below every room, and that is the point rather than an accident. The
@@ -594,16 +605,32 @@ export function search(
     stands: kind === 'all' || kind === 'food' || kind === 'vendor',
     addresses: kind === 'all' || kind === 'place',
   };
-  // A place has no day and no cost, so an event filter silences it — the same
-  // rule as before, now expressed once.
-  const eventOnlyFilter = narrowed && kind !== 'food';
+
+  /*
+   * Whose filters are on the panel, and therefore what the filter means.
+   *
+   * Each kind gets the dimensions that can be true or false of it — see
+   * `EventFilters` — and choosing a kind clears what was asked of the last one.
+   * So the same `EventFilter` is read as an event filter under Events, a stand
+   * filter under Food and Vendors, and a place filter under Places, and no
+   * dimension is ever applied to something it cannot describe.
+   *
+   * The one that has to stay is the old rule for **Everything**: an event
+   * filter there silences rooms, stands and addresses entirely, because "free
+   * on Saturday" can be neither true nor false of Exhibit Hall B and answering
+   * it anyway would answer a different question.
+   */
+  const asksEvents = kind === 'all' || kind === 'event';
+  const eventOnlyFilter = asksEvents && narrowed;
 
   const hits: SearchHit[] = [];
 
   if (wants.rooms && !eventOnlyFilter) {
     for (const keys of ROOM_KEYS) {
       const score = scoreRoom(keys, query);
-      if (score !== null) hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
+      if (score !== null && inChosenPlace(keys.room, filter)) {
+        hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
+      }
     }
   }
 
@@ -636,13 +663,17 @@ export function search(
   if (wants.stands && !eventOnlyFilter) {
     hits.push(
       ...standHits(query, (stand) => {
-        if (kind === 'food' && !isFood(stand)) return false;
-        if (kind === 'vendor' && isFood(stand)) return false;
-        return kind !== 'food' || matchesFood(stand, filter);
+        if (kind === 'food') return isFood(stand) && matchesFood(stand, filter);
+        if (kind === 'vendor') return !isFood(stand) && matchesVendor(stand, filter);
+        return true;
       }),
     );
   }
-  if (wants.addresses && !eventOnlyFilter) hits.push(...addressHits(rawQuery));
+  // An address is not in a building and has no floor, so any place filter drops
+  // it — the same rule as an event filter dropping a room, one level down.
+  if (wants.addresses && !eventOnlyFilter && !inAnyPlace(filter)) {
+    hits.push(...addressHits(rawQuery));
+  }
 
   if (sort) {
     const order = compareBy(sort);

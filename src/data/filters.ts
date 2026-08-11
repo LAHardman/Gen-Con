@@ -26,7 +26,7 @@
  */
 
 import { dayKey, eventEndMs, offsetMinutesOf, type ConEvent } from './events';
-import { ROOMS_BY_ID } from './venues';
+import { ROOMS, ROOMS_BY_ID } from './venues';
 
 /**
  * What kind of thing is being looked for.
@@ -58,6 +58,18 @@ export interface EventFilter {
   cuisine?: readonly string[];
   dish?: readonly string[];
   dietary?: readonly string[];
+  /**
+   * Vendors only: what sort of stand, whereabouts, and what it sells.
+   *
+   * `standKinds` rather than `kinds` because `kind` above is already the top of
+   * the filter and two fields a letter apart would be read wrong by somebody
+   * eventually. See `vendors.ts`.
+   */
+  standKinds?: readonly string[];
+  areas?: readonly string[];
+  tags?: readonly string[];
+  /** Places only: which floor, offered from the rooms in the chosen buildings. */
+  levels?: readonly string[];
   /** Days as `dayKey` writes them. Empty means every day. */
   days?: readonly string[];
   /** Starts no earlier than this many minutes past midnight, local. */
@@ -94,6 +106,10 @@ export function activeCount(filter: EventFilter): number {
   if (filter.cuisine?.length) n += 1;
   if (filter.dish?.length) n += 1;
   if (filter.dietary?.length) n += 1;
+  if (filter.standKinds?.length) n += 1;
+  if (filter.areas?.length) n += 1;
+  if (filter.tags?.length) n += 1;
+  if (filter.levels?.length) n += 1;
   if (filter.days?.length) n += 1;
   if (filter.startFrom !== undefined || filter.startTo !== undefined) n += 1;
   if (filter.minMinutes !== undefined || filter.maxMinutes !== undefined) n += 1;
@@ -117,6 +133,52 @@ export function activeCount(filter: EventFilter): number {
  */
 export const isAsking = (filter: EventFilter): boolean =>
   activeCount(filter) > 0 || (filter.kind ?? 'all') !== 'all';
+
+/* ------------------------------------------------------------------ places */
+
+/** Does this room answer the place filters — the building, and the floor? */
+export const inChosenPlace = (room: { venueId: string; level: string }, filter: EventFilter) =>
+  (!filter.venueIds?.length || filter.venueIds.includes(room.venueId)) &&
+  (!filter.levels?.length || filter.levels.includes(room.level));
+
+export interface PlaceCounts {
+  total: number;
+  venues: Map<string, number>;
+  levels: Map<string, number>;
+}
+
+/**
+ * How many rooms each place chip would leave.
+ *
+ * 149 rooms against thirty-odd options, so it is counted by re-filtering like
+ * the food and vendor tallies — and it means what those mean: the number is
+ * what *pressing it* produces, so adding a second building widens.
+ */
+export function placeCounts(
+  filter: EventFilter,
+  venueIds: readonly string[],
+  levels: readonly string[],
+): PlaceCounts {
+  const count = (next: EventFilter) => ROOMS.filter((room) => inChosenPlace(room, next)).length;
+  const forFacet = (facet: 'venueIds' | 'levels', values: readonly string[]) => {
+    const chosen = filter[facet] ?? [];
+    const out = new Map<string, number>();
+    for (const value of values) {
+      const after = chosen.includes(value) ? chosen.filter((one) => one !== value) : [...chosen, value];
+      // Narrowing to a building throws away a floor chosen in another one, the
+      // same way the room picker does — so the count has to throw it away too,
+      // or it promises a number the press will not produce.
+      const next = { ...filter, [facet]: after };
+      out.set(value, count(facet === 'venueIds' ? { ...next, levels: [] } : next));
+    }
+    return out;
+  };
+  return {
+    total: count(filter),
+    venues: forFacet('venueIds', venueIds),
+    levels: forFacet('levels', levels),
+  };
+}
 
 /**
  * Minutes past midnight, in the timestamp's own offset.

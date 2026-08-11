@@ -426,6 +426,28 @@ describe('something already on the schedule', () => {
     expect(screen.queryByRole('button', { name: /show full description/i })).toBeNull();
   });
 
+  it('says what a planned food stop sells, the same as the vendor panel does', () => {
+    // The schedule is where it is most needed: standing on South Street at one
+    // o'clock deciding whether the walk is worth it, "Venezuelan · arepas ·
+    // vegan options" is the answer, and it is looked up from the id in the
+    // entry rather than copied into it.
+    const arepas = EXHIBITORS.find((one) => one.name === 'Arepas')!;
+    open({ kind: 'planned', entry: { ...lunch, id: `vendor:${arepas.id}@2026-08-01T13:00` } });
+    expect(fact('Cuisine')).toBe('Venezuelan');
+    expect(fact('Serves')).toBe('Arepa');
+    expect(fact('Dietary')).toContain('Vegan Options');
+    // And its own When rather than the truck's opening hours, which it was
+    // already checked against when it was added.
+    expect(fact('When')).toContain('1:00');
+    expect(screen.queryByText('Open')).toBeNull();
+  });
+
+  it('says nothing about what a room sells, having no answer', () => {
+    open({ kind: 'planned', entry: { ...lunch, id: 'place:hall-a@2026-08-01T13:00' } });
+    expect(screen.queryByText('Cuisine')).toBeNull();
+    expect(screen.queryByText('Serves')).toBeNull();
+  });
+
   it('links a food stop to the truck’s own page', () => {
     // The nearest thing to a menu that exists anywhere, and the schedule is
     // where somebody standing on South Street at one o'clock wants it. Looked

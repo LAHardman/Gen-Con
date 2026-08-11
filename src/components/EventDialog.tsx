@@ -231,25 +231,38 @@ export function EventDialog({
     if (event.ageRequirement) rows.push(['Age', event.ageRequirement]);
   }
 
+  /*
+   * "Open" rather than "When", because a vendor is a place with hours and not a
+   * session with a start time. Gen Con publishes hours for the Block Party and
+   * nowhere else, so everywhere else this row is simply absent — see the note in
+   * `food.ts` for the four sources that were checked. A stop already *on* the
+   * schedule has its own When and had this checked when it was added, so it does
+   * not carry it twice.
+   */
   const opening = vendor ? openingFor(vendor) : null;
-  if (vendor) {
-    /*
-     * "Open" rather than "When", because a vendor is a place with hours and not
-     * a session with a start time. Gen Con publishes hours for the Block Party
-     * and nowhere else, so everywhere else this row is simply absent — see the
-     * note in `food.ts` for the four sources that were checked.
-     */
-    if (opening) rows.push(['Open', `${formatOpening(opening)} (${opening.year} hours)`]);
-    // No "Kind" row: the tag at the top of the panel is already that word, and
-    // a fact list that repeats the heading is a fact list somebody stops reading.
-    if (isFood(vendor)) {
-      const facets = foodFacets(vendor);
-      if (facets.cuisine.length) rows.push(['Cuisine', facets.cuisine.join(', ')]);
-      if (facets.dish.length) rows.push(['Serves', facets.dish.join(', ')]);
-      if (facets.dietary.length) rows.push(['Dietary', facets.dietary.join(', ')]);
-      if (facets.other.length) rows.push(['Also', facets.other.join(', ')]);
-    }
+  if (opening) rows.push(['Open', `${formatOpening(opening)} (${opening.year} hours)`]);
+
+  /*
+   * What a stand sells, wherever the panel is showing one.
+   *
+   * The same rows for a vendor being looked at on the map and for one already
+   * on somebody's Saturday. "Venezuelan · arepas · vegan options" is the answer
+   * to "what is this" in both places, and the schedule is where it is most
+   * needed: standing on South Street at one o'clock, deciding whether to walk.
+   *
+   * No "Kind" row anywhere: the tag at the top of the panel is already that
+   * word, and a fact list that repeats its own heading is one people stop
+   * reading.
+   */
+  const stand = vendor ?? plannedVendor;
+  if (stand && isFood(stand)) {
+    const facets = foodFacets(stand);
+    if (facets.cuisine.length) rows.push(['Cuisine', facets.cuisine.join(', ')]);
+    if (facets.dish.length) rows.push(['Serves', facets.dish.join(', ')]);
+    if (facets.dietary.length) rows.push(['Dietary', facets.dietary.join(', ')]);
+    if (facets.other.length) rows.push(['Also', facets.other.join(', ')]);
   }
+
   rows.push(['Where', where]);
 
   /*
