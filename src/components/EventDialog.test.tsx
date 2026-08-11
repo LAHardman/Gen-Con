@@ -12,10 +12,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EventDialog } from './EventDialog';
+import { EventDialog, type Detail } from './EventDialog';
 import { ROOMS_BY_ID } from '../data/venues';
 import type { ConEvent } from '../data/events';
 import type { Plan } from '../hooks/usePlan';
+import { EXHIBITORS } from '../data/exhibitors';
 
 const event: ConEvent = {
   id: 'BGM26ND306429',
@@ -44,13 +45,16 @@ const planOf = (ids: string[] = []) => ({
 });
 
 function show(over: Partial<ConEvent> = {}, plan: Plan = planOf()) {
+  return open({ kind: 'event', event: { ...event, ...over }, room: ROOMS_BY_ID['hall-a'] }, plan);
+}
+
+function open(detail: Detail, plan: Plan = planOf()) {
   const onClose = vi.fn();
   const onShowOnMap = vi.fn();
   const onNavigate = vi.fn();
   render(
     <EventDialog
-      event={{ ...event, ...over }}
-      room={ROOMS_BY_ID['hall-a']}
+      detail={detail}
       plan={plan}
       onClose={onClose}
       onShowOnMap={onShowOnMap}
@@ -246,5 +250,115 @@ describe('the three things you can do', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     fireEvent.pointerDown(document.querySelector('.dialog__backdrop')!);
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a vendor rather than an event', () => {
+  const truck = EXHIBITORS.find((one) => one.name === 'Arepas')!;
+  const showVendor = (over: Partial<typeof truck> = {}) =>
+    open({ kind: 'vendor', exhibitor: { ...truck, ...over }, room: ROOMS_BY_ID['block-party-street'] });
+
+  it('says when they are open rather than when a session runs', () => {
+    // A vendor is a place with hours, not a session with a start time.
+    showVendor();
+    expect(fact('Open')).toContain('Thu–Sat 9am–9pm');
+    expect(screen.queryByText('When')).toBeNull();
+    expect(screen.queryByText('Runs for')).toBeNull();
+  });
+
+  it('says which year the hours are, because they are last year’s', () => {
+    // Gen Con has not published 2026's. Showing 2025's without saying so would
+    // be telling somebody when to turn up using a different convention's times.
+    showVendor();
+    expect(fact('Open')).toContain('2025');
+  });
+
+  it('leaves the row out where nothing publishes hours at all', () => {
+    const inTheHall = EXHIBITORS.find((one) => one.area === 'Exhibit Hall')!;
+    open({ kind: 'vendor', exhibitor: inTheHall, room: ROOMS_BY_ID['hall-a'] });
+    expect(screen.queryByText('Open')).toBeNull();
+  });
+
+  it('splits what they sell into the three questions', () => {
+    showVendor();
+    expect(fact('Cuisine')).toContain('Venezuelan');
+    expect(fact('Serves')).toContain('Arepa');
+    expect(fact('Dietary')).toContain('Vegan Options');
+    // What kind of stall it is, kept but not dressed up as a food type.
+    expect(fact('Also')).toContain('Food Truck');
+  });
+
+  it('does not say Block Party twice, or repeat the heading', () => {
+    // The Block Party is a room called Block Party inside a venue called Block
+    // Party. Printed straight through, the address reads as a stutter — and
+    // "Kind: Food & Drink" under a heading that already says FOOD & DRINK is
+    // the same fault in the other direction.
+    showVendor();
+    expect(fact('Where')).toBe('Block Party · Food Truck 12');
+    expect(screen.queryByText('Kind')).toBeNull();
+  });
+
+  it('links to their own site instead of to gencon.com', () => {
+    // Gen Con publishes no menus. Their own page — a Facebook one for 15 of the
+    // 43 — is where a food truck actually posts what it is cooking.
+    showVendor();
+    const link = screen.getByRole('link');
+    expect(link.getAttribute('href')).toBe(truck.website);
+    expect(link.textContent).toMatch(/their own site/i);
+    expect(screen.queryByText(/gencon\.com/i)).toBeNull();
+  });
+
+  it('offers the same description button', () => {
+    showVendor();
+    expect(screen.getByRole('button', { name: /show full description/i })).toBeTruthy();
+  });
+
+  it('asks the exhibitor record for it, not the event search', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: truck.id, description: 'Arepas, all day.' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    showVendor();
+    fireEvent.click(screen.getByRole('button', { name: /show full description/i }));
+    const asked = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(asked).toContain('exhibitor_profiles');
+    expect(asked).toContain(String(truck.id));
+    expect(asked).not.toContain('event_search');
+  });
+
+  it('refuses a record that is not this vendor', async () => {
+    // A proxy that is not there answers 200 with the app's own HTML, and a
+    // shared cache can answer with the last exhibitor asked for. Neither is
+    // this one, whatever description it happens to carry.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: (truck.id ?? 0) + 1, description: 'Somebody else entirely.' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    );
+    showVendor();
+    fireEvent.click(screen.getByRole('button', { name: /show full description/i }));
+    await waitFor(() => expect(screen.getByText(/couldn’t read the description/i)).toBeTruthy());
+    expect(screen.queryByText('Somebody else entirely.')).toBeNull();
+  });
+
+  it('cannot be put on the schedule, because it is not a session', () => {
+    showVendor();
+    expect(screen.queryByRole('button', { name: /add to schedule/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show on map' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Directions' })).toBeTruthy();
+  });
+
+  it('says nothing about a website it does not have', () => {
+    showVendor({ website: undefined });
+    expect(screen.queryByRole('link')).toBeNull();
   });
 });

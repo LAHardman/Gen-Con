@@ -2088,13 +2088,19 @@ body {
  * would bury the search box, and most searches are still somebody typing a
  * title. Floated over what is beneath rather than pushing it down, so opening
  * the panel never moves the results out from under a thumb.
+ *
+ * ABOVE THE RESULTS, because both of these hang off the same box and on a phone
+ * they are the same 400 pixels. While the panel is open the chips are what is
+ * being read — and each one carries the count of what pressing it leaves, which
+ * is the preview of the list underneath. Closing the panel is what asks for the
+ * list itself. The other way round, choosing a kind covered its own filters.
  */
 .filters__panel {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 3;
+  z-index: 1200;
   display: grid;
   gap: 10px;
   max-height: 60vh;
@@ -2239,4 +2245,42 @@ body {
 
 .event-dialog__more:hover {
   border-color: var(--accent);
+}
+
+/* The top of the filter: what kind of thing is being looked for. */
+.filters__kinds {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  overflow-x: auto;
+}
+
+.filters__kind {
+  flex: 1 1 auto;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filters__kind--on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Said once, under the food filters: there are no menus to be had. */
+.filters__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
 }

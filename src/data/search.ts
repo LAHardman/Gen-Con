@@ -24,7 +24,16 @@ import { ADDRESSES } from './addresses';
 import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
 import { pinPlace, roomPlace, type NavPlace } from './navigation';
 import type { Spot } from './nearby';
-import { activeCount, compareBy, matchesFilter, NO_FILTER, type EventFilter, type SortKey } from './filters';
+import {
+  activeCount,
+  compareBy,
+  isAsking,
+  matchesFilter,
+  NO_FILTER,
+  type EventFilter,
+  type SortKey,
+} from './filters';
+import { isFood, matchesFood } from './food';
 
 export interface SearchHit {
   /** Stable across renders, for list keys and keyboard selection. */
@@ -455,9 +464,10 @@ export function buildEventSearchIndex(index: EventIndex | null): EventSearchInde
  * A name still finds the room it is in as well, ranked below this, so "hall b"
  * keeps meaning Exhibit Hall B rather than the thirteen publishers in it.
  */
-function standHits(query: string): SearchHit[] {
+function standHits(query: string, keep: (stand: Exhibitor) => boolean = () => true): SearchHit[] {
   const hits: SearchHit[] = [];
   for (const stand of STANDS) {
+    if (!keep(stand.exhibitor)) continue;
     const score =
       stand.booth && stand.booth === query
         ? SCORE.boothNumber
@@ -566,13 +576,31 @@ export function search(
 ): SearchHit[] {
   const query = normalise(rawQuery);
   const narrowed = activeCount(filter) > 0;
-  // Two characters of title, OR a filter: "everything free on Saturday
-  // afternoon" is a real question with no word in it.
-  if (query.length < 2 && !narrowed) return [];
+  const kind = filter.kind ?? 'all';
+  // Two characters of title, OR a filter, OR a kind chosen: "everything free on
+  // Saturday afternoon" is a real question with no word in it, and so is "food".
+  if (query.length < 2 && !isAsking(filter)) return [];
+
+  /*
+   * What each kind is allowed to answer with.
+   *
+   * `event` and the rest are exclusive on purpose. Somebody who has said "Food"
+   * is not asking whether a room happens to be called that, and mixing the two
+   * would put Exhibit Hall F above a taco truck for the query "f".
+   */
+  const wants = {
+    rooms: kind === 'all' || kind === 'place',
+    events: kind === 'all' || kind === 'event',
+    stands: kind === 'all' || kind === 'food' || kind === 'vendor',
+    addresses: kind === 'all' || kind === 'place',
+  };
+  // A place has no day and no cost, so an event filter silences it — the same
+  // rule as before, now expressed once.
+  const eventOnlyFilter = narrowed && kind !== 'food';
 
   const hits: SearchHit[] = [];
 
-  if (!narrowed) {
+  if (wants.rooms && !eventOnlyFilter) {
     for (const keys of ROOM_KEYS) {
       const score = scoreRoom(keys, query);
       if (score !== null) hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
@@ -581,7 +609,7 @@ export function search(
 
   // One hit per title per room, keeping the soonest session and counting the rest.
   const grouped = new Map<string, SearchHit>();
-  for (const { room, pin, event, title } of events.entries) {
+  for (const { room, pin, event, title } of wants.events ? events.entries : []) {
     const score = !query
       ? SCORE.eventTitleStart
       : title.startsWith(query)
@@ -605,10 +633,16 @@ export function search(
   }
   hits.push(...grouped.values());
 
-  if (!narrowed) {
-    hits.push(...standHits(query));
-    hits.push(...addressHits(rawQuery));
+  if (wants.stands && !eventOnlyFilter) {
+    hits.push(
+      ...standHits(query, (stand) => {
+        if (kind === 'food' && !isFood(stand)) return false;
+        if (kind === 'vendor' && isFood(stand)) return false;
+        return kind !== 'food' || matchesFood(stand, filter);
+      }),
+    );
   }
+  if (wants.addresses && !eventOnlyFilter) hits.push(...addressHits(rawQuery));
 
   if (sort) {
     const order = compareBy(sort);

@@ -329,10 +329,18 @@ ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
 
 `npm run fetch:exhibitors` reads Gen Con's own exhibitor browser —
 `https://www.gencon.com/api/v1/exhibitor_profiles`, public and paginated — into
-`src/data/exhibitors.ts`: **846 locations, 780 exhibitors, 794 of them
+`src/data/exhibitors.ts`: **845 locations, 779 exhibitors, 793 of them
 numbered**. One row per *place* rather than per exhibitor, because a publisher
 with four booths, a demo hall and a meeting room is six places somebody might
 be looking for.
+
+Each row also keeps the id its description is fetched by and Gen Con's own tags
+for it — 792 of the 845 carry at least one, out of a vocabulary of 116, stored
+as indices into a shared list because the strings repeat and 47.8 KB of them
+becomes 12.3 KB. The importer additionally opens the per-exhibitor record for
+**Food & Drink** alone, which is where the vendor's own website is; that is 43
+extra requests rather than 845, and it is the only group whose own page is worth
+linking to instead of gencon.com.
 
 `area` and `spot` are Gen Con's own words, split on the spaced colon it writes
 them with — `Exhibit Hall` / `Booth 1637`, `ICC : Hall B` / `Archon Studio`,
@@ -400,7 +408,10 @@ That took events resolving to no room from **130 to 50** of 27,467, and stands
 placed on the map from **47 to 621** of 846 — every one of the 573 in the
 exhibit hall. Searching "Kenzer" now finds Exhibit Hall I. Placing Community
 Row, the Makers Market, the Block Party and Hall I's three blocks of tables
-took it to **846 of 846** — every stand Gen Con lists.
+took it to **every stand Gen Con lists**. The test for that asserts the
+*unplaced list is empty* rather than a total, so it stays true across a refresh
+that adds ten more — which is why the figures above are a past run's and the
+current count is 845.
 
 ### Getting between buildings
 
@@ -671,6 +682,61 @@ called that"; the question in front of somebody planning is narrower — what is
 on **Saturday afternoon**, runs **under three hours**, costs **nothing**, and is
 **in the convention centre**, and of those which starts soonest.
 
+**What kind of thing, first.** Above everything else is one row —
+**Everything · Events · Food · Vendors · Places** — and it decides what the rest
+of the panel even means. A cuisine is not a question you can ask of a seminar
+and a ticket price is not one you can ask of a taco truck, so rather than nine
+controls of which four are dead, the panel shows the ones that belong to
+whatever is being looked for. Choosing a kind clears what was asked of the last
+one: a day filter left on while switching to Food would silently narrow a list
+that has no days in it.
+
+The kinds are exclusive on purpose. Somebody who has pressed **Food** is not
+asking whether a room happens to be called that, and mixing the two would put
+Exhibit Hall F above a taco truck for the query "f". Choosing one is also a
+whole question on its own — 43 vendors is a list you browse, not one you type
+at — so the results open on a kind alone, with nothing typed. It is not counted
+on the **Filters** button, though, because it hides nothing: a "1" there would
+claim something was being held back.
+
+The Schedule tab has no kind row. A column there is drawn from a start, an end
+and the walk in between, and a food truck has none of the three, so offering it
+above a box that can only add sessions would be offering something that could
+then only be refused.
+
+**Food: cuisine, dish, dietary.** Gen Con files every exhibitor under tags of
+its own and all 43 Block Party vendors carry them, but the 49 tags in use are
+three different questions wearing one coat: what kitchen it is (Korean,
+Venezuelan), what comes out of it (Tacos, Crepes, Burger), and what you can
+actually eat (Vegan, Gluten Free). Somebody looking for lunch is asking exactly
+one of the three, and no rule reads them apart — "Southern" is a cuisine,
+"Soulfood" is arguably both, "Quick Eats" is neither — so every tag is placed by
+hand in `food.ts`. A tag nobody has filed still shows on the vendor and simply
+gets no chip, which is the right failure for a list somebody else edits: next
+year's new cuisine appears on the trucks that have it and waits to be filed
+rather than vanishing.
+
+**There are no menus, and no amount of work here would produce one.** Gen Con's
+API carries no dishes and no prices; the per-exhibitor description is, for 19 of
+the 43, the words "Visit us at Gen Con Indy 2026 at Block Party on South
+Street". What each vendor does have is its own website, so a vendor's panel
+links there instead of to gencon.com — for 15 of them that is a Facebook page,
+which is where a food truck actually posts what it is cooking. The same **Show
+full description** button is there, reading the exhibitor record rather than the
+event one.
+
+**And the hours are last year's, and say so.** They are not published anywhere a
+program can reach: no hours field on the exhibitor listing or the per-exhibitor
+record; `/api/v1/hours`, `/venues`, `/areas` and `/exhibit_hall_hours` all 404;
+the `block-party-street` room has *zero* events, so there is nothing to derive a
+span from either. The one place hours appear is the Block Party page on
+gencon.com — inside an HTML comment, left over while the 2026 page is written.
+Scraping it without checking would have shipped 2025's times as this year's. So
+they are written down in `food.ts` in Gen Con's own words with the year attached,
+and the panel prints that year: `Thu–Sat 9am–9pm · Sun 9am–4pm (2025 hours)`.
+The beer garden keeps its own, which are different. Everywhere else — the
+exhibit hall included — gets no hours row at all rather than a guess.
+
 Filter by day, start time, length, type, cost, tickets remaining, age, game
 system, and building or room. Sort by start, end, length or cost. A filter is a
 question in its own right, so a filter with no words typed opens the list —
@@ -710,10 +776,12 @@ Three things worth saying about what is there:
   catalogue does not use is never offered, and one it adds appears without
   anybody editing a list.
 
-On the map's search, turning any filter on also drops rooms, stands and street
-addresses from the results. None of them has a day, a cost or a length, so
-"free on Saturday" can be neither true nor false of Exhibit Hall B; offering it
-anyway would answer a different question from the one asked.
+On the map's search, turning on an *event* filter also drops rooms, stands and
+street addresses from the results. None of them has a day, a cost or a length,
+so "free on Saturday" can be neither true nor false of Exhibit Hall B; offering
+it anyway would answer a different question from the one asked. The food filters
+are the exception and for the same reason — a cuisine is a question about a
+stand, so choosing one narrows the stands rather than silencing them.
 
 **Where it is kept.** `localStorage`, on the device, and nowhere else — this is
 a static site that has to keep working when the host that served it is gone, so
@@ -1530,24 +1598,38 @@ src/
     footprints.ts    Real building outlines, from OpenStreetMap
     plan-geometry.ts Floor-plan geometry and outlines (generated)
     events.ts        Event types, venue/room matching, schedule helpers
+    event-kinds.ts   Gen Con's nineteen type codes, read off its own API
     amenities.ts     Restrooms, from the plans that draw them
-    search.ts        Ranking rooms and events against what you type
+    exhibitors.ts    Every stand, its booth, its tags and its site (generated)
+    booths.ts        Booth numbers to halls, and the aisle grid
+    food.ts          Which tags are cuisine, dish or dietary — and the hours
+    search.ts        Ranking rooms, stands, events and addresses against a query
+    filters.ts       The kind, the nine dimensions, and what pressing one leaves
+    plan.ts          The four days, travel between entries, and the shared axis
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
     walkable.ts      The floor you can stand on, as a grid, and A* over it
     vertical.ts      Where a route changes floor, and how sure that is
     route.ts         Joins the floors into one graph and searches it
+    distances.ts     Every room-to-room walk, precomputed (generated)
+    nearby.ts        Reads that table — "how far away" without routing
     venue-plan.ts    Hotel hallways, room outlines and stairs (generated)
     basemaps.ts      Tile providers and their attribution
   hooks/
-    useEventFeed.ts       Loads public/events.json
-    useLocationCheck.ts   Re-reads the source to confirm a room's events
-    useDeviceLocation.ts  Watches the device's position, only while asked
+    useEventFeed.ts        Loads public/events.json
+    useLocationCheck.ts    Re-reads the source to confirm a room's events
+    useDeviceLocation.ts   Watches the device's position, only while asked
+    useEventNotes.ts       Fetches one description, when it is asked for
+    usePlan.ts             The schedule, in localStorage
+    usePlanDescriptions.ts Keeps a planned event's description for offline
   utils/geo.ts       Local-grid ↔ latitude/longitude projection
   components/
     MapView.tsx      Leaflet map, venue/room layers, labels, amenities, routes
     RoomDialog.tsx   Room details and its schedule
+    EventDialog.tsx  One event or one vendor, in full, before committing to it
     SearchBar.tsx    Search box and its results
+    EventFilters.tsx The kind row and the filter panel, shared by both searches
+    PlanView.tsx     The four-day schedule, on one ruler
     NavPanel.tsx     Directions: the two ends, how to choose them, the distance
     Legend.tsx       Category key and the amenities toggle
 plans/

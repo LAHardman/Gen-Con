@@ -16,6 +16,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildEventSearchIndex, search, searchSessions, type EventSearchIndex } from './search';
 import { ROOMS_BY_ID } from './venues';
+import { isFood } from './food';
+import { tagsOf } from './exhibitors';
 import { indexEvents, type ConEvent } from './events';
 
 const NO_EVENTS: EventSearchIndex = { entries: [] };
@@ -315,5 +317,68 @@ describe('filtering and ordering', () => {
   it('answers the map search from a filter alone too', () => {
     const hits = search('', feed, 20, { types: ['BGM'] });
     expect(hits.map((hit) => hit.event?.id)).toEqual(['a']);
+  });
+});
+
+describe('the top-level kind', () => {
+  const feed: EventSearchIndex = {
+    entries: [
+      { room: ROOMS_BY_ID['hall-a'], event: { id: 'a', title: 'Taco Tuesday', locationText: 'ICC', start: '2026-07-30T09:00:00-04:00', roomId: 'hall-a' }, title: 'taco tuesday' },
+    ],
+  };
+
+  it('answers with everything when nothing has been chosen', () => {
+    const hits = search('hall', feed, 30);
+    expect(hits.some((hit) => hit.kind === 'room' && !hit.exhibitor)).toBe(true);
+  });
+
+  it('gives only events when events are asked for', () => {
+    const hits = search('taco', feed, 30, { kind: 'event' });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((hit) => hit.kind === 'event')).toBe(true);
+  });
+
+  it('gives only food when food is asked for', () => {
+    // "taco" is a truck's food and also an event title here. Somebody who has
+    // said Food is not asking about the seminar.
+    const hits = search('taco', feed, 30, { kind: 'food' });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((hit) => hit.exhibitor && isFood(hit.exhibitor))).toBe(true);
+  });
+
+  it('gives only the halls’ vendors when vendors are asked for', () => {
+    const hits = search('games', feed, 30, { kind: 'vendor' });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((hit) => hit.exhibitor && !isFood(hit.exhibitor))).toBe(true);
+  });
+
+  it('gives only places when places are asked for', () => {
+    const hits = search('hall', feed, 30, { kind: 'place' });
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((hit) => !hit.event && !hit.exhibitor)).toBe(true);
+  });
+
+  it('answers a kind with nothing typed at all', () => {
+    // "Food" is a question in its own right, and there is nothing to type.
+    expect(search('', feed, 30, { kind: 'food' }).length).toBeGreaterThan(0);
+    expect(search('', feed, 30)).toEqual([]);
+  });
+
+  it('narrows food by cuisine, dish and dietary', () => {
+    const vegan = search('', feed, 60, { kind: 'food', dietary: ['Vegan Options'] });
+    expect(vegan.length).toBeGreaterThan(0);
+    for (const hit of vegan) expect(tagsOf(hit.exhibitor!)).toContain('Vegan Options');
+
+    const venezuelan = search('', feed, 60, { kind: 'food', cuisine: ['Venezuelan'] });
+    expect(venezuelan.length).toBeGreaterThan(0);
+    expect(venezuelan.length).toBeLessThan(vegan.length + 60);
+    for (const hit of venezuelan) expect(tagsOf(hit.exhibitor!)).toContain('Venezuelan');
+  });
+
+  it('does not let an event filter silence the food list', () => {
+    // The rule that drops rooms while a day filter is on must not drop the
+    // trucks while a cuisine filter is on — they are the thing being asked for.
+    const hits = search('', feed, 60, { kind: 'food', cuisine: ['Korean'] });
+    expect(hits.length).toBeGreaterThan(0);
   });
 });

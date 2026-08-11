@@ -28,7 +28,36 @@
 import { dayKey, eventEndMs, offsetMinutesOf, type ConEvent } from './events';
 import { ROOMS_BY_ID } from './venues';
 
+/**
+ * What kind of thing is being looked for.
+ *
+ * The top of the filter, and the thing that decides what the rest of it even
+ * means. A cuisine is not a question you can ask of a seminar, and a ticket
+ * price is not one you can ask of a taco truck — so rather than showing nine
+ * controls of which four are dead, the panel shows the ones that belong to
+ * whatever is being searched for.
+ *
+ * `all` is the default and the old behaviour: everything, ranked together.
+ */
+export type SearchKind = 'all' | 'event' | 'food' | 'vendor' | 'place';
+
+export const KIND_LABEL: Record<SearchKind, string> = {
+  all: 'Everything',
+  event: 'Events',
+  food: 'Food',
+  vendor: 'Vendors',
+  place: 'Places',
+};
+
+export const SEARCH_KINDS: SearchKind[] = ['all', 'event', 'food', 'vendor', 'place'];
+
 export interface EventFilter {
+  /** What is being looked for. Absent means everything. */
+  kind?: SearchKind;
+  /** Food only: which kitchen, which dish, and what you can eat. */
+  cuisine?: readonly string[];
+  dish?: readonly string[];
+  dietary?: readonly string[];
   /** Days as `dayKey` writes them. Empty means every day. */
   days?: readonly string[];
   /** Starts no earlier than this many minutes past midnight, local. */
@@ -59,6 +88,12 @@ export const NO_FILTER: EventFilter = {};
 /** How many dimensions are actually narrowing anything. */
 export function activeCount(filter: EventFilter): number {
   let n = 0;
+  // The kind is not counted. It is the question rather than a narrowing of it,
+  // and a "1" on the Filters button for having chosen "Food" would say that
+  // something is hidden when nothing is.
+  if (filter.cuisine?.length) n += 1;
+  if (filter.dish?.length) n += 1;
+  if (filter.dietary?.length) n += 1;
   if (filter.days?.length) n += 1;
   if (filter.startFrom !== undefined || filter.startTo !== undefined) n += 1;
   if (filter.minMinutes !== undefined || filter.maxMinutes !== undefined) n += 1;
@@ -70,6 +105,18 @@ export function activeCount(filter: EventFilter): number {
   if (filter.ticketsOnly) n += 1;
   return n;
 }
+
+/**
+ * Has anything been asked at all, with or without a word typed?
+ *
+ * The rule the search itself follows, so that the box that shows the results
+ * and the search that produces them cannot disagree. Choosing "Food" is a whole
+ * question on its own — 43 vendors is a browsable list, and demanding two
+ * letters first would make the chip decoration — but it is not a *narrowing*,
+ * which is why `activeCount` still ignores it and this does not.
+ */
+export const isAsking = (filter: EventFilter): boolean =>
+  activeCount(filter) > 0 || (filter.kind ?? 'all') !== 'all';
 
 /**
  * Minutes past midnight, in the timestamp's own offset.

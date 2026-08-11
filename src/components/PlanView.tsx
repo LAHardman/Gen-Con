@@ -48,7 +48,7 @@ import {
 } from '../data/plan';
 import { searchSessions, type EventSearchIndex, type SessionHit } from '../data/search';
 import {
-  activeCount,
+  isAsking,
   formatCost,
   formatLength,
   lengthMinutes,
@@ -413,7 +413,7 @@ function PlanSearch({
   );
   // A filter alone is a question — "everything free on Saturday afternoon" has
   // no word in it — so the list opens on either.
-  const asked = query.trim().length >= 2 || activeCount(filter) > 0;
+  const asked = query.trim().length >= 2 || isAsking(filter);
 
   return (
     <div className="plan__add">
@@ -427,9 +427,19 @@ function PlanSearch({
         onChange={(change) => setQuery(change.target.value)}
       />
 
+      {/*
+        * No kind row here, unlike the map's search.
+        *
+        * A schedule holds sessions: they start, they end, and the walk between
+        * two of them is the whole point of the column. A taco truck has none of
+        * that, so offering "Food" above a box that can only add events would be
+        * offering something the schedule cannot then hold. The map's search is
+        * where you find lunch; this one is where you decide your Saturday.
+        */}
       <EventFilters
         filter={filter}
         sort={sort}
+        kinds={false}
         days={feedDays.filter(isConventionDay)}
         choices={choices}
         events={events}

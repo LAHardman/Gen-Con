@@ -293,6 +293,15 @@ describe('adding a session', () => {
     expect(offered).toHaveLength(1);
     expect(offered[0]).toContain('Saturday');
   });
+
+  it('does not offer a kind of thing a schedule cannot hold', () => {
+    // The map's search has Food, Vendors and Places above it. A column here is
+    // drawn from a start, an end and the walk in between, and a taco truck has
+    // none of the three — so offering it would be offering something that
+    // could then only be refused.
+    show(planOf([]), indexOf(sessions));
+    expect(screen.queryByRole('group', { name: /what to search for/i })).toBeNull();
+  });
 });
 
 describe('an empty plan', () => {

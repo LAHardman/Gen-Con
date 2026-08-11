@@ -22,12 +22,16 @@ import {
   facetCounts,
   formatLength,
   NO_FILTER,
+  KIND_LABEL,
+  SEARCH_KINDS,
   SORT_LABEL,
   START_BANDS,
   type EventFilter,
   type FilterChoices,
   type SortKey,
 } from '../data/filters';
+import { EXHIBITORS } from '../data/exhibitors';
+import { foodChoices, foodCounts, isFood } from '../data/food';
 import { matchesQuery, type EventSearchIndex } from '../data/search';
 import { kindName } from '../data/event-kinds';
 import { dayName } from '../data/plan';
@@ -43,16 +47,52 @@ interface Props {
   events: EventSearchIndex;
   /** What has been typed, so the counts agree with the list beside them. */
   query: string;
+  /**
+   * Whether to offer the top-level kind at all.
+   *
+   * The map searches everything; the schedule searches sessions, because a
+   * session is the only thing it can hold. Off, the panel is the event one and
+   * `filter.kind` is never set.
+   */
+  kinds?: boolean;
   onChange: (filter: EventFilter) => void;
   onSort: (sort: SortKey | undefined) => void;
 }
 
 const SORT_KEYS: SortKey[] = ['start', 'end', 'length', 'cost'];
 
-export function EventFilters({ filter, sort, days, choices, events, query, onChange, onSort }: Props) {
+/** The three questions somebody looking for lunch is actually asking. */
+const FOOD_LABEL = { cuisine: 'Cuisine', dish: 'Dish', dietary: 'Dietary' } as const;
+
+export function EventFilters({
+  filter,
+  sort,
+  days,
+  choices,
+  events,
+  query,
+  kinds = true,
+  onChange,
+  onSort,
+}: Props) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const active = activeCount(filter);
+  const kind = filter.kind ?? 'all';
+
+  /*
+   * The food vendors, and what each of their chips would leave.
+   *
+   * 43 rows against 27,457 events, so none of `facetCounts`' machinery is
+   * needed — but the meaning has to be the same one: a count is what pressing
+   * it produces, not how many carry that tag.
+   */
+  const food = useMemo(() => foodChoices(), []);
+  const vendors = useMemo(() => EXHIBITORS.filter(isFood), []);
+  const foodTally = useMemo(
+    () => (open && kind === 'food' ? foodCounts(vendors, filter, food) : null),
+    [open, kind, vendors, filter, food],
+  );
 
   /*
    * Counted only while the panel is open.
@@ -64,16 +104,19 @@ export function EventFilters({ filter, sort, days, choices, events, query, onCha
    */
   const counts = useMemo(
     () =>
-      open
+      open && (kind === 'all' || kind === 'event')
         ? facetCounts(events.entries, (title) => matchesQuery(title, query), filter, choices)
         : null,
-    [open, events, query, filter, choices],
+    [open, kind, events, query, filter, choices],
   );
 
   const set = (patch: Partial<EventFilter>) => onChange({ ...filter, ...patch });
 
   /** Adds or removes one value from a list-shaped filter. */
-  const toggleIn = (key: 'days' | 'types' | 'ages' | 'venueIds' | 'roomIds', value: string) => {
+  const toggleIn = (
+    key: 'days' | 'types' | 'ages' | 'venueIds' | 'roomIds' | 'cuisine' | 'dish' | 'dietary',
+    value: string,
+  ) => {
     const held = filter[key] ?? [];
     set({
       [key]: held.includes(value) ? held.filter((one) => one !== value) : [...held, value],
@@ -99,6 +142,32 @@ export function EventFilters({ filter, sort, days, choices, events, query, onCha
 
   return (
     <div className="filters">
+      {/*
+        * The top of the filter, and the thing that decides what the rest of it
+        * means. A cuisine is not a question you can ask of a seminar and a
+        * ticket price is not one you can ask of a taco truck, so rather than
+        * nine controls of which four are dead, the panel shows the ones that
+        * belong to whatever is being looked for.
+        */}
+      {kinds && (
+      <div className="filters__kinds" role="group" aria-label="What to search for">
+        {SEARCH_KINDS.map((one) => (
+          <button
+            key={one}
+            type="button"
+            className={`filters__kind${one === kind ? ' filters__kind--on' : ''}`}
+            aria-pressed={one === kind}
+            // Changing what is being looked for clears what was asked of the
+            // last thing. A day filter left on while switching to Food would
+            // silently narrow a list that has no days in it.
+            onClick={() => onChange(one === 'all' ? {} : { kind: one })}
+          >
+            {KIND_LABEL[one]}
+          </button>
+        ))}
+      </div>
+      )}
+
       <div className="filters__bar">
         <button
           type="button"
@@ -111,6 +180,7 @@ export function EventFilters({ filter, sort, days, choices, events, query, onCha
           {active > 0 && <span className="filters__count">{active}</span>}
         </button>
 
+        {(kind === 'all' || kind === 'event') && (
         <label className="filters__sort">
           <span className="filters__sort-label">Sort</span>
           <select
@@ -125,6 +195,7 @@ export function EventFilters({ filter, sort, days, choices, events, query, onCha
             ))}
           </select>
         </label>
+        )}
 
         {active > 0 && (
           <button type="button" className="filters__clear" onClick={() => onChange(NO_FILTER)}>
@@ -133,7 +204,30 @@ export function EventFilters({ filter, sort, days, choices, events, query, onCha
         )}
       </div>
 
-      {open && (
+      {open && kind === 'food' && (
+        <div className="filters__panel" id={id}>
+          {(['cuisine', 'dish', 'dietary'] as const).map((facet) => (
+            <Group key={facet} label={FOOD_LABEL[facet]}>
+              {food[facet].map((tag) => (
+                <Chip
+                  key={tag}
+                  on={!!filter[facet]?.includes(tag)}
+                  left={foodTally?.[facet].get(tag)}
+                  onClick={() => toggleIn(facet, tag)}
+                >
+                  {tag}
+                </Chip>
+              ))}
+            </Group>
+          ))}
+          <p className="filters__note">
+            Gen Con publishes no menus and no prices — these are its own tags for each vendor. Open
+            one for its own site, which is where a food truck actually posts what it is cooking.
+          </p>
+        </div>
+      )}
+
+      {open && kind !== 'food' && (
         <div className="filters__panel" id={id}>
           <Group label="Day">
             {days.map((day) => (

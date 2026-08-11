@@ -5,8 +5,8 @@ import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import { PlanView } from './components/PlanView';
-import { EventDialog } from './components/EventDialog';
-import type { SearchHit, SessionHit } from './data/search';
+import { EventDialog, type Detail } from './components/EventDialog';
+import type { SearchHit } from './data/search';
 import type { Pin } from './data/offsite';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
@@ -71,7 +71,7 @@ export default function App() {
   // acting on a title and a room: whether it costs forty dollars, whether it is
   // 21+, whether any tickets are left are all reasons not to add it, and none
   // of them fit on a result row.
-  const [openEvent, setOpenEvent] = useState<SessionHit | null>(null);
+  const [openDetail, setOpenDetail] = useState<Detail | null>(null);
 
   // Directions cost a second and a half the first time and 5 ms after it, and
   // that second and a half used to be spent inside the tap. Now it is spent
@@ -241,6 +241,18 @@ export default function App() {
         setNav({ from: null, to: pinPlace(hit.pin) });
         setEditing('from');
         setPickOnMap(false);
+        return;
+      }
+      /*
+       * A stand opens itself rather than the hall it stands in.
+       *
+       * For a food truck that panel is the whole answer — what they sell, when
+       * they are open, and a link to their own page, which is the nearest thing
+       * to a menu that exists. Jumping the map to Exhibit Hall I instead would
+       * answer a question nobody asked.
+       */
+      if (hit.exhibitor) {
+        setOpenDetail({ kind: 'vendor', exhibitor: hit.exhibitor, room: hit.room });
         return;
       }
       const room = hit.room!;
@@ -463,7 +475,9 @@ export default function App() {
             choices={choices}
             nowMs={nowMs}
             onShowRoom={handleShowPlannedRoom}
-            onOpenEvent={setOpenEvent}
+            onOpenEvent={(hit) =>
+              setOpenDetail({ kind: 'event', event: hit.event, room: hit.room, pin: hit.pin })
+            }
           />
         )}
         {tab === 'map' && nav && (
@@ -486,19 +500,17 @@ export default function App() {
         )}
       </main>
 
-      {openEvent && (
+      {openDetail && (
         <EventDialog
-          event={openEvent.event}
-          room={openEvent.room}
-          pin={openEvent.pin}
+          detail={openDetail}
           plan={plan}
-          onClose={() => setOpenEvent(null)}
+          onClose={() => setOpenDetail(null)}
           onShowOnMap={(roomId) => {
-            setOpenEvent(null);
+            setOpenDetail(null);
             handleShowPlannedRoom(roomId);
           }}
           onNavigate={(room, pin) => {
-            setOpenEvent(null);
+            setOpenDetail(null);
             setTab('map');
             if (room) handleNavigateToRoom(room);
             else if (pin) {

@@ -53,6 +53,18 @@ const OUT = join(ROOT, 'src/data/exhibitors.ts');
 const API = 'https://www.gencon.com/api/v1/exhibitor_profiles';
 const PER_PAGE = 100;
 
+/**
+ * The kinds whose own website is worth a request each.
+ *
+ * The listing carries names, places and tags; a *website* is only on the
+ * per-exhibitor record, which is one request per exhibitor. 779 of those is a
+ * three-minute run against somebody else's server for a field that matters to
+ * one group: a food truck's own page is the nearest thing to a menu that
+ * exists, and it is what replaces the Gen Con link for them. So the detail is
+ * pulled for those 43 and nobody else.
+ */
+const DETAILED = new Set(['Food & Drink']);
+
 /** Their server. Node's default user-agent is refused by some of these. */
 const AGENT = 'gen-con-trip/0.1 (+https://github.com/LAHardman/Gen-Con)';
 
@@ -125,6 +137,9 @@ async function main() {
           spot,
           booth,
           level: level === null || level === 'null' ? undefined : Number(level),
+          // Gen Con's own id, which is what the app asks for a description with.
+          id: typeof exhibitor.id === 'number' ? exhibitor.id : undefined,
+          tags: (exhibitor.tags ?? []).map((tag) => String(tag).trim()).filter(Boolean),
         });
       }
     }
@@ -132,13 +147,54 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, PAUSE));
   }
 
+  /*
+   * The website, for the kinds that need one. See `DETAILED`.
+   *
+   * One request per exhibitor rather than per location, because a publisher
+   * with four booths has one website and asking four times would be rude.
+   */
+  const websites = new Map();
+  const wanted = [...new Set(rows.filter((row) => DETAILED.has(row.kind)).map((row) => row.id))].filter(
+    (id) => id !== undefined,
+  );
+  console.log(`Reading ${wanted.length} exhibitor records for their websites...`);
+  for (const id of wanted) {
+    try {
+      const response = await fetch(`${API}/${id}`, { headers: { 'User-Agent': AGENT } });
+      if (!response.ok) throw new Error(String(response.status));
+      const body = await response.json();
+      const link = body?.website?.navigateTo;
+      // Only an absolute link off Gen Con's own site. A relative one is a page
+      // on gencon.com, which is what this is meant to replace.
+      if (typeof link === 'string' && /^https?:\/\//i.test(link)) websites.set(id, link.trim());
+    } catch (error) {
+      console.warn(`  ${id}: ${error.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, PAUSE));
+  }
+  for (const row of rows) row.website = websites.get(row.id);
+
   rows.sort((a, b) => a.name.localeCompare(b.name) || a.spot.localeCompare(b.spot));
+
+  /*
+   * Tags as indices into one list.
+   *
+   * 3,506 tag instances draw on 116 distinct words, and a row is a *location* —
+   * so a publisher with six booths repeats its tags six times. Written out as
+   * strings that is 47.8 KB; as indices into a shared list it is 12.3 KB, on a
+   * file every visit downloads.
+   */
+  const vocabulary = [...new Set(rows.flatMap((row) => row.tags))].sort();
+  const indexOfTag = new Map(vocabulary.map((tag, at) => [tag, at]));
 
   const quote = (text) => `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
   const line = (row) =>
     `  { name: ${quote(row.name)}, kind: ${quote(row.kind)}, area: ${quote(row.area)}, spot: ${quote(row.spot)}` +
     (row.booth ? `, booth: ${quote(row.booth)}` : '') +
     (row.level === undefined || Number.isNaN(row.level) ? '' : `, level: ${row.level}`) +
+    (row.id === undefined ? '' : `, id: ${row.id}`) +
+    (row.tags.length ? `, tags: [${row.tags.map((tag) => indexOfTag.get(tag)).join(',')}]` : '') +
+    (row.website ? `, website: ${quote(row.website)}` : '') +
     ' },';
 
   const areas = new Map();
@@ -170,6 +226,17 @@ async function main() {
  * Source: Gen Con LLC.
  */
 
+/**
+ * Every word Gen Con files exhibitors under, once.
+ *
+ * These are its own vocabulary rather than anything worked out here: cuisines
+ * and dishes for the food trucks, genres and trades for the halls. \`food.ts\`
+ * is what decides which of them mean what.
+ */
+export const EXHIBITOR_TAGS: readonly string[] = [
+${vocabulary.map((tag) => `  ${quote(tag)},`).join('\n')}
+];
+
 export interface Exhibitor {
   name: string;
   /** Gen Con's own grouping: Exhibitors, Artists, Authors, Food & Drink. */
@@ -182,6 +249,17 @@ export interface Exhibitor {
   booth?: string;
   /** The campus level Gen Con's map puts it on. */
   level?: number;
+  /** Gen Con's own id, which its description is fetched by. */
+  id?: number;
+  /** Indices into \`EXHIBITOR_TAGS\` — see \`tagsOf\`. */
+  tags?: number[];
+  /** Their own site, where one is known. Only pulled for food and drink. */
+  website?: string;
+}
+
+/** An exhibitor's tags as words. */
+export function tagsOf(exhibitor: Exhibitor): string[] {
+  return (exhibitor.tags ?? []).map((at) => EXHIBITOR_TAGS[at]).filter(Boolean);
 }
 
 export const EXHIBITORS: Exhibitor[] = [

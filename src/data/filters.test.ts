@@ -19,6 +19,7 @@ import {
   formatLength,
   lengthMinutes,
   facetCounts,
+  isAsking,
   matchesFilter,
   minutesOfDay,
   NO_FILTER,
@@ -56,6 +57,17 @@ describe('an empty filter', () => {
     // Both ends of one range are one dimension, not two.
     expect(activeCount({ startFrom: 0, startTo: 720 })).toBe(1);
     expect(activeCount({ days: [SATURDAY], maxCost: 0, types: ['BGM'] })).toBe(3);
+  });
+
+  it('separates “has anything been asked” from “is anything narrowed”', () => {
+    // The two are not the same question and one bug came of treating them as
+    // one: choosing Food asks something real with nothing typed, while showing
+    // a "1" beside Filters for it would claim something was being hidden.
+    expect(activeCount({ kind: 'food' })).toBe(0);
+    expect(isAsking({ kind: 'food' })).toBe(true);
+    expect(isAsking(NO_FILTER)).toBe(false);
+    expect(isAsking({ kind: 'all' })).toBe(false);
+    expect(isAsking({ days: [SATURDAY] })).toBe(true);
   });
 });
 

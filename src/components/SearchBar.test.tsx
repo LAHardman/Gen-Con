@@ -110,6 +110,37 @@ describe('when the list is on screen', () => {
   });
 });
 
+describe('the top-level kind', () => {
+  const kindButton = (label: string) =>
+    within(screen.getByRole('group', { name: /what to search for/i })).getByRole('button', {
+      name: label,
+    });
+
+  it('opens the list on a kind alone, with nothing typed', () => {
+    // The bug this exists for: `search` answers "Food" with 43 vendors and the
+    // box refused to show them, because the box was gating on the filter count
+    // and the kind deliberately is not counted. Choosing a kind *is* the
+    // question — 43 vendors is a list you browse, not one you type at.
+    const { input } = setup();
+    fireEvent.focus(input);
+    expect(options()).toHaveLength(0);
+    fireEvent.click(kindButton('Food'));
+    expect(options().length).toBeGreaterThan(0);
+    expect(results()!.textContent).toContain('Arepas');
+  });
+
+  it('puts the list away again when the kind goes back to everything', () => {
+    // The other half: "Everything" with nothing typed is not a question, and
+    // answering it would be the whole campus under the search box.
+    const { input } = setup();
+    fireEvent.focus(input);
+    fireEvent.click(kindButton('Food'));
+    expect(options().length).toBeGreaterThan(0);
+    fireEvent.click(kindButton('Everything'));
+    expect(options()).toHaveLength(0);
+  });
+});
+
 describe('the keyboard', () => {
   it('starts on the first result', () => {
     const { type } = setup();

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { hitLabel, hitSpot, search, type EventSearchIndex, type SearchHit } from '../data/search';
 import { formatTimeRange } from '../data/events';
 import { formatRough, roughMinutes, type Spot } from '../data/nearby';
-import { activeCount, type EventFilter, type FilterChoices, type SortKey } from '../data/filters';
+import { isAsking, type EventFilter, type FilterChoices, type SortKey } from '../data/filters';
 import { EventFilters } from './EventFilters';
 
 interface Props {
@@ -33,7 +33,6 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<EventFilter>({});
   const [sort, setSort] = useState<SortKey | undefined>(undefined);
-  const narrowed = activeCount(filter) > 0;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -88,8 +87,10 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
   };
 
   // A filter alone is a question — "everything free on Saturday afternoon" has
-  // no word in it — so the list opens on either.
-  const showList = open && (query.trim().length >= 2 || narrowed);
+  // no word in it, and neither has "food" — so the list opens on either. The
+  // rule is `search`'s own rather than a copy of it, because the two disagreeing
+  // means a list that has results and does not show them.
+  const showList = open && (query.trim().length >= 2 || isAsking(filter));
 
   return (
     <div className="search" ref={boxRef}>

@@ -41,16 +41,49 @@ const NOTHING: EventNotes = { status: 'idle', description: null, program: null }
  * description saved for offline would be parsed by different rules from one
  * shown live.
  */
+/**
+ * What is being asked about.
+ *
+ * An event and an exhibitor are two different records on two different
+ * endpoints, and both have a description the feed cannot carry. Keeping them
+ * one type means the button, the offline archive and every failure path are
+ * written once.
+ */
+export type NotesSubject =
+  | { kind: 'event'; id: string }
+  | { kind: 'vendor'; id: number };
+
 export async function fetchEventNotes(
-  eventId: string,
+  subject: NotesSubject | string,
 ): Promise<{ description: string | null; program: string | null } | null> {
+  // A bare string is an event id — the plan's archive holds those and nothing
+  // else, and rewriting its call sites to say so would say it twice.
+  const asked: NotesSubject = typeof subject === 'string' ? { kind: 'event', id: subject } : subject;
+  const url =
+    asked.kind === 'event'
+      ? `${PROXY}/api/event_search?search=${encodeURIComponent(asked.id)}`
+      : `${PROXY}/api/v1/exhibitor_profiles/${asked.id}`;
   try {
-    const response = await fetch(`${PROXY}/api/event_search?search=${encodeURIComponent(eventId)}`);
+    const response = await fetch(url);
     if (!response.ok) return null;
-    return read(await response.json(), eventId);
+    const body = await response.json();
+    return asked.kind === 'event' ? read(body, asked.id) : readVendor(body, asked.id);
   } catch {
     return null;
   }
+}
+
+/**
+ * An exhibitor's own record, which answers with itself rather than a search.
+ *
+ * The id is still checked. A proxy that is not there answers 200 with the app's
+ * own HTML, and a mis-shaped record is not this vendor whatever it contains.
+ */
+function readVendor(body: unknown, id: number) {
+  const record = body as { id?: unknown; description?: unknown } | null;
+  if (!record || record.id !== id) return null;
+  const description = String(record.description ?? '').trim();
+  return { description: description || null, program: null };
 }
 
 /** Picks this event out of a search that can match more than one record. */
@@ -75,11 +108,14 @@ function read(body: unknown, id: string) {
  * online does not mean reachable — so a failed fetch still lands in
  * `unavailable`.
  */
-export function useEventNotes(eventId: string | null, wanted: boolean): EventNotes {
+export function useEventNotes(subject: NotesSubject | null, wanted: boolean): EventNotes {
   const [notes, setNotes] = useState<EventNotes>(NOTHING);
+  // Its identity, so the effect re-runs on a different subject and not on a
+  // new object holding the same one.
+  const key = subject ? `${subject.kind}:${subject.id}` : null;
 
   useEffect(() => {
-    if (!eventId || !wanted) {
+    if (!subject || !wanted) {
       setNotes(NOTHING);
       return;
     }
@@ -91,7 +127,7 @@ export function useEventNotes(eventId: string | null, wanted: boolean): EventNot
     setNotes({ status: 'loading', description: null, program: null });
 
     (async () => {
-      const found = await fetchEventNotes(eventId);
+      const found = await fetchEventNotes(subject);
       if (cancelled) return;
       // No proxy, no network, or a record that did not parse. All three come to
       // the same thing, and the dialog says so rather than showing a blank.
@@ -105,7 +141,8 @@ export function useEventNotes(eventId: string | null, wanted: boolean): EventNot
     return () => {
       cancelled = true;
     };
-  }, [eventId, wanted]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, wanted]);
 
   return notes;
 }
