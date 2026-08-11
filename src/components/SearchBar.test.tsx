@@ -28,10 +28,13 @@ import { filterChoices } from '../data/filters';
 
 afterEach(cleanup);
 
+/** Saturday lunchtime in Indianapolis, when the trucks are open. */
+const NOW = Date.parse('2026-08-01T12:30:00-04:00');
+
 /** Rooms are searchable with no event feed at all, which is what a clone has. */
 const EVENTS = buildEventSearchIndex(null);
 
-function setup(from: { roomId?: string | null } | null = null) {
+function setup(from: { roomId?: string | null } | null = null, nowMs = NOW) {
   const onPick = vi.fn();
   render(
     <SearchBar
@@ -39,6 +42,8 @@ function setup(from: { roomId?: string | null } | null = null) {
       from={from}
       choices={filterChoices([])}
       feedDays={[]}
+      nowMs={nowMs}
+      offsetMinutes={-240}
       onPick={onPick}
     />,
   );
@@ -143,7 +148,7 @@ describe('the top-level kind', () => {
     expect(legends()).toEqual(['Sort of stand', 'Where', 'Tags']);
 
     fireEvent.click(kindButton('Places'));
-    expect(legends()).toEqual(['Building', 'Floor']);
+    expect(legends()).toEqual(['Right now', 'Building', 'Floor']);
 
     fireEvent.click(kindButton('Events'));
     expect(legends()).toContain('Day');
@@ -165,6 +170,72 @@ describe('the top-level kind', () => {
     );
     expect(options().length).toBeGreaterThan(0);
     expect(results()!.textContent).not.toContain('Nothing matches');
+  });
+
+  it('offers nearest-first only once something says where you are', () => {
+    // An order by distance from nowhere would be a made-up order, so the option
+    // is absent rather than present and inert.
+    setup();
+    fireEvent.focus(screen.getByRole('combobox', { name: /search rooms and events/i }));
+    fireEvent.click(kindButton('Food'));
+    expect(screen.queryByRole('option', { name: /nearest first/i })).toBeNull();
+
+    cleanup();
+    setup({ roomId: 'block-party-street' });
+    fireEvent.focus(screen.getByRole('combobox', { name: /search rooms and events/i }));
+    fireEvent.click(kindButton('Food'));
+    expect(screen.getByRole('option', { name: /nearest first/i })).toBeTruthy();
+  });
+
+  it('orders by distance, and says how far each one is', () => {
+    const { input } = setup({ roomId: 'block-party-street' });
+    fireEvent.focus(input);
+    fireEvent.click(kindButton('Food'));
+    fireEvent.change(screen.getByRole('combobox', { name: /^sort$/i }), { target: { value: 'near' } });
+
+    // "you are here" is nought minutes: from the Block Party, the trucks on it
+    // are in the room you are standing in.
+    const minutes = options().map((option) => {
+      const text = within(option).queryByText(/^(\d+ min|you are here)$/)?.textContent ?? '';
+      return text === 'you are here' ? 0 : Number(/^(\d+) min$/.exec(text)?.[1]);
+    });
+    expect(minutes.length).toBeGreaterThan(3);
+    expect(minutes.every(Number.isFinite)).toBe(true);
+    expect([...minutes].sort((a, b) => a - b)).toEqual(minutes);
+  });
+
+  it('says why the list is empty when the reason is the clock', () => {
+    // Half past three on a Tuesday morning: everywhere downtown is shut and the
+    // trucks do not run at all. That is a true answer, and an empty box under a
+    // pressed chip reads as a broken filter — so it says which clock it read.
+    const { input } = setup(null, Date.parse('2026-08-11T03:30:00-04:00'));
+    fireEvent.focus(input);
+    fireEvent.click(kindButton('Food'));
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Right now' })).getByRole('button', {
+        name: /^Open now/,
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(options()).toHaveLength(0);
+    expect(screen.getByText(/nothing here is open at .* in indianapolis/i)).toBeTruthy();
+  });
+
+  it('narrows rather than empties when things really are open', () => {
+    const { input } = setup();
+    fireEvent.focus(input);
+    fireEvent.click(kindButton('Food'));
+    const before = options().length;
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Right now' })).getByRole('button', {
+        name: /^Open now/,
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    expect(options().length).toBeGreaterThan(0);
+    expect(options().length).toBeLessThanOrEqual(before);
   });
 
   it('puts the list away again when the kind goes back to everything', () => {
@@ -297,7 +368,16 @@ describe('picking one', () => {
       ]),
     } as never);
     const onPick = vi.fn();
-    render(<SearchBar events={feed} choices={filterChoices([])} feedDays={[]} onPick={onPick} />);
+    render(
+      <SearchBar
+        events={feed}
+        choices={filterChoices([])}
+        feedDays={[]}
+        nowMs={NOW}
+        offsetMinutes={-240}
+        onPick={onPick}
+      />,
+    );
     const input = screen.getByRole('combobox', { name: /search rooms and events/i });
     fireEvent.change(input, { target: { value: 'catan' } });
     fireEvent.keyDown(input, { key: 'Enter' });

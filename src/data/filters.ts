@@ -58,6 +58,16 @@ export interface EventFilter {
   cuisine?: readonly string[];
   dish?: readonly string[];
   dietary?: readonly string[];
+  /** Food only: whereabouts — an area of Gen Con's, or `Off site`. */
+  where?: readonly string[];
+  /**
+   * Only what is on, or open, at this moment.
+   *
+   * One flag for two questions that are the same question asked of different
+   * things: an event is *happening* now, a place is *open* now. What it can be
+   * asked of is what has an answer — see `search`.
+   */
+  nowOnly?: boolean;
   /**
    * Vendors only: what sort of stand, whereabouts, and what it sells.
    *
@@ -106,6 +116,8 @@ export function activeCount(filter: EventFilter): number {
   if (filter.cuisine?.length) n += 1;
   if (filter.dish?.length) n += 1;
   if (filter.dietary?.length) n += 1;
+  if (filter.where?.length) n += 1;
+  if (filter.nowOnly) n += 1;
   if (filter.standKinds?.length) n += 1;
   if (filter.areas?.length) n += 1;
   if (filter.tags?.length) n += 1;
@@ -280,14 +292,26 @@ function inPlace(f: EventFilter, roomId: string | undefined) {
 
 /* ------------------------------------------------------------------ order */
 
-export type SortKey = 'start' | 'end' | 'length' | 'cost';
+export type SortKey = 'start' | 'end' | 'length' | 'cost' | 'near';
 
 export const SORT_LABEL: Record<SortKey, string> = {
   start: 'Starts soonest',
   end: 'Ends soonest',
   length: 'Shortest first',
   cost: 'Cheapest first',
+  near: 'Nearest first',
 };
+
+/**
+ * The one sort that is not about the thing, but about where you are.
+ *
+ * `compareBy` cannot answer it — it orders events by their own fields, and how
+ * far away something is depends on a *spot* the filter knows nothing about. So
+ * `search` handles it directly, and it is only offered where something has said
+ * where you are: a room open on the map, or the device, if location is on. An
+ * order by distance from nowhere would be a made-up order.
+ */
+export const BY_DISTANCE: SortKey = 'near';
 
 /**
  * What to order by, and what to fall back on.
@@ -312,6 +336,11 @@ export function compareBy(key: SortKey): (a: ConEvent, b: ConEvent) => number {
       // events whose price is simply unknown.
       return (a, b) =>
         (a.cost ?? Infinity) - (b.cost ?? Infinity) || then(a, b);
+    case 'near':
+      // Distance is not a property of an event — see `BY_DISTANCE`. `search`
+      // orders by it before this is ever reached; anything that gets here with
+      // it has no spot to measure from, and falls back to the time.
+      return then;
   }
 }
 

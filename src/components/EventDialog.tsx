@@ -41,7 +41,8 @@ import { kindName } from '../data/event-kinds';
 import { conventionDays, entryWhere, planEntry, type PlanEntry } from '../data/plan';
 import { AddStop } from './AddStop';
 import { subjectFor } from '../hooks/usePlanDescriptions';
-import { foodFacets, formatOpening, isFood, openingFor, vendorById } from '../data/food';
+import { foodFacets, formatOpening, isFood, openingFor, parseOpeningHours, vendorById } from '../data/food';
+import type { Eatery } from '../data/eateries';
 import { VENUES_BY_ID, type Room } from '../data/venues';
 import { tagsOf, type Exhibitor } from '../data/exhibitors';
 import type { Pin } from '../data/offsite';
@@ -60,7 +61,8 @@ import { useEventNotes, type NotesSubject } from '../hooks/useEventNotes';
 export type Detail =
   | { kind: 'event'; event: ConEvent; room?: Room; pin?: Pin }
   | { kind: 'vendor'; exhibitor: Exhibitor; room?: Room }
-  | { kind: 'planned'; entry: PlanEntry; room?: Room };
+  | { kind: 'planned'; entry: PlanEntry; room?: Room }
+  | { kind: 'eatery'; eatery: Eatery };
 
 interface Props {
   detail: Detail;
@@ -81,6 +83,18 @@ const vendorFor = (id: string) => {
   const found = /^vendor:(\d+)@/.exec(id);
   return found ? vendorById(Number(found[1])) : undefined;
 };
+
+/** A restaurant as directions want it: a name and a coordinate. */
+const eateryPin = (eatery: Eatery | null): Pin | undefined =>
+  eatery
+    ? {
+        id: `eat:${eatery.id}`,
+        name: eatery.name,
+        address: eatery.address ?? 'Off site',
+        lat: eatery.lat,
+        lng: eatery.lng,
+      }
+    : undefined;
 
 /**
  * A planned entry with no room, as directions want it.
@@ -104,13 +118,21 @@ export function EventDialog({
   onNavigate,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const room = detail.room;
+  const room = detail.kind === 'eatery' ? undefined : detail.room;
   const pin = detail.kind === 'event' ? detail.pin : undefined;
   const venue = room ? VENUES_BY_ID[room.venueId] : undefined;
 
   const event = detail.kind === 'event' ? detail.event : null;
   const vendor = detail.kind === 'vendor' ? detail.exhibitor : null;
   const planned = detail.kind === 'planned' ? detail.entry : null;
+  /*
+   * A restaurant, which Gen Con has never heard of.
+   *
+   * Everything about it comes from OpenStreetMap — see `eateries.ts` — so there
+   * is no description to fetch and no id to ask Gen Con about. What it has is a
+   * cuisine, hours somebody volunteered, and its own site.
+   */
+  const eatery = detail.kind === 'eatery' ? detail.eatery : null;
   const held = !!event && plan.planned(event.id);
 
   /*
@@ -133,7 +155,9 @@ export function EventDialog({
         ? plan.entries.find((entry) => entry.id.startsWith(`vendor:${vendor.id}@`))?.description
         : undefined;
 
-  const subject: NotesSubject | null = planned
+  const subject: NotesSubject | null = eatery
+    ? null
+    : planned
     ? subjectFor(planned.id)
     : event
       ? { kind: 'event', id: event.id }
@@ -170,7 +194,7 @@ export function EventDialog({
   // the same thing — nobody has said when the convention is — and offering a
   // form that could only produce a timestamp at the wrong hour would be worse
   // than not offering one.
-  const canPlace = !!vendor && days.length > 0 && offsetMinutes !== null;
+  const canPlace = !!(vendor || eatery) && days.length > 0 && offsetMinutes !== null;
 
   useEffect(() => closeRef.current?.focus(), []);
   useEffect(() => {
@@ -187,7 +211,9 @@ export function EventDialog({
    * rather than special-cased, because the same is true of anywhere else whose
    * room is its whole building.
    */
-  const where = planned
+  const where = eatery
+    ? [eatery.address, 'Off site'].filter(Boolean).join(' · ')
+    : planned
     ? entryWhere(planned)
     : [
         room ? (room.shortName ?? room.name) : (pin?.name ?? event?.locationText),
@@ -254,6 +280,22 @@ export function EventDialog({
    * word, and a fact list that repeats its own heading is one people stop
    * reading.
    */
+  if (eatery) {
+    const opening = eatery.hours ? parseOpeningHours(eatery.hours) : null;
+    /*
+     * The hours as this reads them, or exactly as they were written.
+     *
+     * `parseOpeningHours` refuses rather than guesses — see `hours.ts` — and a
+     * line it will not read is still worth showing, because somebody can read
+     * "Mo-Fr 07:00-20:00; Sa[1] off" and this cannot.
+     */
+    if (eatery.hours) {
+      rows.push(['Open', opening ? formatOpening(opening) : eatery.hours]);
+    }
+    if (eatery.cuisine.length) rows.push(['Cuisine', eatery.cuisine.join(', ')]);
+    if (eatery.diet.length) rows.push(['Dietary', eatery.diet.join(', ')]);
+  }
+
   const stand = vendor ?? plannedVendor;
   if (stand && isFood(stand)) {
     const facets = foodFacets(stand);
@@ -288,7 +330,7 @@ export function EventDialog({
    * happily turn "…T13:00" into gencon.com/events/00.
    */
   const linkedEvent = event ?? (planned?.kind !== 'stop' ? (planned as ConEvent | null) : null);
-  const site = vendor?.website ?? plannedVendor?.website;
+  const site = vendor?.website ?? plannedVendor?.website ?? eatery?.website;
   const link = site
     ? { href: site, label: 'Open their own site ↗' }
     : linkedEvent && eventUrl(linkedEvent)
@@ -306,7 +348,11 @@ export function EventDialog({
       >
         <div className="dialog__header">
           <span className="dialog__tag">
-            {event ? (event.type ?? 'Event') : planned ? 'On your schedule' : (vendor?.kind ?? 'Vendor')}
+            {event
+              ? (event.type ?? 'Event')
+              : planned
+                ? 'On your schedule'
+                : (eatery?.kind ?? vendor?.kind ?? 'Vendor')}
           </span>
           <button ref={closeRef} type="button" className="dialog__close" onClick={onClose} aria-label="Close">
             ✕
@@ -314,7 +360,7 @@ export function EventDialog({
         </div>
 
         <h2 className="dialog__title" id="event-dialog-title">
-          {event ? event.title : (planned?.title ?? vendor?.name)}
+          {event ? event.title : (planned?.title ?? eatery?.name ?? vendor?.name)}
         </h2>
 
         <dl className="event-dialog__facts">
@@ -356,13 +402,22 @@ export function EventDialog({
 
         {placing && canPlace && (
           <AddStop
-            stop={{
-              key: `vendor:${vendor!.id ?? `${vendor!.name}:${vendor!.spot}`}`,
-              title: vendor!.name,
-              where,
-              roomId: room?.id,
-            }}
-            opening={opening}
+            stop={
+              eatery
+                ? {
+                    key: `eat:${eatery.id}`,
+                    title: eatery.name,
+                    where,
+                    at: { lat: eatery.lat, lng: eatery.lng },
+                  }
+                : {
+                    key: `vendor:${vendor!.id ?? `${vendor!.name}:${vendor!.spot}`}`,
+                    title: vendor!.name,
+                    where,
+                    roomId: room?.id,
+                  }
+            }
+            opening={eatery ? (eatery.hours ? parseOpeningHours(eatery.hours) : null) : opening}
             days={days}
             day={days[0]}
             offsetMinutes={offsetMinutes!}
@@ -401,11 +456,11 @@ export function EventDialog({
               Show on map
             </button>
           )}
-          {(room || pin || planned?.at) && (
+          {(room || pin || planned?.at || eatery) && (
             <button
               type="button"
-              className="button"
-              onClick={() => onNavigate(room, pin ?? plannedPin(planned))}
+              className={`button${eatery ? ' button--primary' : ''}`}
+              onClick={() => onNavigate(room, pin ?? plannedPin(planned) ?? eateryPin(eatery))}
             >
               Directions
             </button>

@@ -343,6 +343,14 @@ describe('adding something that is not a session', () => {
       name: label,
     });
 
+  /** One of the offered places, by name — the list holds trucks and restaurants. */
+  const pick = (name: string) =>
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /places to add/i }))
+        .getAllByRole('button')
+        .find((one) => one.textContent?.includes(name))!,
+    );
+
   it('offers a food truck, and asks when rather than adding it blind', () => {
     // A session brings its own times; a truck brings none. So the question a
     // result answers here is not "is this the one" but "when are you going".
@@ -361,9 +369,7 @@ describe('adding something that is not a session', () => {
     const plan = planOf([]);
     show(plan);
     fireEvent.click(kind('Food'));
-    fireEvent.click(
-      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
-    );
+    pick('Arepas');
     fireEvent.change(screen.getByLabelText('Day'), { target: { value: SATURDAY } });
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '13:00' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '13:20' } });
@@ -405,9 +411,7 @@ describe('adding something that is not a session', () => {
     // using a different convention's times.
     show(planOf([]));
     fireEvent.click(kind('Food'));
-    fireEvent.click(
-      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
-    );
+    pick('Arepas');
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '13:00' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '13:20' } });
     expect(screen.getByText(/open then, by 2025/i)).toBeTruthy();
@@ -423,9 +427,7 @@ describe('adding something that is not a session', () => {
     // until half past nine at a truck that shuts at nine.
     show(planOf([]));
     fireEvent.click(kind('Food'));
-    fireEvent.click(
-      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
-    );
+    pick('Arepas');
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '20:30' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '21:30' } });
     expect(screen.getByText(/only part of that/i)).toBeTruthy();
@@ -438,9 +440,7 @@ describe('adding something that is not a session', () => {
     fireEvent.change(screen.getByLabelText('Search events to add to your schedule'), {
       target: { value: 'exhibit hall a' },
     });
-    fireEvent.click(
-      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
-    );
+    pick('Exhibit Hall A');
     expect(screen.getByText(/nobody publishes hours for this one/i)).toBeTruthy();
   });
 });

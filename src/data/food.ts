@@ -29,6 +29,27 @@
  */
 
 import { EXHIBITORS, tagsOf, type Exhibitor } from './exhibitors';
+import { EATERIES, type Eatery } from './eateries';
+import {
+  formatOpening,
+  openAt,
+  openThrough,
+  parseOpeningHours,
+  type Coverage,
+  type OpenHours,
+  type Opening,
+} from './hours';
+
+/*
+ * Re-exported so that everything about food is asked of one module.
+ *
+ * The mechanics moved to `hours.ts` when restaurants arrived, because a
+ * restaurant's hours come from OpenStreetMap and a truck's are written down
+ * here, and both have to answer the same question. Nothing that already asked
+ * this file had to change.
+ */
+export { formatOpening, openAt, openThrough, parseOpeningHours };
+export type { Coverage, OpenHours, Opening };
 
 /** Which of the three questions a tag answers. */
 export type FoodFacet = 'cuisine' | 'dish' | 'dietary';
@@ -173,20 +194,6 @@ export function foodChoices(): Record<FoodFacet, string[]> {
  * the year they belong to attached — and the app says which year it is showing.
  * When Gen Con publishes 2026's, this is the one place to change.
  */
-export interface OpenHours {
-  /** Weekday numbers as `Date.getUTCDay` writes them: Sunday 0, Thursday 4. */
-  days: number[];
-  /** Minutes past midnight. */
-  from: number;
-  to: number;
-}
-
-export interface Opening {
-  /** The year these hours were published for. */
-  year: number;
-  hours: OpenHours[];
-}
-
 const at = (hour: number, minute = 0) => hour * 60 + minute;
 
 /** The food trucks. Gen Con: "Thursday - Saturday, 9am - 9pm / Sunday, 9am - 4pm". */
@@ -207,96 +214,18 @@ export const BEER_GARDEN_HOURS: Opening = {
   ],
 };
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-/** "Thu–Sat 9am–9pm · Sun 9am–4pm", as somebody would read it off a sign. */
-export function formatOpening(opening: Opening): string {
-  return opening.hours.map((span) => `${spanDays(span.days)} ${clock(span.from)}–${clock(span.to)}`).join(' · ');
-}
-
-function spanDays(days: number[]): string {
-  const names = days.map((day) => DAY_NAMES[day].slice(0, 3));
-  if (names.length === 1) return names[0];
-  // Runs of consecutive weekdays read as a range; anything else is a list.
-  const consecutive = days.every((day, at) => at === 0 || day === days[at - 1] + 1);
-  return consecutive ? `${names[0]}–${names[names.length - 1]}` : names.join(', ');
-}
-
-function clock(minutes: number): string {
-  const hour = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  const suffix = hour < 12 ? 'am' : 'pm';
-  const shown = hour % 12 === 0 ? 12 : hour % 12;
-  return rest ? `${shown}:${String(rest).padStart(2, '0')}${suffix}` : `${shown}${suffix}`;
-}
-
 /**
  * The hours that apply to a vendor, where any are known.
  *
  * Only the Block Party has published hours at all, and within it the beer
  * garden keeps its own. Everywhere else — the exhibit hall included — returns
- * nothing, because nothing has said.
+ * nothing, because nothing has said. Checked again for the "open now" filter:
+ * `gencon.com/attend/exhibit-hall` carries no times either, so there is still
+ * no hour of any hall to compare a clock against.
  */
 export function openingFor(exhibitor: Exhibitor): Opening | null {
   if (!exhibitor.area.startsWith('Block Party')) return null;
   return /sun king/i.test(exhibitor.name) ? BEER_GARDEN_HOURS : FOOD_TRUCK_HOURS;
-}
-
-/** Whether a moment falls inside them, at the convention's own offset. */
-export function openAt(opening: Opening, atMs: number, offsetMinutes: number): boolean {
-  const local = new Date(atMs + offsetMinutes * 60_000);
-  const day = local.getUTCDay();
-  const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
-  return opening.hours.some(
-    (span) => span.days.includes(day) && minute >= span.from && minute < span.to,
-  );
-}
-
-/** How much of a span they are open for. */
-export type Coverage = 'open' | 'partly' | 'shut';
-
-/**
- * Whether they are open for the *whole* of a planned stop, part of it, or none.
- *
- * The whole of it, because the failure this is for is not turning up to a locked
- * door — that one is obvious — but planning to eat from half past eight to half
- * past nine at a truck that shuts at nine. A check on the start time alone calls
- * that fine.
- *
- * Measured in minutes from the start of the day the stop begins on, so a stop
- * running past midnight compares against the next day's hours rather than
- * wrapping round to that morning's.
- */
-export function openThrough(
-  opening: Opening,
-  day: string,
-  fromMinutes: number,
-  toMinutes: number,
-): Coverage {
-  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
-  const open: Array<[number, number]> = [];
-  // Today's hours, and tomorrow's shifted a day along — a stop is at most a day
-  // long, so those two are all it can reach.
-  for (const shift of [0, 1]) {
-    const on = (weekday + shift) % 7;
-    for (const span of opening.hours) {
-      if (span.days.includes(on)) open.push([span.from + shift * 1440, span.to + shift * 1440]);
-    }
-  }
-
-  // Merged before they are added up, so a future edit that writes two
-  // overlapping spans for one day cannot count the overlap twice and call a
-  // stop covered that is not.
-  open.sort((a, b) => a[0] - b[0]);
-  let covered = 0;
-  let reached = fromMinutes;
-  for (const [from, to] of open) {
-    const start = Math.max(from, reached);
-    covered += Math.max(0, Math.min(to, toMinutes) - Math.max(start, fromMinutes));
-    reached = Math.max(reached, to);
-  }
-  if (covered <= 0) return 'shut';
-  return covered >= toMinutes - fromMinutes ? 'open' : 'partly';
 }
 
 /* ------------------------------------------------------------ filtering */
@@ -352,5 +281,187 @@ export function foodCounts(
     cuisine: forFacet('cuisine'),
     dish: forFacet('dish'),
     dietary: forFacet('dietary'),
+  };
+}
+
+/* ------------------------------------------------- somewhere else to eat */
+
+/**
+ * Everywhere to eat, as one list — Gen Con's trucks and the city's restaurants.
+ *
+ * WHY THEY ARE ONE QUESTION. "Where can I eat" does not stop at the edge of
+ * Gen Con's catalogue. It knows 43 trucks on South Street; the convention is in
+ * the middle of a city, and there is an Indian restaurant four hundred metres
+ * away that no amount of work on Gen Con's data would ever produce. See
+ * `eateries.ts` for where the other 48 come from and what had to be true of one
+ * to be kept.
+ *
+ * WHY THEY STAY TWO SHAPES. A truck is an `Exhibitor` with a booth in a room
+ * the map draws; a restaurant is a coordinate with a street address. They are
+ * walked to differently, drawn differently and linked differently, and pressing
+ * them into one row type would mean a row where half the fields are always
+ * empty. So this is a union, and the two halves are told apart by which side is
+ * set.
+ */
+export type Bite =
+  | { truck: Exhibitor; eatery?: undefined }
+  | { eatery: Eatery; truck?: undefined };
+
+/** Gen Con's own word for where its food is, and one word for everywhere else. */
+export const OFF_SITE = 'Off site';
+
+export const BITES: ReadonlyArray<Bite> = [
+  ...EXHIBITORS.filter(isFood).map((truck) => ({ truck })),
+  ...EATERIES.map((eatery) => ({ eatery })),
+];
+
+/** What to call it. */
+export const biteName = (bite: Bite) => bite.truck?.name ?? bite.eatery!.name;
+
+/**
+ * Whereabouts it is: Gen Con's own area for a stand, `Off site` for the rest.
+ *
+ * Derived rather than written down, so if Gen Con ever lists food anywhere but
+ * the Block Party the filter grows a chip for it without anybody editing a
+ * list. Today that is exactly two values, and the second is the whole city.
+ */
+export const biteWhere = (bite: Bite) => bite.truck?.area ?? OFF_SITE;
+
+/** What sort of place: Gen Con's kind for a stand, OSM's for a restaurant. */
+export const biteKind = (bite: Bite) => bite.truck?.kind ?? bite.eatery!.kind;
+
+/**
+ * What it sells, in the three facets, from whichever source it came from.
+ *
+ * Gen Con's tags are already filed by `FOOD_TAGS`; OpenStreetMap's `cuisine`
+ * is a cuisine by definition and its `diet:*` flags are dietary by definition,
+ * so neither needs a table. A restaurant has no dish list at all, which is
+ * honest: OSM records `Pizza` as a cuisine and does not record what is on the
+ * menu any more than Gen Con does.
+ */
+export function biteFacets(bite: Bite): Record<FoodFacet, string[]> {
+  if (bite.truck) {
+    const facets = foodFacets(bite.truck);
+    return { cuisine: facets.cuisine, dish: facets.dish, dietary: facets.dietary };
+  }
+  return { cuisine: bite.eatery!.cuisine, dish: [], dietary: bite.eatery!.diet };
+}
+
+/**
+ * Its hours, where anything says.
+ *
+ * A truck's are Gen Con's, written down and a year old. A restaurant's are
+ * whatever OpenStreetMap holds, read where this understands the form and null
+ * where it does not — see `parseOpeningHours`, which refuses rather than
+ * guesses. Both come back as the same `Opening`.
+ */
+export function biteOpening(bite: Bite): Opening | null {
+  if (bite.truck) return openingFor(bite.truck);
+  const hours = bite.eatery!.hours;
+  return hours ? parseOpeningHours(hours) : null;
+}
+
+/**
+ * Is it open at this moment?
+ *
+ * `null` where nothing says — which is a different answer from `false`, and the
+ * difference matters: an "open now" filter that treats "nobody has said" as
+ * "shut" hides a restaurant that is very probably open, and one that treats it
+ * as "open" promises a walk to a locked door. The filter keeps only the ones
+ * that answer `true`, and the panel says which are simply unknown.
+ */
+export function biteOpenAt(bite: Bite, atMs: number, offsetMinutes: number): boolean | null {
+  const opening = biteOpening(bite);
+  return opening ? openAt(opening, atMs, offsetMinutes) : null;
+}
+
+export interface BiteFilter {
+  cuisine?: readonly string[];
+  dish?: readonly string[];
+  dietary?: readonly string[];
+  /** Where it is: an area of Gen Con's, or `Off site`. */
+  where?: readonly string[];
+}
+
+/** Does it survive the food filters? */
+export function matchesBite(bite: Bite, filter: BiteFilter): boolean {
+  if (filter.where?.length && !filter.where.includes(biteWhere(bite))) return false;
+  const facets = biteFacets(bite);
+  const has = (chosen: readonly string[] | undefined, held: string[]) =>
+    !chosen?.length || held.some((one) => chosen.includes(one));
+  return (
+    has(filter.cuisine, facets.cuisine) &&
+    has(filter.dish, facets.dish) &&
+    has(filter.dietary, facets.dietary)
+  );
+}
+
+export interface BiteChoices {
+  cuisine: string[];
+  dish: string[];
+  dietary: string[];
+  where: string[];
+}
+
+/**
+ * What the pickers may offer, from what everywhere actually carries.
+ *
+ * Both sources at once, so `Indian` from a restaurant and `Korean` from a truck
+ * stand in the same list — which is the point of putting them in one search.
+ */
+export function biteChoices(): BiteChoices {
+  const found = {
+    cuisine: new Set<string>(),
+    dish: new Set<string>(),
+    dietary: new Set<string>(),
+    where: new Set<string>(),
+  };
+  for (const bite of BITES) {
+    const facets = biteFacets(bite);
+    for (const one of facets.cuisine) found.cuisine.add(one);
+    for (const one of facets.dish) found.dish.add(one);
+    for (const one of facets.dietary) found.dietary.add(one);
+    found.where.add(biteWhere(bite));
+  }
+  return {
+    cuisine: [...found.cuisine].sort(),
+    dish: [...found.dish].sort(),
+    dietary: [...found.dietary].sort(),
+    where: [...found.where].sort(),
+  };
+}
+
+export interface BiteCounts {
+  total: number;
+  cuisine: Map<string, number>;
+  dish: Map<string, number>;
+  dietary: Map<string, number>;
+  where: Map<string, number>;
+}
+
+/**
+ * How many places each chip would leave — what pressing it produces.
+ *
+ * 91 rows against seventy-odd options, so re-filtering is exact and free. The
+ * same rule as everywhere: adding a second cuisine widens, so the count on an
+ * unchosen one goes up.
+ */
+export function biteCounts(filter: BiteFilter, choices: BiteChoices): BiteCounts {
+  const count = (next: BiteFilter) => BITES.filter((one) => matchesBite(one, next)).length;
+  const forFacet = (facet: keyof BiteChoices) => {
+    const chosen = filter[facet] ?? [];
+    const out = new Map<string, number>();
+    for (const value of choices[facet]) {
+      const after = chosen.includes(value) ? chosen.filter((one) => one !== value) : [...chosen, value];
+      out.set(value, count({ ...filter, [facet]: after }));
+    }
+    return out;
+  };
+  return {
+    total: count(filter),
+    cuisine: forFacet('cuisine'),
+    dish: forFacet('dish'),
+    dietary: forFacet('dietary'),
+    where: forFacet('where'),
   };
 }

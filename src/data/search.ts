@@ -16,14 +16,14 @@
  */
 
 import { ROOMS, VENUES_BY_ID, type Room } from './venues';
-import { roomIdForEvent, type ConEvent, type EventIndex } from './events';
+import { isHappeningAt, roomIdForEvent, type ConEvent, type EventIndex } from './events';
 import { EXHIBITORS, type Exhibitor } from './exhibitors';
 import { hallForBooth } from './booths';
 import { PLANNED_BOOTHS } from './booth-plan';
 import { ADDRESSES } from './addresses';
 import { addressPin, NAMED_PINS, plainStreet, plainWords, type Pin } from './offsite';
 import { pinPlace, roomPlace, type NavPlace } from './navigation';
-import type { Spot } from './nearby';
+import { roughMetres, type Spot } from './nearby';
 import {
   activeCount,
   compareBy,
@@ -34,7 +34,8 @@ import {
   type EventFilter,
   type SortKey,
 } from './filters';
-import { isFood, matchesFood } from './food';
+import { biteOpenAt, isFood, matchesBite, type Bite } from './food';
+import { EATERIES, type Eatery } from './eateries';
 import { matchesVendor } from './vendors';
 
 export interface SearchHit {
@@ -60,6 +61,15 @@ export interface SearchHit {
    * route goes to; the booth is the answer.
    */
   exhibitor?: Exhibitor;
+  /**
+   * The restaurant this hit is, where it is one.
+   *
+   * Carried alongside `pin`, which is where it stands. A stand and a restaurant
+   * are both answers to "where can I eat" and are not the same shape — see
+   * `Bite` in `food.ts` — so the panel and the schedule tell them apart by
+   * which of `exhibitor` and `eatery` is set.
+   */
+  eatery?: Eatery;
   /** The soonest session, when this hit came from an event. */
   event?: ConEvent;
   /** How many sessions share this title in this room. */
@@ -176,6 +186,13 @@ export function hitLabel(hit: SearchHit): { title: string; detail: string } {
         ? `${hit.room.shortName ?? hit.room.name} · ${venue?.shortName ?? venue?.name ?? ''}`
         : (hit.pin?.name ?? ''),
     };
+  }
+  if (hit.eatery) {
+    // What it is and what it cooks, then where — the order somebody reads it
+    // in. The address is last because it is the part you only need once you
+    // have decided.
+    const parts = [hit.eatery.kind, hit.eatery.cuisine.join(', '), hit.eatery.address];
+    return { title: hit.eatery.name, detail: parts.filter(Boolean).join(' · ') };
   }
   if (hit.pin) return { title: hit.pin.name, detail: hit.pin.address };
   const venue = VENUES_BY_ID[hit.room!.venueId];
@@ -491,6 +508,50 @@ function standHits(query: string, keep: (stand: Exhibitor) => boolean = () => tr
 }
 
 /**
+ * Somewhere to eat that Gen Con has never heard of.
+ *
+ * A restaurant is not a stand and not a room: it is a name, a cuisine and a
+ * coordinate four hundred metres away. It ranks alongside the trucks rather
+ * than below them, because under **Food** the question is "where can I eat" and
+ * South Street has no special claim on the answer — but it carries its own
+ * `eatery`, so everything downstream can tell the two apart.
+ *
+ * Matched on the name and on its cuisines, so "indian" finds Aroma Indian
+ * Cuisine and also the one whose name says nothing about what it cooks.
+ */
+function eateryHits(query: string, keep: (one: Eatery) => boolean): SearchHit[] {
+  const hits: SearchHit[] = [];
+  for (const eatery of EATERIES) {
+    if (!keep(eatery)) continue;
+    const name = eatery.name.toLowerCase();
+    const score = !query
+      ? SCORE.standName
+      : name.startsWith(query)
+        ? SCORE.standName
+        : startsWord(name, query)
+          ? SCORE.standName + 0.5
+          : eatery.cuisine.some((one) => one.toLowerCase().startsWith(query))
+            ? SCORE.standName + 1
+            : null;
+    if (score === null) continue;
+    hits.push({
+      key: `eat:${eatery.id}`,
+      kind: 'address',
+      pin: {
+        id: `eat:${eatery.id}`,
+        name: eatery.name,
+        address: eatery.address ?? eatery.cuisine.join(', '),
+        lat: eatery.lat,
+        lng: eatery.lng,
+      },
+      eatery,
+      score,
+    });
+  }
+  return hits;
+}
+
+/**
  * Whether a place filter has been asked at all.
  *
  * The two dimensions a *place* has are its building and its floor — see
@@ -578,12 +639,27 @@ function addressHits(rawQuery: string): SearchHit[] {
  * @param sort orders the whole list rather than breaking ties within it.
  *   Somebody who asked for "cheapest first" wants the cheapest first.
  */
+/**
+ * Where you are and what time it is — the two things a hit cannot know alone.
+ *
+ * Both optional and both meaning "nobody has said". Without a spot there is no
+ * nearest; without a clock there is no now. Neither is invented: the sort and
+ * the filter that need them are only offered where they exist.
+ */
+export interface SearchContext {
+  from?: Spot | null;
+  nowMs?: number;
+  /** The convention's own offset, for reading hours at its clock and not yours. */
+  offsetMinutes?: number | null;
+}
+
 export function search(
   rawQuery: string,
   events: EventSearchIndex,
   limit = 8,
   filter: EventFilter = NO_FILTER,
   sort?: SortKey,
+  context: SearchContext = {},
 ): SearchHit[] {
   const query = normalise(rawQuery);
   const narrowed = activeCount(filter) > 0;
@@ -623,14 +699,51 @@ export function search(
   const asksEvents = kind === 'all' || kind === 'event';
   const eventOnlyFilter = asksEvents && narrowed;
 
+  /*
+   * "Open now", asked of a truck and of a restaurant in one place.
+   *
+   * `biteOpenAt` answers null where nothing publishes hours, and null is kept
+   * out: a filter called "open now" that let through everywhere nobody has
+   * written hours for would be promising a walk to a locked door. Ten of the 48
+   * restaurants and every stand outside the Block Party fall into that gap, and
+   * the panel says so rather than the list quietly shrinking.
+   *
+   * With no clock the flag does nothing at all, which is right — nothing has
+   * said what "now" is.
+   */
+  const keepsBite = (bite: Bite) => {
+    if (!matchesBite(bite, filter)) return false;
+    if (!filter.nowOnly || context.nowMs === undefined || context.offsetMinutes == null) return true;
+    return biteOpenAt(bite, context.nowMs, context.offsetMinutes) === true;
+  };
+
   const hits: SearchHit[] = [];
+
+  /*
+   * A room that has something on right now.
+   *
+   * The nearest honest thing to "open now" for a place. Nobody publishes the
+   * hours of a hall — checked again for this: `/api/v1/hours`, `/venues`,
+   * `/areas` and `/exhibit_hall_hours` all 404, and `attend/exhibit-hall`
+   * carries no times — so a room cannot be asked whether it is open. What the
+   * feed *does* say is whether a session is running in it, which is why the
+   * chip is labelled for that and not for opening hours.
+   */
+  const busyNow =
+    filter.nowOnly && context.nowMs !== undefined
+      ? new Set(
+          events.entries
+            .filter((entry) => entry.room && isHappeningAt(entry.event, context.nowMs!))
+            .map((entry) => entry.room!.id),
+        )
+      : null;
 
   if (wants.rooms && !eventOnlyFilter) {
     for (const keys of ROOM_KEYS) {
       const score = scoreRoom(keys, query);
-      if (score !== null && inChosenPlace(keys.room, filter)) {
-        hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
-      }
+      if (score === null || !inChosenPlace(keys.room, filter)) continue;
+      if (busyNow && !busyNow.has(keys.room.id)) continue;
+      hits.push({ key: `room:${keys.room.id}`, kind: 'room', room: keys.room, score });
     }
   }
 
@@ -648,6 +761,11 @@ export function search(
             : null;
     if (score === null) continue;
     if (narrowed && !matchesFilter(event, filter, room?.id)) continue;
+    // Happening *now*, which is the same question "open now" asks of a place.
+    // Only where a clock has been handed in; with none, nothing is now.
+    if (filter.nowOnly && context.nowMs !== undefined && !isHappeningAt(event, context.nowMs)) {
+      continue;
+    }
 
     const key = `event:${room?.id ?? pin!.id}:${title}`;
     const existing = grouped.get(key);
@@ -663,19 +781,49 @@ export function search(
   if (wants.stands && !eventOnlyFilter) {
     hits.push(
       ...standHits(query, (stand) => {
-        if (kind === 'food') return isFood(stand) && matchesFood(stand, filter);
+        if (kind === 'food') return isFood(stand) && keepsBite({ truck: stand });
         if (kind === 'vendor') return !isFood(stand) && matchesVendor(stand, filter);
         return true;
       }),
     );
   }
+
+  /*
+   * Restaurants, under Food and nowhere else.
+   *
+   * Not under Everything: 48 of them would swamp a search for a room, and
+   * somebody typing "hall b" is not asking about lunch. Under Food they stand
+   * beside the trucks, which is the point — "where can I eat" does not stop at
+   * the edge of Gen Con's catalogue.
+   */
+  if (kind === 'food') hits.push(...eateryHits(query, (eatery) => keepsBite({ eatery })));
+
   // An address is not in a building and has no floor, so any place filter drops
   // it — the same rule as an event filter dropping a room, one level down.
-  if (wants.addresses && !eventOnlyFilter && !inAnyPlace(filter)) {
+  if (wants.addresses && !eventOnlyFilter && !inAnyPlace(filter) && !busyNow) {
     hits.push(...addressHits(rawQuery));
   }
 
-  if (sort) {
+  /*
+   * Nearest first, when something has said where you are.
+   *
+   * Not `compareBy`'s job: how far away something is is not a property of it,
+   * it is a property of the pair. Measured with `roughMetres`, which is a table
+   * lookup rather than a route — see `nearby.ts` — so ordering a hundred hits
+   * costs about as much as ordering them by name. Anything the table cannot
+   * place goes last rather than first, because an unknown distance is not a
+   * short one.
+   */
+  if (sort === 'near' && context.from) {
+    const away = new Map(hits.map((hit) => [hit.key, roughMetres(context.from!, hitSpot(hit))]));
+    hits.sort(
+      (a, b) =>
+        (away.get(a.key) ?? Infinity) - (away.get(b.key) ?? Infinity) || a.score - b.score,
+    );
+    return hits.slice(0, limit);
+  }
+
+  if (sort && sort !== 'near') {
     const order = compareBy(sort);
     // Rooms, stands and addresses have no start time to sort by, so they keep
     // their own ranking and sit above the events an explicit order applies to.

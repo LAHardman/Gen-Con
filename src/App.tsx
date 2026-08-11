@@ -252,6 +252,18 @@ export default function App() {
       // switch to — it is a coordinate with an address on it. Picking one puts
       // it straight into directions, because going there is the only thing
       // anybody can do with it.
+      /*
+       * A restaurant opens itself, like a stand.
+       *
+       * It carries a cuisine, hours somebody volunteered and its own site, and
+       * none of that fits on a result row. A plain address still goes straight
+       * to directions, because going there is the only thing anybody can do
+       * with a coordinate that has nothing else attached.
+       */
+      if (hit.eatery) {
+        setOpenDetail({ kind: 'eatery', eatery: hit.eatery });
+        return;
+      }
       if (hit.pin) {
         setNav({ from: null, to: pinPlace(hit.pin) });
         setEditing('from');
@@ -426,6 +438,8 @@ export default function App() {
             from={searchFrom}
             choices={choices}
             feedDays={index?.days ?? []}
+            nowMs={nowMs}
+            offsetMinutes={offsetMinutes}
             onPick={handlePickSearchResult}
           />
         )}

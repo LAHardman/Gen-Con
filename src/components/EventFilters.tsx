@@ -31,8 +31,7 @@ import {
   type FilterChoices,
   type SortKey,
 } from '../data/filters';
-import { EXHIBITORS } from '../data/exhibitors';
-import { foodChoices, foodCounts, isFood } from '../data/food';
+import { biteChoices, biteCounts } from '../data/food';
 import { vendorChoices, vendorCounts, vendorsOf } from '../data/vendors';
 import { matchesQuery, type EventSearchIndex } from '../data/search';
 import { kindName } from '../data/event-kinds';
@@ -57,11 +56,18 @@ interface Props {
    * `filter.kind` is never set.
    */
   kinds?: boolean;
+  /**
+   * Whether "nearest first" can be offered — something has to have said where
+   * you are. A room open on the map, or the device with location on.
+   */
+  canSortByDistance?: boolean;
+  /** Now, for the "open now" and "on now" chips. Null when nothing has said. */
+  nowMs?: number | null;
   onChange: (filter: EventFilter) => void;
   onSort: (sort: SortKey | undefined) => void;
 }
 
-const SORT_KEYS: SortKey[] = ['start', 'end', 'length', 'cost'];
+const EVENT_SORTS: SortKey[] = ['start', 'end', 'length', 'cost'];
 
 /** The three questions somebody looking for lunch is actually asking. */
 const FOOD_LABEL = { cuisine: 'Cuisine', dish: 'Dish', dietary: 'Dietary' } as const;
@@ -74,6 +80,8 @@ export function EventFilters({
   events,
   query,
   kinds = true,
+  canSortByDistance = false,
+  nowMs = null,
   onChange,
   onSort,
 }: Props) {
@@ -89,11 +97,10 @@ export function EventFilters({
    * needed — but the meaning has to be the same one: a count is what pressing
    * it produces, not how many carry that tag.
    */
-  const food = useMemo(() => foodChoices(), []);
-  const vendors = useMemo(() => EXHIBITORS.filter(isFood), []);
+  const food = useMemo(() => biteChoices(), []);
   const foodTally = useMemo(
-    () => (open && kind === 'food' ? foodCounts(vendors, filter, food) : null),
-    [open, kind, vendors, filter, food],
+    () => (open && kind === 'food' ? biteCounts(filter, food) : null),
+    [open, kind, filter, food],
   );
 
   /*
@@ -170,7 +177,8 @@ export function EventFilters({
       | 'dietary'
       | 'standKinds'
       | 'areas'
-      | 'levels',
+      | 'levels'
+      | 'where',
     value: string,
   ) => {
     const held = filter[key] ?? [];
@@ -196,6 +204,28 @@ export function EventFilters({
   const chosenTime = START_BANDS.findIndex(
     (band) => band.from === filter.startFrom && band.to === filter.startTo,
   );
+
+  const sortsHere = kind === 'all' || kind === 'event' ? EVENT_SORTS : [];
+
+  /*
+   * "On now" and "Open now", which are the same chip asking the same question
+   * of different things — and only where there is an answer.
+   *
+   *   events   the feed says exactly when each one runs
+   *   food     Gen Con's Block Party hours, and OpenStreetMap's for a
+   *            restaurant. Ten of the 48 restaurants and every stand outside
+   *            the Block Party publish none, and those are kept *out* rather
+   *            than let through — see `search`
+   *   places   nobody publishes the hours of a hall, so this is the honest
+   *            question the feed can answer instead: is something on in it
+   *
+   * Vendors get no such chip. Gen Con publishes no hall hours anywhere a
+   * program can reach, and a chip that could only empty the list is the bug
+   * this whole panel was rebuilt to stop.
+   */
+  const nowLabel =
+    kind === 'place' ? 'Has an event on' : kind === 'all' || kind === 'event' ? 'On now' : 'Open now';
+  const offersNow = nowMs !== null && kind !== 'vendor';
 
   return (
     <div className="filters">
@@ -237,7 +267,16 @@ export function EventFilters({
           {active > 0 && <span className="filters__count">{active}</span>}
         </button>
 
-        {(kind === 'all' || kind === 'event') && (
+        {/*
+          * What can be sorted by depends on what is being sorted.
+          *
+          * A start time is a property of a session and of nothing else, so the
+          * four time-and-money orders are offered under Events alone. Distance
+          * is a property of the *pair* — you, and the thing — so it appears
+          * wherever something has said where you are, and nowhere else: an
+          * order by distance from nowhere would be a made-up order.
+          */}
+        {(sortsHere.length > 0 || canSortByDistance) && (
         <label className="filters__sort">
           <span className="filters__sort-label">Sort</span>
           <select
@@ -245,11 +284,12 @@ export function EventFilters({
             onChange={(change) => onSort((change.target.value || undefined) as SortKey | undefined)}
           >
             <option value="">Best match</option>
-            {SORT_KEYS.map((key) => (
+            {sortsHere.map((key) => (
               <option key={key} value={key}>
                 {SORT_LABEL[key]}
               </option>
             ))}
+            {canSortByDistance && <option value="near">{SORT_LABEL.near}</option>}
           </select>
         </label>
         )}
@@ -263,6 +303,27 @@ export function EventFilters({
 
       {open && kind === 'food' && (
         <div className="filters__panel" id={id}>
+          {offersNow && (
+            <Group label="Right now">
+              <Chip on={!!filter.nowOnly} onClick={() => set({ nowOnly: !filter.nowOnly })}>
+                {nowLabel}
+              </Chip>
+            </Group>
+          )}
+
+          <Group label="Where">
+            {food.where.map((one) => (
+              <Chip
+                key={one}
+                on={!!filter.where?.includes(one)}
+                left={foodTally?.where.get(one)}
+                onClick={() => toggleIn('where', one)}
+              >
+                {one}
+              </Chip>
+            ))}
+          </Group>
+
           {(['cuisine', 'dish', 'dietary'] as const).map((facet) => (
             <Group key={facet} label={FOOD_LABEL[facet]}>
               {food[facet].map((tag) => (
@@ -278,8 +339,10 @@ export function EventFilters({
             </Group>
           ))}
           <p className="filters__note">
-            Gen Con publishes no menus and no prices — these are its own tags for each vendor. Open
-            one for its own site, which is where a food truck actually posts what it is cooking.
+            Gen Con publishes no menus and no prices — the Block Party’s are its own tags for each
+            vendor, and its hours are last year’s. Everywhere off site comes from OpenStreetMap,
+            whose hours are volunteers’ and whose ten unlisted ones drop out of “open now” rather
+            than being guessed at. Open one for its own site.
           </p>
         </div>
       )}
@@ -353,6 +416,14 @@ export function EventFilters({
         */}
       {open && kind === 'place' && (
         <div className="filters__panel" id={id}>
+          {offersNow && (
+            <Group label="Right now">
+              <Chip on={!!filter.nowOnly} onClick={() => set({ nowOnly: !filter.nowOnly })}>
+                {nowLabel}
+              </Chip>
+            </Group>
+          )}
+
           <Group label="Building">
             {placeVenues.map((venueId) => (
               <Chip
@@ -383,6 +454,14 @@ export function EventFilters({
 
       {open && (kind === 'all' || kind === 'event') && (
         <div className="filters__panel" id={id}>
+          {offersNow && (
+            <Group label="Right now">
+              <Chip on={!!filter.nowOnly} onClick={() => set({ nowOnly: !filter.nowOnly })}>
+                {nowLabel}
+              </Chip>
+            </Group>
+          )}
+
           <Group label="Day">
             {days.map((day) => (
               <Chip

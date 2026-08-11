@@ -17,7 +17,9 @@ import { describe, expect, it } from 'vitest';
 import { buildEventSearchIndex, search, searchSessions, type EventSearchIndex } from './search';
 import { ROOMS_BY_ID } from './venues';
 import { isFood } from './food';
-import { tagsOf } from './exhibitors';
+import { EXHIBITORS, tagsOf } from './exhibitors';
+import { roughMetres } from './nearby';
+import { hitSpot } from './search';
 import { indexEvents, type ConEvent } from './events';
 
 const NO_EVENTS: EventSearchIndex = { entries: [] };
@@ -418,5 +420,171 @@ describe('the top-level kind', () => {
     expect(loose.some((hit) => hit.pin)).toBe(true);
     const narrowed = search('washington', feed, 200, { kind: 'place', venueIds: ['icc'] });
     expect(narrowed.some((hit) => hit.pin)).toBe(false);
+  });
+});
+
+describe('somewhere to eat, from both sources at once', () => {
+  const feed: EventSearchIndex = {
+    entries: [
+      {
+        room: ROOMS_BY_ID['hall-a'],
+        event: {
+          id: 'a',
+          title: 'Morning game',
+          locationText: 'ICC',
+          start: '2026-08-01T09:00:00-04:00',
+          end: '2026-08-01T13:00:00-04:00',
+          roomId: 'hall-a',
+        },
+        title: 'morning game',
+      },
+    ],
+  };
+  it('answers Food with the trucks and the restaurants together', () => {
+    const hits = search('', feed, 200, { kind: 'food' });
+    expect(hits.some((hit) => hit.exhibitor)).toBe(true);
+    expect(hits.some((hit) => hit.eatery)).toBe(true);
+    expect(hits.length).toBeGreaterThan(EXHIBITORS.filter(isFood).length);
+  });
+
+  it('finds a restaurant by what it cooks as well as by its name', () => {
+    const byName = search('aroma', feed, 50, { kind: 'food' });
+    expect(byName.some((hit) => hit.eatery?.name.includes('Aroma'))).toBe(true);
+    const byCuisine = search('indian', feed, 50, { kind: 'food' });
+    expect(byCuisine.some((hit) => hit.eatery?.cuisine.includes('Indian'))).toBe(true);
+  });
+
+  it('keeps restaurants out of every other kind', () => {
+    // 48 of them would swamp a search for a room, and "hall b" is not a
+    // question about lunch.
+    for (const kind of ['all', 'event', 'vendor', 'place'] as const) {
+      expect(search('a', feed, 200, { kind }).some((hit) => hit.eatery)).toBe(false);
+    }
+  });
+
+  it('narrows food by whereabouts it is', () => {
+    const street = search('', feed, 200, { kind: 'food', where: ['Block Party'] });
+    expect(street.length).toBeGreaterThan(0);
+    expect(street.every((hit) => hit.exhibitor)).toBe(true);
+
+    const city = search('', feed, 200, { kind: 'food', where: ['Off site'] });
+    expect(city.length).toBeGreaterThan(0);
+    expect(city.every((hit) => hit.eatery)).toBe(true);
+  });
+
+  it('takes a cuisine across both sources', () => {
+    // Gen Con tags a truck `Mexican`; OpenStreetMap tags a restaurant `Mexican`.
+    // One chip, both answers — which is the whole point of one list.
+    const hits = search('', feed, 200, { kind: 'food', cuisine: ['Mexican'] });
+    expect(hits.some((hit) => hit.exhibitor)).toBe(true);
+    expect(hits.some((hit) => hit.eatery)).toBe(true);
+  });
+});
+
+describe('what is on, and what is open, right now', () => {
+  const feed: EventSearchIndex = {
+    entries: [
+      {
+        room: ROOMS_BY_ID['hall-a'],
+        event: {
+          id: 'now',
+          title: 'Running now',
+          locationText: 'ICC',
+          start: '2026-08-01T09:00:00-04:00',
+          end: '2026-08-01T13:00:00-04:00',
+          roomId: 'hall-a',
+        },
+        title: 'running now',
+      },
+      {
+        room: ROOMS_BY_ID['hall-b'],
+        event: {
+          id: 'later',
+          title: 'Running later',
+          locationText: 'ICC',
+          start: '2026-08-01T18:00:00-04:00',
+          end: '2026-08-01T20:00:00-04:00',
+          roomId: 'hall-b',
+        },
+        title: 'running later',
+      },
+    ],
+  };
+  const LUNCH = Date.parse('2026-08-01T12:30:00-04:00');
+  const THREE_AM = Date.parse('2026-08-01T03:00:00-04:00');
+  const EAST = -240;
+  const context = (nowMs: number) => ({ nowMs, offsetMinutes: EAST });
+
+  it('keeps only the session actually running', () => {
+    const hits = search('running', feed, 50, { kind: 'event', nowOnly: true }, undefined, context(LUNCH));
+    expect(hits.map((hit) => hit.event!.id)).toEqual(['now']);
+  });
+
+  it('keeps only the food that is open', () => {
+    // Lunchtime on the Saturday: the Block Party is open by its own hours and
+    // most of the restaurants by theirs. Three in the morning: almost nothing.
+    const open = search('', feed, 200, { kind: 'food', nowOnly: true }, undefined, context(LUNCH));
+    const shut = search('', feed, 200, { kind: 'food', nowOnly: true }, undefined, context(THREE_AM));
+    expect(open.length).toBeGreaterThan(10);
+    expect(shut.length).toBeLessThan(open.length);
+  });
+
+  it('leaves out the ones nobody publishes hours for, rather than guessing', () => {
+    // Ten of the 48 restaurants have a website and no hours. "Open now" cannot
+    // be true of them, and letting them through would promise a locked door.
+    const all = search('', feed, 200, { kind: 'food' });
+    const open = search('', feed, 200, { kind: 'food', nowOnly: true }, undefined, context(LUNCH));
+    const unlisted = all.filter((hit) => hit.eatery && !hit.eatery.hours);
+    expect(unlisted.length).toBeGreaterThan(0);
+    for (const hit of unlisted) expect(open.some((one) => one.key === hit.key)).toBe(false);
+  });
+
+  it('answers a place with the room something is on in', () => {
+    // Nobody publishes the hours of a hall — so this is the honest question the
+    // feed can answer instead, and the chip is labelled for that.
+    const hits = search('exhibit hall', feed, 50, { kind: 'place', nowOnly: true }, undefined, context(LUNCH));
+    expect(hits.map((hit) => hit.room!.id)).toEqual(['hall-a']);
+  });
+
+  it('does nothing at all with no clock', () => {
+    // Nothing has said what "now" is, so the flag cannot narrow anything.
+    const hits = search('running', feed, 50, { kind: 'event', nowOnly: true });
+    expect(hits).toHaveLength(2);
+  });
+});
+
+describe('nearest first', () => {
+  const feed: EventSearchIndex = { entries: [] };
+
+  it('orders by how far away each one is, not by name', () => {
+    const from = { roomId: 'hall-a' };
+    const hits = search('', feed, 200, { kind: 'food' }, 'near', { from });
+    expect(hits.length).toBeGreaterThan(5);
+    const metres = hits.map((hit) => roughMetres(from, hitSpot(hit)) ?? Infinity);
+    for (let i = 1; i < metres.length; i += 1) expect(metres[i]).toBeGreaterThanOrEqual(metres[i - 1]);
+  });
+
+  it('puts what the table cannot place last rather than first', () => {
+    // An unknown distance is not a short one.
+    const hits = search('', feed, 200, { kind: 'food' }, 'near', { from: { roomId: 'hall-a' } });
+    const unplaced = hits.findIndex((hit) => roughMetres({ roomId: 'hall-a' }, hitSpot(hit)) === null);
+    if (unplaced !== -1) expect(unplaced).toBe(hits.length - 1);
+  });
+
+  it('changes with where you are standing', () => {
+    // The one that proves it is measuring rather than printing an order. The
+    // Block Party is on South Street; the Westin is six blocks north.
+    const fromStreet = search('', feed, 200, { kind: 'food' }, 'near', {
+      from: { roomId: 'block-party-street' },
+    });
+    const fromWestin = search('', feed, 200, { kind: 'food' }, 'near', {
+      from: { roomId: 'westin-grand-ballroom' },
+    });
+    expect(fromStreet[0].key).not.toBe(fromWestin[0].key);
+  });
+
+  it('falls back to the ranking with nowhere to measure from', () => {
+    const hits = search('', feed, 50, { kind: 'food' }, 'near');
+    expect(hits.length).toBeGreaterThan(0);
   });
 });

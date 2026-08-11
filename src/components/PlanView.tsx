@@ -56,7 +56,7 @@ import {
   type SearchHit,
   type SessionHit,
 } from '../data/search';
-import { openingFor, type Opening } from '../data/food';
+import { biteOpening, type Opening } from '../data/food';
 import { AddStop } from './AddStop';
 import {
   isAsking,
@@ -460,9 +460,11 @@ function Block({
 function stopFor(hit: SearchHit, title: string, where: string): Stop {
   const key = hit.exhibitor
     ? `vendor:${hit.exhibitor.id ?? `${hit.exhibitor.name}:${hit.exhibitor.spot}`}`
-    : hit.room
-      ? `place:${hit.room.id}`
-      : `pin:${hit.pin!.id}`;
+    : hit.eatery
+      ? `eat:${hit.eatery.id}`
+      : hit.room
+        ? `place:${hit.room.id}`
+        : `pin:${hit.pin!.id}`;
   return {
     key,
     title,
@@ -598,7 +600,13 @@ function PlanSearch({
                   onClick={() =>
                     setPlacing({
                       stop: stopFor(hit, title, detail),
-                      opening: hit.exhibitor ? openingFor(hit.exhibitor) : null,
+                      // A truck's hours are Gen Con's, a restaurant's are
+                      // OpenStreetMap's, and both come back as one `Opening`.
+                      opening: hit.exhibitor
+                        ? biteOpening({ truck: hit.exhibitor })
+                        : hit.eatery
+                          ? biteOpening({ eatery: hit.eatery })
+                          : null,
                     })
                   }
                 >

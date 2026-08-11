@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hitLabel, hitSpot, search, type EventSearchIndex, type SearchHit } from '../data/search';
-import { formatTimeRange } from '../data/events';
+import { formatClock, formatTimeRange } from '../data/events';
 import { formatRough, roughMinutes, type Spot } from '../data/nearby';
 import { isAsking, type EventFilter, type FilterChoices, type SortKey } from '../data/filters';
 import { EventFilters } from './EventFilters';
@@ -21,13 +21,17 @@ interface Props {
   choices: FilterChoices;
   /** The days the feed knows about, for the day filter. */
   feedDays: readonly string[];
+  /** Now, for "on now" and "open now". */
+  nowMs: number;
+  /** The convention's own offset, so hours are read at its clock. */
+  offsetMinutes: number | null;
   /** Take the map to this room and open it. */
   onPick: (hit: SearchHit) => void;
 }
 
 const RESULT_LIMIT = 8;
 
-export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
+export function SearchBar({ events, from, choices, feedDays, nowMs, offsetMinutes, onPick }: Props) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState(false);
@@ -36,9 +40,14 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  /*
+   * Where you are and what time it is, handed to the search rather than applied
+   * after it: "nearest first" has to order everything before the list is cut to
+   * eight, and "open now" has to drop what is shut before the cut too.
+   */
   const hits = useMemo(
-    () => search(query, events, RESULT_LIMIT, filter, sort),
-    [query, events, filter, sort],
+    () => search(query, events, RESULT_LIMIT, filter, sort, { from, nowMs, offsetMinutes }),
+    [query, events, filter, sort, from, nowMs, offsetMinutes],
   );
 
   // How far each one is, read out of the table rather than routed: eight real
@@ -120,6 +129,8 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
         choices={choices}
         events={events}
         query={query}
+        canSortByDistance={!!from}
+        nowMs={offsetMinutes === null ? null : nowMs}
         onChange={(next) => {
           setFilter(next);
           setOpen(true);
@@ -129,7 +140,24 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
 
       {showList && (
         <ul className="search__results" id="search-results" role="listbox">
-          {hits.length === 0 && <li className="search__empty">Nothing matches “{query.trim()}”</li>}
+          {/*
+            * Why the list is empty, when the reason is not the query.
+            *
+            * "Open now" at one in the morning correctly answers with nothing,
+            * and an empty box under a pressed chip reads as a broken filter
+            * rather than as a true answer. The clock is the convention's, not
+            * the reader's — see `conventionOffset` — which is the other half of
+            * why the answer can surprise somebody planning from California.
+            */}
+          {hits.length === 0 && (
+            <li className="search__empty">
+              {filter.nowOnly
+                ? `Nothing here is ${
+                    (filter.kind ?? 'all') === 'food' ? 'open' : 'on'
+                  } at ${formatClock(nowMs, offsetMinutes ?? 0)} in Indianapolis.`
+                : `Nothing matches “${query.trim()}”`}
+            </li>
+          )}
           {hits.map((hit, position) => {
             const { title, detail } = hitLabel(hit);
             // How many times it runs, or when the next one is: only an event

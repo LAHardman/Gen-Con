@@ -123,6 +123,7 @@ want to see it on a real device.
 | `npm run plans:campus` | Fetches Gen Con's own floor-plan tiles into `plans/campus/` |
 | `npm run fetch:events` | Imports the real schedule from the event database |
 | `npm run fetch:exhibitors` | Re-reads the stand list — who is at which booth |
+| `npm run fetch:eateries` | Re-reads downtown's restaurants from OpenStreetMap |
 | `npm run data:distances` | Re-measures every room to every other, for the walking estimates |
 | `npm run fetch:events -- --inspect` | Reports what the source site actually looks like |
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
@@ -766,10 +767,10 @@ them emptied the list. That looks exactly like a search that found nothing.
 | Kind | What it filters on |
 | --- | --- |
 | **Everything** | the event dimensions; any of them silences rooms, stands and addresses |
-| **Events** | day, start time, length, type, cost, tickets left, age, game system, building, room — and sort by start, end, length or cost |
-| **Food** | cuisine (12), dish (26), dietary (5) |
+| **Events** | on now, day, start time, length, type, cost, tickets left, age, game system, building, room — and sort by start, end, length or cost |
+| **Food** | where (Block Party / Off site), cuisine (34), dish (26), dietary (8), open now |
 | **Vendors** | sort of stand (7), where (15 areas), tags (74) |
-| **Places** | building (16), floor — offered from the buildings already chosen |
+| **Places** | has an event on, building (16), floor — offered from the buildings already chosen |
 
 Every one of those numbers is read off the live catalogue rather than written
 down, so a value Gen Con stops using stops being offered and one it adds appears
@@ -803,7 +804,36 @@ hiding places from a search for places. A street address has neither a building
 nor a floor, so either filter drops every address — the same rule as an event
 filter dropping a room, one level down.
 
-**Food: cuisine, dish, dietary.** Gen Con files every exhibitor under tags of
+**Sorted by how far away it is, when something says where you are.** A room
+open on the map, or the device with location on — see **Where you are** below,
+which never asks. Distance is not a property of a thing, it is a property of the
+pair, so `compareBy` cannot answer it and `search` orders by `roughMetres`
+directly: a table lookup rather than a route, so ordering a hundred hits costs
+about what ordering them by name costs. What the table cannot place goes last
+rather than first, because an unknown distance is not a short one. With nowhere
+to measure from the option is **absent** rather than present and inert.
+
+**"On now" and "open now" are the same chip asking the same question of
+different things** — and it is only offered where there is an answer:
+
+- **Events** — the feed says exactly when each one runs.
+- **Food** — Gen Con's Block Party hours for a truck, OpenStreetMap's for a
+  restaurant. Ten of the 48 restaurants publish none, and those are kept **out**
+  rather than let through: a filter called "open now" that included everywhere
+  nobody has written hours for would be promising a walk to a locked door.
+- **Places** — nobody publishes the hours of a hall. Checked again for this:
+  `/api/v1/hours`, `/venues`, `/areas` and `/exhibit_hall_hours` all 404, and
+  `gencon.com/attend/exhibit-hall` carries no times. So the chip asks the
+  question the feed *can* answer and is labelled for it: **has an event on**.
+- **Vendors** — no chip at all, for the same reason. One that could only empty
+  the list is the bug this panel was rebuilt to stop.
+
+When it empties the list the list says why, with the time it read: *"Nothing
+here is open at 12:22 AM in Indianapolis."* The clock is the convention's, not
+the reader's, which is the other half of why the answer can surprise somebody
+planning from California.
+
+**Food: where, cuisine, dish, dietary.** Gen Con files every exhibitor under tags of
 its own and all 43 Block Party vendors carry them, but the 49 tags in use are
 three different questions wearing one coat: what kitchen it is (Korean,
 Venezuelan), what comes out of it (Tacos, Crepes, Burger), and what you can
@@ -1701,7 +1731,9 @@ src/
     amenities.ts     Restrooms, from the plans that draw them
     exhibitors.ts    Every stand, its booth, its tags and its site (generated)
     booths.ts        Booth numbers to halls, and the aisle grid
-    food.ts          Which tags are cuisine, dish or dietary — and the hours
+    food.ts          Trucks and restaurants as one list, and what they sell
+    hours.ts         When somewhere is open, including reading OSM's own format
+    eateries.ts      Somewhere to eat downtown, from OpenStreetMap (generated)
     search.ts        Ranking rooms, stands, events and addresses against a query
     filters.ts       The kind, the event dimensions, and what pressing one leaves
     vendors.ts       What a stand is, where it is and what it sells
@@ -1748,6 +1780,7 @@ scripts/
   gencon-tiles.mjs         Fetches and stitches Gen Con's floor-plan tiles
   fetch-pavements.mjs      Pulls the footway network (writes pavements.ts)
   lib/png.mjs              PNG decoding, down to 4-bit palette tiles
+  fetch-eateries.mjs       Pulls downtown's restaurants (writes eateries.ts)
   fetch-events.mjs         Crawls the source and imports the real schedule
   lib/parse-events.mjs     Catalogue and event-page parsing, and FIELD_PATTERNS
   make-sample-events.mjs   Fake schedule for offline development
