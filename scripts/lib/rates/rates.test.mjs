@@ -88,38 +88,51 @@ describe('the monthly allowance', () => {
 
 describe('who gets asked about', () => {
   const budgets = { serpapi: 100, xotelo: 0, amadeus: 0, apify: 0 };
+  const BLOCK = new Set(['w2']);
+
+  it('never spends a request on a hotel Gen Con publishes', () => {
+    // The most wasteful thing this could do: paying an allowance for a number
+    // already sitting in partners.ts. The block covers most of the walk ring.
+    const { tasks } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST, inBlock: BLOCK });
+    expect(tasks.map((task) => task.place.id)).not.toContain('w2');
+    expect(tasks.length).toBe(PLACES.length - 1);
+  });
 
   it('does the walk ring before the drive ring, nearest first', () => {
-    // If the allowance runs out halfway down, the half that got asked should be
-    // the half nearest the hall.
     const { tasks } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST });
     expect(tasks.slice(0, 3).map((task) => task.place.id)).toEqual(['w1', 'w2', 'w3']);
-    expect(tasks.every((task) => task.why === 'walk-due' || task.why === 'drive-candidate')).toBe(true);
   });
 
   it('leaves alone anything already asked about this month', () => {
     const quotes = [quote('w1', 200, '2026-08-02T00:00:00Z')];
     const { tasks } = planRun({ places: PLACES, quotes, budgets, whenMs: AUGUST });
-    expect(tasks.map((task) => task.place.id)).not.toContain('w1');
+    expect(tasks.filter((task) => task.why !== 'refresh').map((task) => task.place.id)).not.toContain('w1');
     expect(isFresh(quotes, 'w1', AUGUST)).toBe(true);
     // Last month is not this month, however few days ago it was.
     expect(isFresh([quote('w1', 200, '2026-07-31T23:00:00Z')], 'w1', AUGUST)).toBe(false);
   });
 
-  it('will not touch the drive ring until something walkable has a price', () => {
-    // No floor is a reason to stop, not a reason to use infinity — otherwise the
-    // whole allowance goes on places that may all be above a cap found next week.
-    const { tasks, floor } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST });
-    expect(floor).toBeNull();
-    expect(tasks.every((task) => task.place.ring === 'walk')).toBe(true);
+  it('asks about every hotel outside the block, not only the cheap ones', () => {
+    /*
+     * The rule that changed. Capping the drive ring at the cheapest walkable
+     * rate saved quota and lost information: you cannot tell whether a hotel is
+     * worth the drive without knowing what it costs, and "too expensive" is a
+     * fact worth showing rather than one worth forgetting.
+     */
+    const { tasks } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST });
+    const asked = new Set(tasks.map((task) => task.place.id));
+    for (const place of PLACES) expect(asked.has(place.id), place.id).toBe(true);
   });
 
-  it('probes the drive ring cheapest-looking first once there is a floor', () => {
-    const quotes = PLACES.filter((one) => one.ring === 'walk').map((one) =>
-      quote(one.id, 250, '2026-08-02T00:00:00Z'),
-    );
-    const { tasks, floor } = planRun({ places: PLACES, quotes, budgets, whenMs: AUGUST });
-    expect(floor).toBe(250);
+  it('asks about the drive ring even with no walkable price yet', () => {
+    // It used to refuse without a floor. There is no floor any more.
+    const { tasks, floor } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST });
+    expect(floor).toBeNull();
+    expect(tasks.some((task) => task.place.ring === 'drive')).toBe(true);
+  });
+
+  it('probes the drive ring cheapest-looking first', () => {
+    const { tasks } = planRun({ places: PLACES, quotes: [], budgets, whenMs: AUGUST });
     const drive = tasks.filter((task) => task.place.ring === 'drive').map((task) => task.place.id);
     // Two budget chains before the Conrad, whatever the distances say.
     expect(drive.indexOf('d1')).toBeLessThan(drive.indexOf('d2'));
@@ -127,21 +140,12 @@ describe('who gets asked about', () => {
     expect(cheapFirst(PLACES[3])).toBeLessThan(cheapFirst(PLACES[4]));
   });
 
-  it('does not re-probe a place already found to be over the floor', () => {
-    const quotes = [quote('w1', 250, '2026-08-02T00:00:00Z')];
-    const { tasks } = planRun({
-      places: PLACES,
-      quotes,
-      budgets,
-      whenMs: AUGUST,
-      tried: { d1: '2026-07' },
-    });
-    expect(tasks.map((task) => task.place.id)).not.toContain('d1');
-  });
-
-  it('spends spare quota re-asking the walk ring, stalest first', () => {
-    // "Once a month unless there is extra": a second look at the hotel across
-    // the road beats a first look at one you would need a car for.
+  it('spends what is left over rather than letting it expire', () => {
+    /*
+     * An allowance resets on the first and anything unspent is gone. Once
+     * nothing is due, the rest goes on refreshing the stalest — nearest first,
+     * because that is where a stale price misleads most.
+     */
     const quotes = [
       quote('w1', 200, '2026-08-09T00:00:00Z'),
       quote('w2', 210, '2026-08-01T00:00:00Z'),
@@ -154,7 +158,19 @@ describe('who gets asked about', () => {
       whenMs: AUGUST,
     });
     expect(tasks.map((task) => task.place.id)).toEqual(['w2', 'w3']);
-    expect(tasks.every((task) => task.why === 'walk-extra')).toBe(true);
+    expect(tasks.every((task) => task.why === 'refresh')).toBe(true);
+  });
+
+  it('never refreshes a block hotel with the spare either', () => {
+    const quotes = PLACES.map((one) => quote(one.id, 200, '2026-08-01T00:00:00Z'));
+    const { tasks } = planRun({
+      places: PLACES,
+      quotes,
+      budgets: { serpapi: 50 },
+      whenMs: AUGUST,
+      inBlock: BLOCK,
+    });
+    expect(tasks.map((task) => task.place.id)).not.toContain('w2');
   });
 
   it('plans nothing at all when every allowance is gone', () => {
@@ -168,27 +184,22 @@ describe('who gets asked about', () => {
   });
 });
 
-describe('the price cap', () => {
-  it('takes the floor from the walk ring only, stale quotes included', () => {
-    // Last month's cheapest walkable rate is a far better cap than none.
+describe('what is worth keeping', () => {
+  it('keeps any real number now that the drive ring is uncapped', () => {
+    expect(keeps(PLACES[3], 999)).toBe(true);
+    expect(keeps(PLACES[0], 10)).toBe(true);
+  });
+
+  it('still refuses a number that is not one', () => {
+    // A source that half-answered is worse than one that did not answer.
+    expect(keeps(PLACES[0], 0)).toBe(false);
+    expect(keeps(PLACES[0], NaN)).toBe(false);
+    expect(keeps(PLACES[0], -5)).toBe(false);
+  });
+
+  it('still reports the cheapest walkable rate, which the page uses', () => {
     const quotes = [quote('w1', 300, '2026-07-01T00:00:00Z'), quote('d1', 60, '2026-08-01T00:00:00Z')];
     expect(walkFloor(PLACES, quotes)).toBe(300);
-  });
-
-  it('keeps a drive-ring price at or under the floor and drops one over it', () => {
-    const drive = PLACES[3];
-    expect(keeps(drive, 199, 200)).toBe(true);
-    expect(keeps(drive, 200, 200)).toBe(true);
-    expect(keeps(drive, 201, 200)).toBe(false);
-  });
-
-  it('always keeps a walkable price, because it is what the cap is made of', () => {
-    expect(keeps(PLACES[0], 900, 200)).toBe(true);
-    expect(keeps(PLACES[0], 900, null)).toBe(true);
-  });
-
-  it('keeps nothing from the drive ring when there is no floor', () => {
-    expect(keeps(PLACES[3], 10, null)).toBe(false);
   });
 });
 
@@ -309,23 +320,32 @@ describe('when a service goes offline', () => {
     expect(usable([each, area], env, { serpapi: 1, xotelo: 1 })[0].name).toBe('serpapi');
   });
 
-  it('remembers a drive-ring place it priced and rejected', async () => {
-    const quotes = [quote('w1', 100, '2026-08-01T00:00:00Z')];
-    const ledger = ledgerFor(null, AUGUST);
-    const dear = placeSource('xotelo', async (one) =>
-      one.ring === 'drive' ? { nightly: 400, currency: 'USD' } : null,
-    );
+  it('never stores a bought price for a hotel Gen Con publishes', async () => {
+    /*
+     * An area source returns a page of hotels whatever it was asked, so a block
+     * hotel can come back through the side door — and a bought price sitting
+     * beside a published one is worse than no price at all.
+     */
+    const inBlock = new Set(['w2']);
+    const everything = areaSource('serpapi', async (asked) => {
+      // It was not even offered the block hotel.
+      expect(asked.map((one) => one.id)).not.toContain('w2');
+      return [
+        { placeId: 'w1', nightly: 100, currency: 'USD' },
+        { placeId: 'w2', nightly: 999, currency: 'USD' },
+      ];
+    });
     const result = await runOnce({
       places: PLACES,
-      quotes,
-      ledger,
+      quotes: [],
+      ledger: ledgerFor(null, AUGUST),
       env,
       whenMs: AUGUST,
-      sources: [dear],
+      sources: [everything],
+      inBlock,
     });
-    expect(result.rejected).toBeGreaterThan(0);
-    expect(Object.keys(ledger.tried).length).toBeGreaterThan(0);
-    expect(result.quotes.some((one) => one.nightly === 400)).toBe(false);
+    expect(result.quotes.map((one) => one.placeId)).not.toContain('w2');
+    expect(result.quotes.map((one) => one.placeId)).toContain('w1');
   });
 });
 

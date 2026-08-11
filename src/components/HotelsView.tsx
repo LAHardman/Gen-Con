@@ -1,59 +1,60 @@
 /**
- * Where to sleep, and what it costs.
+ * Where to sleep, what it costs, and how you get from it to the hall.
  *
- * THE PRICES ARE THE LEAST TRUSTWORTHY THING ON THIS PAGE and it is laid out
- * accordingly. They come from free tiers of commercial services, they are
- * indicative rates for a sample night rather than a quote for your dates, and
- * the number everybody actually wants — the Gen Con block rate — is behind a
- * badge purchase and a login and cannot be fetched at all. So every price
- * carries its age and who said it, a disagreement between two services is shown
- * rather than averaged away, and the block rate gets a line of its own saying it
- * is missing. A confident-looking table of prices that quietly omits the cheapest
- * one available is worse than no table.
+ * FOUR FACTS PER HOTEL, deliberately of different qualities:
  *
- * DISTANCE IS THE TRUSTWORTHY THING, so it leads. This app knows the campus
- * exactly; it knows hotel prices roughly and second-hand. Ordering by walk
- * first, and only then by price, matches which of those two numbers deserves to
- * decide anything.
+ *   skywalk    Gen Con's own, and only for hotels in its block. Nobody else
+ *              records it, so a hotel outside the block says nothing rather
+ *              than claiming it has none.
+ *   journey    a walk time, or a drive time past the point where nobody walks
+ *              with a suitcase in August. The drive is arithmetic and marked.
+ *   distance   this app's own, exact, and the only number here it is sure of.
+ *   price      per person per night, which is a division this app performed
+ *              rather than a rate anybody quotes — so the room total is printed
+ *              beside it whenever more than one person is sharing.
  *
- * IT WORKS WITH NOTHING. No prices at all is the normal starting state and a
- * plausible steady state if every service withdraws its free tier — so the page
- * is a useful distance-ordered list of hotels before a single rate exists, and
- * says what is missing rather than showing a column of blanks.
+ * WHERE GEN CON PUBLISHES A PRICE, THAT IS THE PRICE. The block's rates come
+ * from Gen Con's own page: free, official, and better than anything a rate API
+ * would sell. So the gathering never spends an allowance on a block hotel, and
+ * this page shows the published figure instead of a bought one.
+ *
+ * DISTANCE LEADS, because it is the number this app actually knows. The campus
+ * is measured; the non-block prices are second-hand, from free tiers, for a
+ * sample night, and every one carries its age and its source.
+ *
+ * IT WORKS WITH NOTHING. No bought prices at all is the normal starting state,
+ * and a plausible steady state if every free tier withdraws — the page is still
+ * a distance-ordered list with Gen Con's own rates on two thirds of it.
  */
 
 import { useMemo, useState } from 'react';
 
-import { BLOCK_YEAR, CAVEAT, SOURCE, pairings } from '../data/blocks';
-import { CHEAPEST } from '../data/partners';
+import {
+  BLOCK_YEAR,
+  CAVEAT,
+  SOURCE,
+  blockRate,
+  hasSkywalk,
+  journeyTo,
+  pairings,
+  perPerson,
+} from '../data/blocks';
 import { planningYear } from '../data/key-dates';
-import { LODGING, PULLED, WALK_METRES } from '../data/lodging';
-
-import { RATES, REFRESHED, rateFor, type Rate } from '../data/rates';
+import { LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
+import { CHEAPEST } from '../data/partners';
+import { RATES, REFRESHED, rateFor } from '../data/rates';
 
 type Ring = 'walk' | 'drive' | 'block';
 
-/** Metres to "9 min", at the pace this app already walks everywhere else. */
-const WALK_METRES_PER_MIN = 78;
-const walkMinutes = (metres: number) => Math.max(1, Math.round(metres / WALK_METRES_PER_MIN));
-
-/**
- * Roughly how long the drive is.
- *
- * Openly a division, not a route. It is here because "14 km" means nothing to
- * somebody deciding where to sleep and "about 21 min" means something — and it
- * is rounded to five minutes so it cannot be mistaken for a routed answer.
- */
-const driveMinutes = (metres: number) => Math.max(5, Math.round(metres / 1000 / 0.7 / 5) * 5);
+/** How many people share the room, and therefore the bill. */
+const PARTIES = [1, 2, 3, 4] as const;
 
 const dollars = (amount: number, currency = 'USD') =>
   new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency,
+    currency: currency || 'USD',
     maximumFractionDigits: 0,
   }).format(amount);
-
-const money = (rate: Rate) => dollars(rate.nightly, rate.currency || 'USD');
 
 /** "3 weeks ago", so a stale price looks stale. */
 function age(at: string, nowMs: number): string {
@@ -66,44 +67,100 @@ function age(at: string, nowMs: number): string {
   return `${Math.round(days / 30)} months ago`;
 }
 
+/**
+ * How you would get to the hall from here.
+ *
+ * A skywalk is called out rather than folded into a distance, because it is a
+ * different experience rather than a shorter one: indoors and air-conditioned,
+ * which in an Indianapolis August is the whole difference between two hotels
+ * the same distance apart.
+ */
+function Journey({ place }: { place: Lodging }) {
+  const skywalk = hasSkywalk(place.id);
+  const journey = journeyTo(place, skywalk === true);
+  const km = (place.metres / 1000).toFixed(1);
+  return (
+    <p className="hotels__where">
+      {journey.mode === 'skywalk' && <span className="hotels__skywalk">skywalk</span>}
+      {journey.mode === 'drive'
+        ? `about ${journey.minutes} min drive`
+        : `${journey.minutes} min walk`}
+      {journey.rough ? '*' : ''}
+      {' · '}
+      {place.metres < 1000 ? `${place.metres} m` : `${km} km`} from the ICC
+      {place.city && place.city !== 'Indianapolis' ? ` · ${place.city}` : ''}
+      {place.kind !== 'hotel' ? ` · ${place.kind.replace('_', ' ')}` : ''}
+    </p>
+  );
+}
+
+/** A price, per head and per room, because those are different claims. */
+function Price({
+  nightly,
+  currency,
+  people,
+}: {
+  nightly: number;
+  currency: string;
+  people: number;
+}) {
+  return (
+    <>
+      <span className="hotels__money">{dollars(perPerson(nightly, people), currency)}</span>
+      <span className="hotels__meta">
+        per person, per night
+        {/* The room total, always, because the per-head figure is a division
+            this app performed rather than a rate anybody is quoted. */}
+        {people > 1 ? ` · ${dollars(nightly, currency)} the room` : ''}
+      </span>
+    </>
+  );
+}
+
 interface Props {
   nowMs: number;
 }
 
 export function HotelsView({ nowMs }: Props) {
   const [ring, setRing] = useState<Ring>('walk');
+  /*
+   * Two, because a room is priced for two and most people travel in pairs — but
+   * it is the reader's to change, since no default is right for both a couple
+   * and a group of six.
+   */
+  const [people, setPeople] = useState(2);
+  const year = planningYear(nowMs);
 
   const { rows, unpriced } = useMemo(() => {
-    const inRing = LODGING.filter((place) => place.ring === ring).map((place) => ({
-      place,
-      rate: rateFor(place.id),
-    }));
+    const inRing = LODGING.filter((place) => place.ring === ring).map((place) => {
+      const block = blockRate(place.id, year);
+      const rate = rateFor(place.id);
+      return {
+        place,
+        block,
+        rate,
+        // What the page shows and sorts on: Gen Con's published figure where
+        // there is one, because it beats anything bought.
+        nightly: block?.low ?? rate?.nightly ?? null,
+      };
+    });
 
     /*
      * The walk ring lists everything; the drive ring lists only what has a
-     * price.
-     *
-     * Because a drive-ring hotel with no price is not an option — it is a
-     * hotel nobody has asked about yet. The only reason to sleep out there is
-     * to spend less, and anything collected out there is by construction at or
-     * under the cheapest walkable rate, so a price is what *makes* it a
-     * candidate. Two hundred unpriced names would bury the handful that are.
-     *
-     * The walk ring is the opposite: you would consider walking to any of them
-     * at any price, so an unpriced one is still worth seeing and its blank is
-     * honest.
+     * price. A drive-ring hotel with no price is not an option — it is one
+     * nobody has asked about, and the only reason to sleep out there is to spend
+     * less. The walk ring is the opposite: you would consider walking to any of
+     * them at any price, so its blanks are honest and stay visible.
      */
-    const shown = ring === 'walk' ? inRing : inRing.filter((one) => one.rate);
+    const shown = ring === 'walk' ? inRing : inRing.filter((one) => one.nightly !== null);
     shown.sort((a, b) => {
-      // Walk ring by distance, which is the number this app is sure of. Drive
-      // ring by price, which is the only reason to be out there.
       if (ring === 'walk') return a.place.metres - b.place.metres;
-      return (a.rate?.nightly ?? Infinity) - (b.rate?.nightly ?? Infinity);
+      return (a.nightly ?? Infinity) - (b.nightly ?? Infinity);
     });
     return { rows: shown, unpriced: inRing.length - shown.length };
-  }, [ring]);
+  }, [ring, year]);
 
-  const priced = rows.filter((row) => row.rate).length;
+  const priced = rows.filter((row) => row.nightly !== null).length;
   const walkable = LODGING.filter((place) => place.ring === 'walk').length;
 
   return (
@@ -113,22 +170,9 @@ export function HotelsView({ nowMs }: Props) {
         <p>
           {walkable} places within a {(WALK_METRES / 1000).toFixed(1)} km walk of the hall, and{' '}
           {LODGING.length - walkable} more within about a half-hour drive. Distances are this app’s
-          own and exact; the prices are not.
+          own and exact; the prices are not, unless Gen Con published them.
         </p>
       </header>
-
-      {/* Said once, at the top, where a decision gets made — not in a footnote
-          under a table somebody has already read. Not on the block tab, which
-          is showing block rates and where "these are not block rates" would be
-          flatly contradicting the thing above it. */}
-      {ring !== 'block' && (
-      <p className="hotels__caution">
-        <strong>These are not Gen Con block rates.</strong> The block is booked through Gen Con’s
-        housing portal, opens 157 days before the convention, and is usually cheaper than anything
-        here — its prices are behind a badge purchase and a login and cannot be read by any app.
-        Treat the figures below as a rough guide to what the open market is charging.
-      </p>
-      )}
 
       <div className="hotels__rings" role="group" aria-label="How far">
         {(['walk', 'drive', 'block'] as const).map((which) => (
@@ -148,55 +192,70 @@ export function HotelsView({ nowMs }: Props) {
         ))}
       </div>
 
+      {/* Sharing changes the answer more than anything else on this page: a
+          $296 room is $296 or $74 depending on who is in it. */}
+      <div className="hotels__party" role="group" aria-label="Sharing the room">
+        <span className="hotels__party-label">Sharing between</span>
+        {PARTIES.map((many) => (
+          <button
+            key={many}
+            type="button"
+            className={`hotels__person${many === people ? ' hotels__person--on' : ''}`}
+            aria-pressed={many === people}
+            onClick={() => setPeople(many)}
+          >
+            {many}
+          </button>
+        ))}
+      </div>
+
+      {ring !== 'block' && (
+        <p className="hotels__caution">
+          <strong>Rates marked “Gen Con’s own” are the block’s published prices.</strong> Everything
+          else is an indicative market rate for a sample night, gathered from free tiers — a rough
+          guide rather than a quote for your dates. {CAVEAT}
+        </p>
+      )}
+
       {ring === 'drive' && (
         <p className="hotels__note">
-          Only places quoted at or below the cheapest walkable rate are listed here — the point of a
-          drive is to save money, so one that does not is not worth the drive.{' '}
-          {unpriced > 0 &&
-            `${unpriced} more are within range and have not been priced yet; they are asked about a few at a time, cheapest-looking first, as the monthly allowances permit. `}
-          “About {driveMinutes(8000)} min” and the like are distance divided by a typical speed, not
-          a routed time.
+          Cheapest first. {unpriced > 0 ? `${unpriced} more out here have no price yet. ` : ''}
+          Times marked * are distance divided by a typical speed rather than a routed drive.
         </p>
       )}
 
       {ring === 'block' ? (
-        <BlockTable nowMs={nowMs} />
+        <BlockTable nowMs={nowMs} people={people} />
       ) : rows.length === 0 ? (
         <p className="hotels__empty">
-          {ring === 'drive'
-            ? 'Nothing out here has been priced yet, so there is nothing worth driving to that this app knows about.'
-            : 'No hotels in this ring.'}
+          {ring === 'drive' ? 'Nothing out here has been priced yet.' : 'No hotels in this ring.'}
         </p>
       ) : (
         <ol className="hotels__list">
-          {rows.map(({ place, rate }) => (
+          {rows.map(({ place, rate, block, nightly }) => (
             <li key={place.id} className="hotels__row">
               <div className="hotels__what">
-                <h3>{place.name}</h3>
-                <p className="hotels__where">
-                  {ring === 'walk'
-                    ? `${walkMinutes(place.metres)} min walk · ${place.metres} m`
-                    : `about ${driveMinutes(place.metres)} min drive · ${(place.metres / 1000).toFixed(1)} km`}
-                  {/* Only where it says something: every walkable hotel is in
-                      Indianapolis and repeating it 35 times is noise. */}
-                  {place.city && place.city !== 'Indianapolis' ? ` · ${place.city}` : ''}
-                  {place.kind !== 'hotel' ? ` · ${place.kind.replace('_', ' ')}` : ''}
-                </p>
+                <h3>
+                  {place.name}
+                  {block && <span className="hotels__inblock">in the block</span>}
+                </h3>
+                <Journey place={place} />
               </div>
               <div className="hotels__price">
-                {rate ? (
-                  <>
-                    <span className="hotels__money">{money(rate)}</span>
-                    <span className="hotels__meta">
-                      per night · {age(rate.at, nowMs)}
-                      {/* Two services disagreeing is the honest width of the
-                          number, and hiding it would make it look surer. */}
-                      {rate.spread > 0 ? ` · they differ by ${rate.spread}` : ''}
-                    </span>
-                    <span className="hotels__meta">{rate.sources.join(', ')}</span>
-                  </>
-                ) : (
+                {nightly === null ? (
                   <span className="hotels__none">no price</span>
+                ) : (
+                  <>
+                    <Price nightly={nightly} currency={rate?.currency ?? 'USD'} people={people} />
+                    <span className="hotels__meta">
+                      {block
+                        ? `Gen Con’s own${block.projected ? ', projected' : ` ${BLOCK_YEAR} rate`}`
+                        : `${age(rate!.at, nowMs)}${
+                            rate!.spread > 0 ? ` · they differ by ${rate!.spread}` : ''
+                          }`}
+                    </span>
+                    {!block && <span className="hotels__meta">{rate!.sources.join(', ')}</span>}
+                  </>
                 )}
               </div>
             </li>
@@ -205,41 +264,33 @@ export function HotelsView({ nowMs }: Props) {
       )}
 
       {ring !== 'block' && (
-      <p className="hotels__note">
-        {priced === 0
-          ? 'No prices have been collected yet. The list above is still ordered and still useful; run scripts/fetch-rates.mjs to fill the right-hand column.'
-          : `${priced} of ${rows.length} priced. Prices are refreshed about once a month per place, within the free monthly allowances of the services asked — so a figure here can be weeks old, and says so.`}
-        {' '}Hotels pulled {PULLED} from OpenStreetMap, which caps its answers, so this is a sample
-        rather than a complete list. Prices last written {REFRESHED}.
-        {RATES.length === 0 ? '' : ' © OpenStreetMap contributors.'}
-      </p>
+        <p className="hotels__note">
+          {priced} of {rows.length} priced. Hotels pulled {PULLED} from OpenStreetMap, which caps its
+          answers, so this is a sample rather than a complete list. Bought prices last written{' '}
+          {REFRESHED}; they are refreshed about once a month per hotel, within the free monthly
+          allowances of the services asked, and never spent on a hotel Gen Con publishes.
+          {RATES.length === 0 ? '' : ' © OpenStreetMap contributors.'}
+        </p>
       )}
     </section>
   );
 }
 
 /**
- * The block, estimated, beside what you would pay instead.
+ * The block, beside what you would pay instead.
  *
- * TWO NUMBERS OF VERY DIFFERENT QUALITY SIT SIDE BY SIDE HERE, which is the
- * whole difficulty. The left is a real 2019 negotiated rate multiplied by a
- * published index; the right is a market rate somebody quoted this month. They
- * are not the same kind of fact and the column headings say so, because a table
- * that lines them up in matching type invites a comparison neither supports on
- * its own.
- *
- * The alternative is never the same hotel twice — see `pairings`. A table where
- * one Hampton Inn is the alternative to six different hotels tells you one thing
- * six times, and the fix is a matching rather than a lookup.
+ * The left column is Gen Con's own published rate — a fact for the year it
+ * published, arithmetic for any year after. The right is a market quote. They
+ * are not the same kind of number and the labels say so, because a table that
+ * lines them up in matching type invites a comparison neither supports alone.
  */
-function BlockTable({ nowMs }: { nowMs: number }) {
+function BlockTable({ nowMs, people }: { nowMs: number; people: number }) {
   const year = planningYear(nowMs);
   const rows = useMemo(() => pairings(year), [year]);
   const projected = rows[0]?.rate.projected ?? false;
   const yearsOn = rows[0]?.rate.yearsOn ?? 0;
   const unpaired = rows.filter((one) => !one.alternative).length;
   const walkable = LODGING.filter((one) => one.ring === 'walk').length;
-  const inBlock = rows.length;
 
   if (rows.length === 0) {
     return <p className="hotels__empty">No block hotels are on record.</p>;
@@ -279,15 +330,17 @@ function BlockTable({ nowMs }: { nowMs: number }) {
               </span>
               <h3>{partner.name}</h3>
               <span className={`hotels__money${rate.projected ? ' hotels__money--guess' : ''}`}>
-                {dollars(rate.low)}
-                {/* Both ends. Showing only the low one would make the block look
-                    cheaper than anybody actually pays for it. */}
-                {rate.high !== null && rate.high !== rate.low ? `–${dollars(rate.high)}` : ''}
+                {dollars(perPerson(rate.low, people))}
+                {/* Both ends. Only the low one would make the block look cheaper
+                    than anybody pays for it. */}
+                {rate.high !== null && rate.high !== rate.low
+                  ? `–${dollars(perPerson(rate.high, people))}`
+                  : ''}
               </span>
               <span className="hotels__meta">
-                {rate.partner.skywalk ? 'skywalk to the hall' : rate.partner.distance}
-                {rate.projected ? ` · from ${dollars(rate.from.low)} in ${rate.from.year}` : ''}
+                per person{people > 1 ? ` · ${dollars(rate.low)} the room` : ''}
               </span>
+              <Journey place={partner} />
             </div>
 
             <div className="hotels__side">
@@ -296,17 +349,18 @@ function BlockTable({ nowMs }: { nowMs: number }) {
                 <>
                   <h3>{alternative.name}</h3>
                   {alternativeRate ? (
-                    <span className="hotels__money">{money(alternativeRate)}</span>
+                    <span className="hotels__money">
+                      {dollars(perPerson(alternativeRate.nightly, people), alternativeRate.currency)}
+                    </span>
                   ) : (
                     <span className="hotels__none">no price yet</span>
                   )}
                   <span className="hotels__meta">
-                    {apart} m away · {walkMinutes(alternative.metres)} min walk
-                    {alternativeRate ? ` · ${age(alternativeRate.at, nowMs)}` : ''}
+                    {apart} m from it{alternativeRate ? ` · ${age(alternativeRate.at, nowMs)}` : ''}
                   </span>
+                  <Journey place={alternative} />
                 </>
               ) : (
-                // Better than repeating somebody else's alternative.
                 <span className="hotels__none">
                   every nearby hotel outside the block is already somebody else’s comparison
                 </span>
@@ -316,8 +370,8 @@ function BlockTable({ nowMs }: { nowMs: number }) {
             {saving !== null && (
               <p className={`hotels__saving${saving > 0 ? '' : ' hotels__saving--worse'}`}>
                 {saving > 0
-                  ? `About ${dollars(saving)} a night cheaper outside the block`
-                  : `About ${dollars(-saving)} a night dearer outside the block`}
+                  ? `About ${dollars(perPerson(saving, people))} a night each cheaper outside the block`
+                  : `About ${dollars(perPerson(-saving, people))} a night each dearer outside the block`}
                 <span>
                   {' '}
                   — and the block rate is before tax while the other is a market quote, so treat it
@@ -337,26 +391,20 @@ function BlockTable({ nowMs }: { nowMs: number }) {
         choice.
       </p>
 
-      {/* The finding, rather than an apology for a short list. Nearly every
-          hotel you can walk to is already Gen Con's, which is the answer to
-          "should I book outside the block" for most of downtown. */}
       {unpaired > 0 && (
         <p className="hotels__note">
           <strong>{unpaired} of them have no comparison at all</strong>, and that is the finding
-          rather than a gap: {inBlock} of the {walkable} hotels within a walk of the hall are in Gen
-          Con’s block, so there is very little downtown left to compare against. If you want to pay
-          less, the block’s own outlying hotels are the realistic answer, not a walkable one outside
-          it.
+          rather than a gap: {rows.length} of the {walkable} hotels within a walk of the hall are in
+          Gen Con’s block, so there is very little downtown left to compare against. If you want to
+          pay less, the block’s own outlying hotels are the realistic answer, not a walkable one
+          outside it.
         </p>
       )}
 
-      {/* The cheapest thing in the block is usually nowhere near the hall, and
-          it is a real published price rather than one this app had to buy. */}
       <p className="hotels__note">
         The block reaches well past downtown: its cheapest room anywhere is{' '}
-        <strong>{dollars(CHEAPEST.low)}</strong> at {CHEAPEST.blockName}, {CHEAPEST.distance} away.
-        Those outlying rates are published by Gen Con and cost this app nothing to know, which is
-        why they are worth more than anything on the “within a drive” tab.
+        <strong>{dollars(CHEAPEST.low)}</strong> at {CHEAPEST.blockName}, {CHEAPEST.distance} away —
+        published by Gen Con, and so costing this app no API quota at all.
       </p>
     </>
   );

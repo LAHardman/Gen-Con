@@ -2,33 +2,35 @@
  * Who to ask about, in what order, with the quota there is.
  *
  * This file is the feature. Everything around it fetches and draws; this is
- * where the four rules live, and each of them is here because the obvious
- * implementation gets it wrong.
+ * where the rules live, and each is here because the obvious implementation
+ * gets it wrong.
  *
- * 1. WALK BEFORE DRIVE, ALWAYS. Somewhere you can walk to at any price is worth
- *    more than somewhere cheap you would have to drive from, and the quota is
- *    small enough that a run which starts on the drive ring may never reach the
- *    walk ring at all. So the walk ring is planned to exhaustion first, and the
- *    drive ring only ever gets what is left over.
+ * 1. NEVER SPEND A REQUEST ON A HOTEL IN GEN CON'S BLOCK. Gen Con publishes
+ *    those rates itself, on a page that costs nothing to read and is more
+ *    authoritative than anything a rate API would return. Paying an allowance to
+ *    learn a number already sitting in `partners.ts` is the single most wasteful
+ *    thing this could do — and with the block covering 24 of the 35 walkable
+ *    hotels, it is most of the walk ring.
  *
- * 2. ONCE A MONTH EACH, UNLESS THERE IS SPARE. A price a month old is worth
- *    having and worth refreshing; a price refreshed weekly costs four times as
- *    much to say nearly the same thing. So a place is due when its newest quote
- *    is older than the current month — and only when the walk ring is entirely
- *    due-free does spare quota go on refreshing the freshest-but-oldest of them
- *    again, oldest first.
+ * 2. WALK BEFORE DRIVE. Somewhere you can walk to at any price is worth more
+ *    than somewhere cheap you would have to drive from, and the quota is small
+ *    enough that a run starting on the drive ring may never reach the walk ring.
+ *    So the walk ring is planned to exhaustion first.
  *
- * 3. THE DRIVE RING IS CAPPED BY THE WALK RING'S CHEAPEST. "Only grab places up
- *    to the cheapest walkable price" cannot be a filter before the call, because
- *    the price is what the call is for. It is therefore two things: a **keep**
- *    rule applied to the answer, and a **probe order** chosen to find keepers
- *    early. Anything that comes back dearer than the floor is discarded and its
- *    id is remembered, so next month's quota is not spent learning it again.
+ * 3. EVERY HOTEL OUTSIDE THE BLOCK, NOT JUST THE CHEAP ONES. An earlier version
+ *    capped the drive ring at the cheapest walkable rate and discarded anything
+ *    dearer. That saved quota and lost information — you cannot tell whether a
+ *    hotel is worth the drive without knowing what it costs, and "it was too
+ *    expensive" is a fact worth showing rather than one worth forgetting. So
+ *    everything outside the block is asked about, and the *page* decides what
+ *    is worth a drive.
  *
- * 4. NO FLOOR MEANS NO DRIVE RING. If nothing in the walk ring has a price yet,
- *    there is no cap, and querying the drive ring "for now" would spend the
- *    entire allowance on places that may all be above a floor discovered next
- *    week. A missing floor is a reason to stop, not a reason to use infinity.
+ * 4. ONCE A MONTH EACH, THEN SPEND WHAT IS LEFT. A price a month old is worth
+ *    having; one refreshed weekly costs four times as much to say nearly the
+ *    same thing. But an allowance that resets on the first of the month and goes
+ *    unspent is gone, so once nothing is due the remaining quota goes on
+ *    refreshing the stalest — nearest first, because that is where a stale price
+ *    misleads most.
  */
 
 /** A month, as the ledger spells it. */
@@ -115,73 +117,75 @@ export function cheapFirst(place) {
  *
  * `budgets` is units remaining per source; `quotes` is every quote already held.
  */
-export function planRun({ places, quotes, budgets, whenMs, tried = {} }) {
+export function planRun({ places, quotes, budgets, whenMs, tried = {}, inBlock = new Set() }) {
   const capacity = Object.values(budgets).reduce((sum, left) => sum + left, 0);
-  const tasks = [];
-  if (capacity <= 0) return { tasks, floor: walkFloor(places, quotes), reason: 'no quota left' };
-
-  const walk = places.filter((one) => one.ring === 'walk');
-
-  // Rule 1 and 2: every walkable place with nothing from this month, nearest
-  // first — because if the quota runs out halfway down, the half that got
-  // asked should be the half nearest the hall.
-  const dueWalk = walk
-    .filter((one) => !isFresh(quotes, one.id, whenMs))
-    .sort((a, b) => a.metres - b.metres);
-  for (const place of dueWalk) tasks.push({ place, why: 'walk-due' });
-
-  // Rule 4: no floor, no drive ring. Computed against the quotes actually held,
-  // not against what this run might be about to learn.
   const floor = walkFloor(places, quotes);
+  if (capacity <= 0) return { tasks: [], floor, reason: 'no quota left' };
 
-  let spare = capacity - tasks.length;
-  if (spare > 0 && floor !== null) {
-    // Rule 3: the drive ring, most-likely-cheap first, skipping anything
-    // already known to be above the floor and anything already fresh.
-    const dueDrive = places
-      .filter((one) => one.ring === 'drive')
-      .filter((one) => !tried[one.id])
-      .filter((one) => !isFresh(quotes, one.id, whenMs))
-      .sort((a, b) => cheapFirst(a) - cheapFirst(b));
-    for (const place of dueDrive) {
-      if (spare <= 0) break;
-      tasks.push({ place, why: 'drive-candidate' });
-      spare -= 1;
-    }
+  /*
+   * Rule 1, applied before anything else so it cannot be forgotten later.
+   *
+   * A block hotel's price is published. Every request spent on one is a request
+   * not spent on a hotel whose price nobody knows.
+   */
+  const askable = places.filter((one) => !inBlock.has(one.id));
+  const walk = askable.filter((one) => one.ring === 'walk');
+  const drive = askable.filter((one) => one.ring === 'drive');
+
+  const tasks = [];
+  const due = (list) => list.filter((one) => !isFresh(quotes, one.id, whenMs));
+
+  // Rule 2: the walk ring, nearest first — if the quota runs out halfway down,
+  // the half that got asked should be the half nearest the hall.
+  for (const place of due(walk).sort((a, b) => a.metres - b.metres)) {
+    tasks.push({ place, why: 'walk-due' });
   }
 
-  // Rule 2's exception: quota still spare and nothing due. Refresh the walk ring
-  // again, oldest first, because a second look at the nearest hotel is worth
-  // more than a first look at one you would need a car for.
-  if (spare > 0 && dueWalk.length === 0) {
-    const stalest = walk
+  // Rule 3: then everything else outside the block, most-likely-cheap first so
+  // that a run which stops early has still found the useful end of the list.
+  for (const place of due(drive).sort((a, b) => cheapFirst(a) - cheapFirst(b))) {
+    tasks.push({ place, why: 'drive-due' });
+  }
+
+  /*
+   * Rule 4: spend the rest.
+   *
+   * An unspent allowance is gone on the first of next month, so anything left
+   * after everything is fresh goes on refreshing the stalest. Walkable places
+   * first at equal staleness: a stale price on a hotel across the road misleads
+   * somebody more than a stale one twenty kilometres out.
+   */
+  let spare = capacity - tasks.length;
+  if (spare > 0) {
+    const stalest = askable
+      .filter((one) => isFresh(quotes, one.id, whenMs))
       .map((place) => ({ place, at: newestFor(quotes, place.id) ?? 0 }))
       .sort((a, b) => a.at - b.at || a.place.metres - b.place.metres);
     for (const { place } of stalest) {
       if (spare <= 0) break;
-      tasks.push({ place, why: 'walk-extra' });
+      tasks.push({ place, why: 'refresh' });
       spare -= 1;
     }
   }
 
+  const skipped = places.length - askable.length;
   return {
     tasks,
     floor,
     reason:
-      floor === null
-        ? 'no walkable price yet, so the drive ring is not worth asking about'
-        : `drive ring capped at ${floor}`,
+      `${askable.length} outside the block, ${skipped} skipped because Gen Con publishes them` +
+      (floor === null ? '' : `; cheapest walkable so far ${floor}`),
   };
 }
 
 /**
- * Whether a quote earns its place, given the floor.
+ * Whether a quote is worth keeping.
  *
- * The other half of rule 3. A walkable price is always kept — it is the thing
- * being compared against, so it cannot be filtered by itself.
+ * Everything with a real number is, now that the drive ring is no longer capped
+ * — see rule 3. This survives as a function rather than being inlined because
+ * it is the one place a "do not store this" rule would go, and a quote of zero
+ * or NaN from a source that half-answered is still worth refusing.
  */
-export function keeps(place, nightly, floor) {
-  if (place.ring === 'walk') return true;
-  if (floor === null) return false;
-  return Number.isFinite(nightly) && nightly <= floor;
+export function keeps(place, nightly) {
+  return Number.isFinite(nightly) && nightly > 0;
 }

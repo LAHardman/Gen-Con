@@ -3149,3 +3149,63 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* A skywalk is a different experience, not a shorter distance — so it is a
+   badge rather than a number. */
+.hotels__skywalk {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Published beats bought, and the row says which it is showing. */
+.hotels__inblock {
+  margin-left: 7px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hotels__party {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotels__party-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+.hotels__person {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hotels__person--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}

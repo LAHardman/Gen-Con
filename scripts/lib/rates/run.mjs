@@ -52,11 +52,13 @@ export async function runOnce({
   env = {},
   whenMs,
   sources = ALL,
+  /** Places Gen Con publishes a rate for. Never worth a request. */
+  inBlock = new Set(),
   fetch: get,
   log = () => {},
 }) {
   const budgets = budget(ledger, env);
-  const plan = planRun({ places, quotes, budgets, whenMs, tried: ledger.tried });
+  const plan = planRun({ places, quotes, budgets, whenMs, tried: ledger.tried, inBlock });
   const fresh = [];
   /** Sources that broke this run, and why. Reported rather than swallowed. */
   const down = {};
@@ -78,9 +80,22 @@ export async function runOnce({
     // under-count on the same failure, which costs the quota.
     if (!spend(ledger, source.name, source.cost, env)) continue;
     try {
-      const rows = await source.quoteArea(places, { env, whenMs, fetch: get, keys, cache });
-      for (const row of rows) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
-      log(`  ${source.name}: ${rows.length} prices from one search`);
+      /*
+       * Area sources are asked only about hotels outside the block.
+       *
+       * One search returns a page of hotels whatever it is asked, but handing
+       * it the block ones would let their bought prices back in through the
+       * side door — and a bought price is worse than the published one it would
+       * sit beside.
+       */
+      const asked = places.filter((one) => !inBlock.has(one.id));
+      const rows = await source.quoteArea(asked, { env, whenMs, fetch: get, keys, cache });
+      const outside = rows.filter((row) => !inBlock.has(row.placeId));
+      for (const row of outside) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
+      log(
+        `  ${source.name}: ${outside.length} prices from one search` +
+          (rows.length > outside.length ? ` (${rows.length - outside.length} block hotels dropped)` : ''),
+      );
     } catch (error) {
       down[source.name] = String(error.message ?? error);
       // Rule 2: give the unit back. It bought nothing.
@@ -125,13 +140,14 @@ export async function runOnce({
    * so next month's allowance is not spent learning the same thing again.
    */
   const byId = new Map(places.map((place) => [place.id, place]));
-  const floor = plan.floor;
   const kept = [];
   let rejected = 0;
   for (const quote of fresh) {
     const place = byId.get(quote.placeId);
-    if (!place) continue;
-    if (keeps(place, quote.nightly, floor)) {
+    // A block hotel that slipped through is dropped here too, belt and braces:
+    // its published rate is better than anything bought.
+    if (!place || inBlock.has(place.id)) continue;
+    if (keeps(place, quote.nightly)) {
       kept.push(quote);
     } else {
       rejected += 1;
@@ -140,7 +156,7 @@ export async function runOnce({
   }
 
   log(
-    `kept ${kept.length}, dropped ${rejected} above the ${floor ?? 'unknown'} floor` +
+    `kept ${kept.length}, dropped ${rejected} with no usable number` +
       `${Object.keys(down).length ? `, ${Object.keys(down).join(' and ')} down` : ''}`,
   );
 

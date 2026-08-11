@@ -77,7 +77,23 @@ function readLodging() {
   return rows;
 }
 
+/**
+ * The hotels Gen Con publishes a rate for, read out of the generated file.
+ *
+ * Never worth a request: Gen Con's own page is free, official, and better than
+ * anything a rate API would sell. With the block covering two thirds of the
+ * walk ring, this is the single biggest saving available.
+ */
+function readBlockIds() {
+  const source = readFileSync(join(ROOT, 'src/data/partners.ts'), 'utf8');
+  const ids = new Set([...source.matchAll(/placeId: '([^']+)'/g)].map((one) => one[1]));
+  const suspected = source.match(/SUSPECTED_IN_BLOCK[^=]*= new Set\((\[[^\]]*\])\)/s)?.[1];
+  if (suspected) for (const id of JSON.parse(suspected)) ids.add(id);
+  return ids;
+}
+
 const places = readLodging();
+const inBlock = readBlockIds();
 
 let store = { quotes: [], ledger: null, keys: {} };
 try {
@@ -89,7 +105,10 @@ try {
 const ledger = ledgerFor(store.ledger, now);
 const budgets = budget(ledger, env);
 
-console.error(`\n${places.length} places (${places.filter((one) => one.ring === 'walk').length} walkable)`);
+console.error(
+  `\n${places.length} places (${places.filter((one) => one.ring === 'walk').length} walkable), ` +
+    `${inBlock.size} of them published by Gen Con and never asked about`,
+);
 console.error(`month ${ledger.month}, allowances left:`);
 for (const [name, left] of Object.entries(budgets)) {
   const source = ALL.find((one) => one.name === name);
@@ -98,7 +117,14 @@ for (const [name, left] of Object.entries(budgets)) {
 }
 
 if (dry) {
-  const plan = planRun({ places, quotes: store.quotes, budgets, whenMs: now, tried: ledger.tried });
+  const plan = planRun({
+    places,
+    quotes: store.quotes,
+    budgets,
+    whenMs: now,
+    tried: ledger.tried,
+    inBlock,
+  });
   console.error(`\nwould ask about ${plan.tasks.length} — ${plan.reason}`);
   for (const task of plan.tasks.slice(0, 25)) {
     console.error(`  ${task.why.padEnd(16)} ${task.place.metres.toString().padStart(6)} m  ${task.place.name}`);
@@ -115,6 +141,7 @@ const result = await runOnce({
   keys: store.keys,
   env,
   whenMs: now,
+  inBlock,
   log: (line) => console.error(line),
 });
 

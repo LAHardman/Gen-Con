@@ -90,6 +90,88 @@ export function blockRate(placeId: string, year: number): BlockRate | null {
   };
 }
 
+/* ------------------------------------------------------ the facts on a row */
+
+/**
+ * The walking pace this app uses everywhere else.
+ *
+ * A hotel walk is pavement rather than corridor, so it does not go through the
+ * campus graph — but it uses the same pace, because a reader comparing "9 min
+ * to the Westin" with the schedule's "9 min between rooms" is entitled to
+ * assume the two mean the same thing.
+ */
+export const WALK_METRES_PER_MIN = 78;
+
+/**
+ * Past this, nobody is walking with a suitcase in August.
+ *
+ * Twenty-five minutes on foot. Beyond it the useful number is a drive time,
+ * and printing "48 min walk" for a hotel by the airport is technically true and
+ * practically noise.
+ */
+export const WALKABLE_MINUTES = 25;
+
+export interface Journey {
+  mode: 'skywalk' | 'walk' | 'drive';
+  minutes: number;
+  metres: number;
+  /** True where the mode is arithmetic rather than a route — see below. */
+  rough: boolean;
+}
+
+/**
+ * How you would actually get to the hall from here.
+ *
+ * Three modes because they are three different experiences, not three ranges of
+ * one number: a skywalk is indoors and air-conditioned and does not care that it
+ * is thirty-four degrees outside, which in August is the whole difference
+ * between two hotels the same distance apart.
+ *
+ * The drive time is openly a division rather than a route — distance over a
+ * typical city speed, rounded to five minutes so it cannot be mistaken for a
+ * routed answer. `rough` says so wherever it is printed.
+ */
+export function journeyTo(place: Lodging, skywalk: boolean): Journey {
+  const minutes = Math.max(1, Math.round(place.metres / WALK_METRES_PER_MIN));
+  if (skywalk) return { mode: 'skywalk', minutes, metres: place.metres, rough: false };
+  if (minutes <= WALKABLE_MINUTES) {
+    return { mode: 'walk', minutes, metres: place.metres, rough: false };
+  }
+  return {
+    mode: 'drive',
+    minutes: Math.max(5, Math.round(place.metres / 1000 / 0.7 / 5) * 5),
+    metres: place.metres,
+    rough: true,
+  };
+}
+
+/**
+ * A room price, split between the people in the room.
+ *
+ * Not a discount and not a per-person rate anybody is quoted: hotels charge for
+ * the room. This is the room divided, which is what four people sharing
+ * actually each pay, and the page says which it is — because "$74" beside a
+ * hotel is a very different claim from "$296 between four".
+ *
+ * Occupancy is the reader's to choose. There is no sensible default that is
+ * right for both a couple and a group of six, so the control is on the page and
+ * the number moves when it is changed.
+ */
+export const perPerson = (nightly: number, people: number): number =>
+  Math.round(nightly / Math.max(1, people));
+
+/**
+ * Whether a hotel has a skywalk, for any hotel rather than only block ones.
+ *
+ * Gen Con marks the skywalk hotels on its own page and nobody else records it,
+ * so a hotel outside the block has no answer rather than a negative one. Null
+ * is that: "not known to have one", which is not the same as "does not".
+ */
+export function hasSkywalk(placeId: string): boolean | null {
+  const partner = partnerFor(placeId);
+  return partner ? partner.skywalk : null;
+}
+
 /* ------------------------------------------------------- pairing the two lists */
 
 /** Straight-line metres between two places. */

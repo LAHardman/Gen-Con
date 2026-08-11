@@ -727,19 +727,26 @@ box above the list rather than in a footnote under it, because a confident table
 of open-market rates that quietly omits the cheapest option is worse than no
 table.
 
-#### The four rules the gathering follows
+#### What every hotel shows
+
+Four facts, deliberately of different qualities, and the page never lets them
+look alike:
 
 | | |
 | --- | --- |
-| **Walk before drive, always** | The allowance is small enough that a run starting on the drive ring might never reach the walk ring. Walkable places are planned to exhaustion first; the drive ring gets only what is left. |
-| **Once a month each, unless there is spare** | A month-old price is worth having and worth refreshing; a weekly one costs four times as much to say nearly the same thing. Spare quota re-asks the walk ring, stalest first. |
-| **The drive ring is capped by the walk ring's cheapest** | "Only up to the cheapest walkable price" cannot be a filter *before* the call, because the price is what the call is for. So it is a **keep** rule on the answer plus a **probe order** — budget chains and far-out places first — and anything dearer than the floor is dropped *and remembered*, so next month is not spent learning it again. |
-| **No floor means no drive ring** | With nothing walkable priced there is no cap, and querying anyway would spend the whole allowance on places that may all be above a floor discovered next week. A missing floor stops the drive ring rather than defaulting to infinity. |
+| **Skywalk** | Gen Con's own flag, and only for block hotels — nobody else records it. A hotel outside the block says nothing rather than claiming it has none. It is a badge rather than a distance, because indoors and air-conditioned is a different *experience*, not a shorter walk, and in August that is the whole difference between two hotels the same distance apart. |
+| **Journey** | A walk time up to 25 minutes; a drive time beyond it, because nobody walks 45 minutes with a suitcase in August. The drive is distance over a typical speed and is marked `*`. |
+| **Distance** | From the convention centre, exact. The only number on the page this app is sure of, so it decides the order. |
+| **Price** | **Per person, per night** — with the room total always beside it when more than one is sharing, because the per-head figure is a division this app performed rather than a rate anybody is quoted. Occupancy is a control on the page (1–4, default 2); there is no default that is right for both a couple and a group of six. |
 
-The drive ring lists only places that have a price, because an unpriced hotel out
-there is not an option — it is one nobody has asked about, and the only reason to
-sleep there is to spend less. The walk ring is the opposite: you would consider
-walking to any of them at any price, so its blanks are honest and stay visible.
+#### The rules the gathering follows
+
+| | |
+| --- | --- |
+| **Never spend a request on a block hotel** | Gen Con publishes those rates itself, free and more authoritatively than any rate API. Paying an allowance for a number already in `partners.ts` is the most wasteful thing this could do — and the block covers **62 of the 236 hotels**, including two thirds of the walk ring. Where a published rate exists, the page shows it and the fetcher skips the hotel entirely. |
+| **Walk before drive** | The allowance is small enough that a run starting on the drive ring might never reach the walk ring. Walkable hotels are planned to exhaustion first, nearest first. |
+| **Every hotel outside the block** | An earlier version capped the drive ring at the cheapest walkable rate and discarded anything dearer. That saved quota and lost information: you cannot tell whether a hotel is worth the drive without knowing what it costs, and "too expensive" is a fact worth showing rather than one worth forgetting. |
+| **Once a month, then spend the rest** | A month-old price is worth having; a weekly one costs four times as much to say nearly the same thing. But an allowance resets on the first and anything unspent is *gone*, so once nothing is due the remainder goes on refreshing the stalest — nearest first, since that is where a stale price misleads most. |
 
 #### The Gen Con block, from Gen Con's own page
 
