@@ -18,9 +18,11 @@ import {
   formatCost,
   formatLength,
   lengthMinutes,
+  facetCounts,
   matchesFilter,
   minutesOfDay,
   NO_FILTER,
+  type EventFilter,
 } from './filters';
 import type { ConEvent } from './events';
 
@@ -192,6 +194,123 @@ describe('what the pickers may offer', () => {
     const choices = filterChoices([]);
     expect(choices.types).toEqual([]);
     expect(choices.rooms).toEqual([]);
+  });
+});
+
+describe('the number on each option', () => {
+  /*
+   * A corpus small enough to reason about and varied enough that no two
+   * dimensions move together — which is what makes the brute-force comparison
+   * below meaningful rather than a tautology.
+   */
+  const corpus = [
+    event({ id: '1', start: `${SATURDAY}T09:00:00-04:00`, durationMinutes: 60, type: 'BGM', cost: 0, roomId: 'hall-a', ticketsAvailable: 2, ageRequirement: 'Everyone (6+)' }),
+    event({ id: '2', start: `${SATURDAY}T14:00:00-04:00`, durationMinutes: 240, type: 'RPG', cost: 6, roomId: 'hall-a', ticketsAvailable: 0, ageRequirement: '21+' }),
+    event({ id: '3', start: `${SATURDAY}T20:00:00-04:00`, durationMinutes: 120, type: 'BGM', cost: 0, roomId: 'westin-grand-ballroom', ticketsAvailable: 5, ageRequirement: '21+' }),
+    event({ id: '4', start: `${THURSDAY}T09:00:00-04:00`, durationMinutes: 60, type: 'TCG', cost: 20, roomId: 'westin-grand-ballroom', ticketsAvailable: 1, ageRequirement: 'Everyone (6+)' }),
+    event({ id: '5', start: `${THURSDAY}T14:00:00-04:00`, durationMinutes: 240, type: 'RPG', cost: 0, roomId: 'hall-a', ticketsAvailable: 3, ageRequirement: 'Everyone (6+)' }),
+  ];
+  const entries = corpus.map((one) => ({ event: one, room: { id: one.roomId! }, title: one.title.toLowerCase() }));
+  const choices = filterChoices(corpus);
+  const counts = (filter: EventFilter) => facetCounts(entries, () => true, filter, choices);
+  /** What the list would actually hold — the thing every count claims to predict. */
+  const actually = (filter: EventFilter) =>
+    entries.filter(({ event: one, room }) => matchesFilter(one, filter, room.id)).length;
+
+  it('counts what there is now', () => {
+    expect(counts({}).total).toBe(5);
+    expect(counts({ days: [SATURDAY] }).total).toBe(3);
+  });
+
+  it('predicts a value being switched on, from nothing chosen', () => {
+    const on = counts({});
+    expect(on.days.get(SATURDAY)).toBe(actually({ days: [SATURDAY] }));
+    expect(on.types.get('RPG')).toBe(actually({ types: ['RPG'] }));
+    expect(on.venues.get('westin')).toBe(actually({ venueIds: ['westin'] }));
+    // The two toggles, against a corpus where they are not everything: three
+    // of the five are free and four of the five still have tickets.
+    expect(on.free).toBe(actually({ maxCost: 0 }));
+    expect(on.free).toBe(3);
+    expect(on.tickets).toBe(actually({ ticketsOnly: true }));
+    expect(on.tickets).toBe(4);
+  });
+
+  it('predicts a value being ADDED to a facet that already has one', () => {
+    // The one a plain facet count gets wrong. A second type widens rather than
+    // narrows, so the number on the chip has to go up, not down.
+    const filter: EventFilter = { types: ['BGM'] };
+    const on = counts(filter);
+    expect(on.total).toBe(2);
+    expect(on.types.get('RPG')).toBe(actually({ types: ['BGM', 'RPG'] }));
+    expect(on.types.get('RPG')!).toBeGreaterThan(on.total);
+  });
+
+  it('predicts a value being switched off', () => {
+    const filter: EventFilter = { types: ['BGM', 'RPG'] };
+    expect(counts(filter).types.get('RPG')).toBe(actually({ types: ['BGM'] }));
+    // The last one off leaves the facet unconstrained, not empty.
+    expect(counts({ types: ['BGM'] }).types.get('BGM')).toBe(actually({}));
+  });
+
+  it('predicts every option against every other filter that is on', () => {
+    // The real assurance: for a compound filter, each count is compared with
+    // the list that pressing it actually produces. Nothing here is the count's
+    // own arithmetic checked against itself.
+    const filter: EventFilter = { days: [SATURDAY], types: ['BGM'], minMinutes: 60 };
+    const on = counts(filter);
+    expect(on.total).toBe(actually(filter));
+    expect(on.days.get(THURSDAY)).toBe(actually({ ...filter, days: [SATURDAY, THURSDAY] }));
+    expect(on.types.get('RPG')).toBe(actually({ ...filter, types: ['BGM', 'RPG'] }));
+    expect(on.ages.get('21+')).toBe(actually({ ...filter, ages: ['21+'] }));
+    expect(on.venues.get('icc')).toBe(actually({ ...filter, venueIds: ['icc'] }));
+    expect(on.rooms.get('hall-a')).toBe(actually({ ...filter, roomIds: ['hall-a'] }));
+    expect(on.free).toBe(actually({ ...filter, maxCost: 0 }));
+    expect(on.tickets).toBe(actually({ ...filter, ticketsOnly: true }));
+    expect(on.times[2]).toBe(actually({ ...filter, startFrom: 12 * 60, startTo: 16 * 60 + 59 }));
+    expect(on.lengthAtLeast.get(120)).toBe(actually({ ...filter, minMinutes: 120 }));
+    expect(on.lengthAtMost.get(120)).toBe(actually({ ...filter, maxMinutes: 120 }));
+  });
+
+  it('keeps the other end of a range when predicting one end of it', () => {
+    // "At least" and "at most" are one dimension. Offering a minimum that
+    // ignores the maximum already set would promise results that are not there.
+    const filter: EventFilter = { maxMinutes: 120 };
+    expect(counts(filter).lengthAtLeast.get(60)).toBe(actually({ minMinutes: 60, maxMinutes: 120 }));
+    expect(counts(filter).lengthAtLeast.get(240)).toBe(actually({ minMinutes: 240, maxMinutes: 120 }));
+  });
+
+  it('predicts turning a toggle back off', () => {
+    expect(counts({ maxCost: 0 }).free).toBe(actually({}));
+    expect(counts({ ticketsOnly: true }).tickets).toBe(actually({}));
+  });
+
+  it('counts only what the typed query already found', () => {
+    // A count taken over a different set from the list beside it is worse than
+    // no count: it is a number that disagrees with what pressing it does.
+    const onlyOne = facetCounts(entries, (title) => title === corpus[0].title.toLowerCase(), {}, choices);
+    expect(onlyOne.total).toBe(5);
+    const none = facetCounts(entries, () => false, {}, choices);
+    expect(none.total).toBe(0);
+    // Every option still answers — with a zero, which is the useful answer.
+    expect([...none.days.values()].every((n) => n === 0)).toBe(true);
+  });
+
+  it('answers with a number for an option nothing survives, not with nothing', () => {
+    // Thursday's events are all the wrong type here, so none reaches the day
+    // tally — and the chip must still say what pressing it leaves, which is
+    // what the other days already leave rather than a blank.
+    const on = counts({ days: [SATURDAY], types: ['BGM'], minMinutes: 60 });
+    expect(on.days.get(THURSDAY)).toBe(actually({ days: [SATURDAY, THURSDAY], types: ['BGM'], minMinutes: 60 }));
+    expect(on.days.get(THURSDAY)).toBe(on.total);
+  });
+
+  it('offers zero rather than nothing for a value that would empty the list', () => {
+    // The dead ends are the whole point: pressing "Thursday" here leaves
+    // nothing, and seeing that beforehand is what saves the press.
+    const on = counts({ types: ['TCG'], days: [SATURDAY] });
+    expect(on.total).toBe(0);
+    expect(on.days.get(THURSDAY)).toBe(actually({ types: ['TCG'], days: [SATURDAY, THURSDAY] }));
+    expect(on.days.get(THURSDAY)).toBe(1);
   });
 });
 

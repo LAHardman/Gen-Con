@@ -43,6 +43,17 @@ export interface PlanEntry {
   at?: { lat: number; lng: number };
   /** What to print for the place, as it read when this was added. */
   where: string;
+  /**
+   * The event's own description, kept once it has been fetched.
+   *
+   * Saved rather than re-fetched because a plan is what you read *at* the
+   * convention, and the exhibit hall is the worst signal on the campus. The
+   * feed cannot carry these — a paragraph each across 27,467 events is several
+   * megabytes — but a dozen of them for the events somebody actually chose is a
+   * few kilobytes, and it is the difference between a schedule that works
+   * underground and one that does not.
+   */
+  description?: string;
 }
 
 /** What to call where an event is, given whatever the app knows about it. */

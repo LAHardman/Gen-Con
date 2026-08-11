@@ -16,6 +16,7 @@ import { useFollowedRoute } from './hooks/useFollowedRoute';
 import { useDeviceLocation, useLocationGranted } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
 import { usePlan } from './hooks/usePlan';
+import { usePlanDescriptions } from './hooks/usePlanDescriptions';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
 import { filterChoices } from './data/filters';
@@ -61,6 +62,10 @@ export default function App() {
   // Somebody's own schedule, kept on the device. Read once on load and written
   // on every change — see `usePlan` for why it lives nowhere else.
   const plan = usePlan();
+
+  // Descriptions for what is on the schedule, fetched once and kept, so a
+  // planned event stays readable in an exhibit hall with no signal.
+  usePlanDescriptions(plan);
 
   // One session, opened in full. Both searches go through this rather than
   // acting on a title and a room: whether it costs forty dollars, whether it is

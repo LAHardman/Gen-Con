@@ -69,6 +69,8 @@ export interface Plan {
   add: (entry: PlanEntry) => void;
   remove: (eventId: string) => void;
   toggle: (entry: PlanEntry) => void;
+  /** Write a fetched description onto an entry, so it survives going offline. */
+  describe: (eventId: string, description: string) => void;
 }
 
 export function usePlan(): Plan {
@@ -85,8 +87,13 @@ export function usePlan(): Plan {
 
   const add = useCallback((entry: PlanEntry) => {
     // Replacing rather than skipping, so adding an event whose room or time has
-    // changed since it was planned takes the newer copy.
-    setEntries((current) => [...current.filter((held) => held.id !== entry.id), entry]);
+    // changed since it was planned takes the newer copy — but keeping any
+    // description already fetched, which the newer copy will not carry and
+    // which costs a request to get back.
+    setEntries((current) => [
+      ...current.filter((held) => held.id !== entry.id),
+      { ...entry, description: entry.description ?? current.find((held) => held.id === entry.id)?.description },
+    ]);
   }, []);
 
   const remove = useCallback((eventId: string) => {
@@ -103,10 +110,21 @@ export function usePlan(): Plan {
     [],
   );
 
+  const describe = useCallback((eventId: string, description: string) => {
+    setEntries((current) => {
+      const held = current.find((one) => one.id === eventId);
+      // Nothing to write onto, or the same words already there. Returning the
+      // array unchanged matters: this runs from a fetch, and a new array every
+      // time would rewrite storage and restart whatever depends on the entries.
+      if (!held || held.description === description) return current;
+      return current.map((one) => (one.id === eventId ? { ...one, description } : one));
+    });
+  }, []);
+
   const planned = useCallback(
     (eventId: string) => entries.some((held) => held.id === eventId),
     [entries],
   );
 
-  return { entries, planned, add, remove, toggle };
+  return { entries, planned, add, remove, toggle, describe };
 }

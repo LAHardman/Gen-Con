@@ -72,6 +72,53 @@ describe('keeping a plan', () => {
   });
 });
 
+describe('the description kept for offline', () => {
+  it('writes one onto an entry and keeps it across sessions', () => {
+    // The point of keeping it: this is what an exhibit hall with no signal
+    // shows, on the events somebody actually committed to.
+    const { result, unmount } = renderHook(() => usePlan());
+    act(() => result.current.add(entry('a')));
+    act(() => result.current.describe('a', 'Bring your own sheep.'));
+    expect(result.current.entries[0].description).toBe('Bring your own sheep.');
+    unmount();
+
+    const { result: later } = renderHook(() => usePlan());
+    expect(later.current.entries[0].description).toBe('Bring your own sheep.');
+  });
+
+  it('leaves the array alone when nothing changed', () => {
+    // This runs from a fetch. A new array on every call would rewrite storage
+    // and restart whatever is watching the entries — including the fetching.
+    const { result } = renderHook(() => usePlan());
+    act(() => result.current.add(entry('a')));
+    act(() => result.current.describe('a', 'Once.'));
+    const held = result.current.entries;
+    act(() => result.current.describe('a', 'Once.'));
+    expect(result.current.entries).toBe(held);
+    act(() => result.current.describe('nobody', 'Anything.'));
+    expect(result.current.entries).toBe(held);
+  });
+
+  it('keeps a fetched description when the event is added again', () => {
+    // Re-adding takes the newer copy of everything the feed knows — and the
+    // feed does not know the description, so taking it wholesale would throw
+    // away a request's worth of work.
+    const { result } = renderHook(() => usePlan());
+    act(() => result.current.add(entry('a')));
+    act(() => result.current.describe('a', 'Bring your own sheep.'));
+    act(() => result.current.add(entry('a', { where: 'Somewhere else' })));
+    expect(result.current.entries[0].where).toBe('Somewhere else');
+    expect(result.current.entries[0].description).toBe('Bring your own sheep.');
+  });
+
+  it('survives a plan saved before descriptions existed', () => {
+    // Every entry in storage right now has no description. They must read as
+    // "not asked yet" rather than as corrupt.
+    window.localStorage.setItem(KEY, JSON.stringify({ version: 1, entries: [entry('a')] }));
+    expect(readPlan()[0].description).toBeUndefined();
+  });
+});
+
 describe('what was left under the key', () => {
   it('ignores something that is not a plan at all', () => {
     window.localStorage.setItem(KEY, 'not json {');

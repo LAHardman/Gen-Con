@@ -644,11 +644,24 @@ enough to decide by: whether it costs forty dollars, whether it is 21+, whether
 any tickets are left, whether it runs six hours — all of that is in the feed,
 none of it fits on a result row, and every one of them is a reason not to add
 it. From there you can add it, show it on the map, or start directions to it.
-The **description** is the one thing not in the feed — Gen Con's descriptions
-run to a paragraph each and across 27,467 events that is several megabytes on a
-file a phone fetches before it can show anything — so it is fetched for that one
-event through the same same-origin proxy the room check uses, and its absence is
-not an error.
+
+**The description is asked for, not assumed.** Gen Con's descriptions run to a
+paragraph each; across 27,467 events that is several megabytes on a file a phone
+fetches before it can show anything, so the feed drops them. A **Show full
+description** button fetches that one event through the same same-origin proxy
+the room check uses. Nothing spends that request until it is pressed — opening a
+panel on a phone in an exhibit hall should not fetch a paragraph nobody asked to
+read, and there the request is as likely to hang as to answer. Where the browser
+reports no network it says so instead of spinning.
+
+**And what you commit to is kept.** Adding an event to the schedule fetches its
+description once, in the background, one at a time, and stores it with the
+entry — so a planned event opens with its description already there, instantly
+and with no network at all. That is the whole point: the schedule is what you
+read *at* the convention, and an exhibit hall with sixty thousand people in it
+is the worst signal on the campus. A dozen descriptions for the dozen events
+somebody chose is a few kilobytes, against megabytes for all of them. An event
+that genuinely has none is stored as empty, so it is never asked for twice.
 
 ### Filtering the catalogue
 
@@ -662,6 +675,25 @@ Filter by day, start time, length, type, cost, tickets remaining, age, game
 system, and building or room. Sort by start, end, length or cost. A filter is a
 question in its own right, so a filter with no words typed opens the list —
 "everything free on Saturday" has nothing to type.
+
+**Every option says how many results pressing it would leave**, and the numbers
+move as you narrow. Without them a filter list is a list of guesses: press
+"Escape Rooms", get nothing, press it again, try "Saturday", get nothing, and
+there is no way to tell which of the nine dimensions emptied the list. With them
+the dead ends are visible before they are pressed. A zero is dimmed rather than
+hidden — seeing it is the point, and a chip that vanished would shift every chip
+beside it on each press.
+
+Two things about those numbers. They are **what pressing it produces**, not "how
+many have this value": adding a second day to a day filter *widens*, so the
+count on an unchosen day goes up rather than down, and the count on a chosen one
+is what removing it would leave. And they are counted in **one pass** rather
+than fifty — each event is tested against all nine dimensions once and its
+failures recorded as a bitmask, so an event failing nothing counts toward every
+facet, one failing exactly one counts toward that facet alone, and one failing
+two counts nowhere. That takes 27,457 × 9 checks instead of 27,457 × 50:
+**10–40 ms**, redone on every press, and only while the panel is open. Typing
+makes it faster, because most of the catalogue stops matching the query first.
 
 Three things worth saying about what is there:
 

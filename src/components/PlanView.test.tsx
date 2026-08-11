@@ -42,6 +42,7 @@ function planOf(entries: PlanEntry[]): Plan & { toggle: ReturnType<typeof vi.fn>
     add: vi.fn(),
     remove: vi.fn(),
     toggle,
+    describe: vi.fn(),
   };
 }
 
@@ -286,7 +287,8 @@ describe('adding a session', () => {
     // "Everything on Saturday" is a real question and has nothing to type.
     show(planOf([]), indexOf(sessions));
     fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
-    fireEvent.click(within(screen.getByRole('group', { name: 'Day' })).getByRole('button', { name: 'Saturday' }));
+    // The chips carry their result count now, so the name is "Saturday1".
+    fireEvent.click(within(screen.getByRole('group', { name: 'Day' })).getByRole('button', { name: /^Saturday/ }));
     const offered = screen.getAllByRole('listitem').map((row) => row.textContent);
     expect(offered).toHaveLength(1);
     expect(offered[0]).toContain('Saturday');

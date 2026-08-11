@@ -13,12 +13,15 @@
  * where is that, and how do I get there — asked from the place where the
  * question actually arises.
  *
- * THE DESCRIPTION IS FETCHED, everything else is already in hand. See
- * `useEventNotes` for why it is not in the feed, and why its absence is not an
- * error.
+ * THE DESCRIPTION IS ASKED FOR, everything else is already in hand. It is not
+ * in the feed — a paragraph each across 27,467 events is several megabytes in
+ * front of the first screen — so it costs a request, and nothing spends that
+ * request until the button is pressed. Where the event is already on somebody's
+ * schedule the copy saved for offline reading is used instead, and no request
+ * happens at all.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   eventUrl,
   formatDayLabel,
@@ -48,9 +51,23 @@ interface Props {
 
 export function EventDialog({ event, room, pin, plan, onClose, onShowOnMap, onNavigate }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  const notes = useEventNotes(event.id);
   const held = plan.planned(event.id);
   const venue = room ? VENUES_BY_ID[room.venueId] : undefined;
+
+  /*
+   * The copy kept on the device, where there is one.
+   *
+   * An entry on the schedule has its description archived — see
+   * `usePlanDescriptions` — so opening one underground shows it immediately and
+   * asks the network for nothing. An empty string is a real answer there: it
+   * means the source was asked and had nothing, which is different from not
+   * having asked.
+   */
+  const saved = plan.entries.find((entry) => entry.id === event.id)?.description;
+
+  const [asked, setAsked] = useState(false);
+  const notes = useEventNotes(event.id, asked);
+  const description = saved || notes.description;
 
   useEffect(() => closeRef.current?.focus(), []);
   useEffect(() => {
@@ -127,8 +144,33 @@ export function EventDialog({ event, room, pin, plan, onClose, onShowOnMap, onNa
           ))}
         </dl>
 
-        {notes.status === 'loading' && <p className="event-dialog__note">Loading the description…</p>}
-        {notes.description && <p className="event-dialog__description">{notes.description}</p>}
+        {/*
+          * The description, on request.
+          *
+          * A button rather than an automatic fetch: opening this on a phone in
+          * an exhibit hall should not spend a request on a paragraph nobody has
+          * asked to read, and on the show floor that request is as likely to
+          * hang as to answer. Where the event is on the schedule its saved copy
+          * is already here and there is nothing to press.
+          */}
+        {description ? (
+          <p className="event-dialog__description">{description}</p>
+        ) : saved === '' ? (
+          <p className="event-dialog__note">This event has no description.</p>
+        ) : notes.status === 'loading' ? (
+          <p className="event-dialog__note">Reading the description…</p>
+        ) : notes.status === 'offline' ? (
+          <p className="event-dialog__note">
+            No connection, and this one is not saved. Add it to your schedule and its description
+            will be kept for reading offline.
+          </p>
+        ) : notes.status === 'unavailable' || notes.status === 'ready' ? (
+          <p className="event-dialog__note">Couldn’t read the description.</p>
+        ) : (
+          <button type="button" className="event-dialog__more" onClick={() => setAsked(true)}>
+            Show full description
+          </button>
+        )}
 
         <div className="dialog__actions">
           <button

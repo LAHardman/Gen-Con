@@ -432,6 +432,8 @@ function PlanSearch({
         sort={sort}
         days={feedDays.filter(isConventionDay)}
         choices={choices}
+        events={events}
+        query={query}
         onChange={setFilter}
         onSort={setSort}
       />

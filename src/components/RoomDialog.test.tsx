@@ -23,6 +23,7 @@ const emptyPlan = () => ({
   add: vi.fn(),
   remove: vi.fn(),
   toggle: vi.fn(),
+  describe: vi.fn(),
 });
 
 function setup() {

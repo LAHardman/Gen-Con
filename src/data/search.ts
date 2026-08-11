@@ -247,6 +247,21 @@ const SCORE = {
 const normalise = (text: string) => text.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /** True when `needle` starts a word in `haystack`, not just any position. */
+/**
+ * Whether a normalised title matches a raw query, by the same rule the searches
+ * use — and nothing else.
+ *
+ * Exported so the facet counts can narrow to the same set the results come
+ * from. A count taken over a different set of events from the list it sits
+ * beside is worse than no count: it is a number that disagrees with what
+ * happens when you press the thing it is printed on.
+ */
+export function matchesQuery(title: string, rawQuery: string): boolean {
+  const query = normalise(rawQuery);
+  if (query.length < 2) return true;
+  return title.includes(query);
+}
+
 function startsWord(haystack: string, needle: string) {
   let from = 0;
   for (;;) {

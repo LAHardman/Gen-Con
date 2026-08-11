@@ -40,6 +40,7 @@ const planOf = (ids: string[] = []) => ({
   add: vi.fn(),
   remove: vi.fn(),
   toggle: vi.fn(),
+  describe: vi.fn(),
 });
 
 function show(over: Partial<ConEvent> = {}, plan: Plan = planOf()) {
@@ -116,50 +117,96 @@ describe('what it says', () => {
   });
 });
 
-describe('the description that is fetched', () => {
-  it('shows it when it arrives', async () => {
+describe('the description, on request', () => {
+  const answers = (body: object, status = 200) =>
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({ records: [{ _source: { game_code: event.id, long_description: 'Bring your own sheep.', program: 'Catan Nights' } }] }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          ),
-      ),
+      vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })),
     );
+  const record = (over: object = {}) => ({
+    records: [{ _source: { game_code: event.id, long_description: 'Bring your own sheep.', ...over } }],
+  });
+  const expand = () => fireEvent.click(screen.getByRole('button', { name: /show full description/i }));
+
+  it('asks for nothing until the button is pressed', async () => {
+    // Opening this on a phone in an exhibit hall should not spend a request on
+    // a paragraph nobody has asked to read.
+    answers(record());
     show();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByText('Bring your own sheep.')).toBeNull();
+
+    expand();
     await waitFor(() => expect(screen.getByText('Bring your own sheep.')).toBeTruthy());
-    expect(fact('Programme')).toBe('Catan Nights');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for that one event and nothing else', () => {
+    answers(record());
+    show();
+    expand();
+    expect((fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(event.id);
+  });
+
+  it('brings the programme back with it', async () => {
+    answers(record({ program: 'Catan Nights' }));
+    show();
+    expand();
+    await waitFor(() => expect(fact('Programme')).toBe('Catan Nights'));
   });
 
   it('does not read a description out of an error response', async () => {
     // A gateway or a rate limiter can answer 503 with a body, and a proxy that
     // is not there can answer 200 with the app's own HTML. Neither is the
     // event, whatever it happens to contain.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({ records: [{ _source: { game_code: event.id, long_description: 'Not from Gen Con.' } }] }),
-            { status: 503, headers: { 'content-type': 'application/json' } },
-          ),
-      ),
-    );
+    answers({ records: [{ _source: { game_code: event.id, long_description: 'Not from Gen Con.' } }] }, 503);
     show();
-    await waitFor(() => expect(screen.queryByText(/loading the description/i)).toBeNull());
+    expand();
+    await waitFor(() => expect(screen.getByText(/couldn’t read the description/i)).toBeTruthy());
     expect(screen.queryByText('Not from Gen Con.')).toBeNull();
   });
 
-  it('says nothing at all when there is no way to fetch it', async () => {
-    // No proxy configured, or no network. The feed drops the descriptions on
-    // purpose — several megabytes across 27,467 events — so their absence is
-    // the normal case and must not read as an error.
+  it('does not even try when the browser says there is no network', () => {
+    // A button that says why beats a spinner that times out after thirty
+    // seconds, which is what an exhibit hall gives you.
+    answers(record());
+    vi.stubGlobal('navigator', { ...navigator, onLine: false });
     show();
-    await waitFor(() => expect(screen.queryByText(/loading the description/i)).toBeNull());
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(fact('Cost')).toBe('$6');
+    expand();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.getByText(/no connection/i)).toBeTruthy();
+  });
+
+  it('says it could not read one rather than showing a blank', async () => {
+    answers({ records: [] });
+    show();
+    expand();
+    await waitFor(() => expect(screen.getByText(/couldn’t read the description/i)).toBeTruthy());
+  });
+});
+
+describe('a description already saved', () => {
+  const withSaved = (description: string) => ({
+    ...planOf([event.id]),
+    entries: [{ id: event.id, title: event.title, start: event.start, where: 'Hall A', description }],
+  });
+
+  it('shows it at once and asks the network for nothing', () => {
+    // The whole point of keeping it: this is what happens in an exhibit hall
+    // with no signal, on the events somebody actually committed to.
+    vi.stubGlobal('navigator', { ...navigator, onLine: false });
+    show({}, withSaved('Saved for the show floor.') as unknown as Plan);
+    expect(screen.getByText('Saved for the show floor.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /show full description/i })).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('knows the difference between having none and not having asked', () => {
+    // An empty saved description means the source was asked and had nothing.
+    // Offering the button again would spend a request to learn the same thing.
+    show({}, withSaved('') as unknown as Plan);
+    expect(screen.getByText(/has no description/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /show full description/i })).toBeNull();
   });
 });
 

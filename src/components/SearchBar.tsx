@@ -117,6 +117,8 @@ export function SearchBar({ events, from, choices, feedDays, onPick }: Props) {
         sort={sort}
         days={feedDays}
         choices={choices}
+        events={events}
+        query={query}
         onChange={(next) => {
           setFilter(next);
           setOpen(true);
