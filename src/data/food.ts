@@ -29,6 +29,7 @@
  */
 
 import { EXHIBITORS, tagsOf, type Exhibitor } from './exhibitors';
+import { ROOMS_BY_ID, VENUES_BY_ID, type Room } from './venues';
 import { EATERIES, type Eatery } from './eateries';
 import {
   formatOpening,
@@ -304,19 +305,72 @@ export function foodCounts(
  * set.
  */
 export type Bite =
-  | { truck: Exhibitor; eatery?: undefined }
-  | { eatery: Eatery; truck?: undefined };
+  | { truck: Exhibitor; eatery?: undefined; place?: undefined }
+  | { eatery: Eatery; truck?: undefined; place?: undefined }
+  | { place: CampusFood; truck?: undefined; eatery?: undefined };
+
+/** A room on the campus that is somewhere to eat. */
+export interface CampusFood {
+  room: Room;
+  /** What sort of place it is, in the same words a restaurant's kind uses. */
+  kind: string;
+}
+
+/**
+ * Somewhere to eat *inside* a building the map draws.
+ *
+ * WHY THIS IS A LIST AND NOT A QUERY. Neither source knows about them. Gen Con
+ * files 43 food vendors and every one is on the Block Party — its API has no
+ * concession, no café and no food court anywhere in the convention centre.
+ * OpenStreetMap maps **zero** eating places inside the ICC's or the stadium's
+ * footprint; checked by point-in-polygon against `VENUE_FOOTPRINTS` over all
+ * 111 it does map downtown. The convention centre's own site would say, and it
+ * is not reachable from here.
+ *
+ * WHAT IS LEFT is the campus data this repository already carries, where a
+ * room's own description says what it is — and two of them are places to buy
+ * food. They are named here by id rather than matched by a word in a
+ * description, because "Concessions" also appears in the highlights of a hall
+ * that merely has some, and a regex would file Lucas Oil's bowl as a café.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: the hotel lobbies and club lounges, which are
+ * `amenity` rooms too. A club lounge is ticketed and a lobby is a lobby, and
+ * neither is an answer to "where can I eat".
+ *
+ * They carry no cuisine and no hours, because nothing publishes either — so
+ * they never match a cuisine chip and never survive "open now", exactly like
+ * the ten restaurants whose hours nobody has written down. What earns them a
+ * place in the list is the one thing the restaurants cannot claim: they are
+ * inside the building somebody is already standing in.
+ */
+const CAMPUS_FOOD_ROOMS: ReadonlyArray<{ roomId: string; kind: string }> = [
+  // "Concession stands along the main concourse" — its own description, and the
+  // one food label the convention centre prints on its Level 1 plan.
+  { roomId: 'food-court', kind: 'Food court' },
+  // "Skywalk-connected mall with a food court and restaurants … the reliable
+  // option when convention center concession lines are 30 deep."
+  { roomId: 'circle-centre-mall', kind: 'Food court' },
+];
+
+export const CAMPUS_FOOD: ReadonlyArray<CampusFood> = CAMPUS_FOOD_ROOMS.flatMap(
+  ({ roomId, kind }) => {
+    const room = ROOMS_BY_ID[roomId];
+    return room ? [{ room, kind }] : [];
+  },
+);
 
 /** Gen Con's own word for where its food is, and one word for everywhere else. */
 export const OFF_SITE = 'Off site';
 
 export const BITES: ReadonlyArray<Bite> = [
   ...EXHIBITORS.filter(isFood).map((truck) => ({ truck })),
+  ...CAMPUS_FOOD.map((place) => ({ place })),
   ...EATERIES.map((eatery) => ({ eatery })),
 ];
 
 /** What to call it. */
-export const biteName = (bite: Bite) => bite.truck?.name ?? bite.eatery!.name;
+export const biteName = (bite: Bite) =>
+  bite.truck?.name ?? bite.place?.room.name ?? bite.eatery!.name;
 
 /**
  * Whereabouts it is: Gen Con's own area for a stand, `Off site` for the rest.
@@ -325,10 +379,18 @@ export const biteName = (bite: Bite) => bite.truck?.name ?? bite.eatery!.name;
  * the Block Party the filter grows a chip for it without anybody editing a
  * list. Today that is exactly two values, and the second is the whole city.
  */
-export const biteWhere = (bite: Bite) => bite.truck?.area ?? OFF_SITE;
+export const biteWhere = (bite: Bite) => {
+  if (bite.truck) return bite.truck.area;
+  if (bite.place) {
+    const venue = VENUES_BY_ID[bite.place.room.venueId];
+    return venue?.shortName ?? venue?.name ?? bite.place.room.venueId;
+  }
+  return OFF_SITE;
+};
 
 /** What sort of place: Gen Con's kind for a stand, OSM's for a restaurant. */
-export const biteKind = (bite: Bite) => bite.truck?.kind ?? bite.eatery!.kind;
+export const biteKind = (bite: Bite) =>
+  bite.truck?.kind ?? bite.place?.kind ?? bite.eatery!.kind;
 
 /**
  * What it sells, in the three facets, from whichever source it came from.
@@ -344,6 +406,8 @@ export function biteFacets(bite: Bite): Record<FoodFacet, string[]> {
     const facets = foodFacets(bite.truck);
     return { cuisine: facets.cuisine, dish: facets.dish, dietary: facets.dietary };
   }
+  // A food court has no cuisine, because nothing says what is in it this year.
+  if (bite.place) return { cuisine: [], dish: [], dietary: [] };
   return { cuisine: bite.eatery!.cuisine, dish: [], dietary: bite.eatery!.diet };
 }
 
@@ -356,6 +420,9 @@ export function biteFacets(bite: Bite): Record<FoodFacet, string[]> {
  * guesses. Both come back as the same `Opening`.
  */
 export function biteOpening(bite: Bite): Opening | null {
+  // Nobody publishes the hours of a concourse — the same four sources that had
+  // none for the exhibit hall have none for this either.
+  if (bite.place) return null;
   if (bite.truck) return openingFor(bite.truck);
   const hours = bite.eatery!.hours;
   return hours ? parseOpeningHours(hours) : null;

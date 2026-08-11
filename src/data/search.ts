@@ -34,7 +34,7 @@ import {
   type EventFilter,
   type SortKey,
 } from './filters';
-import { biteOpenAt, isFood, matchesBite, type Bite } from './food';
+import { biteOpenAt, CAMPUS_FOOD, isFood, matchesBite, type Bite } from './food';
 import { EATERIES, type Eatery } from './eateries';
 import { matchesVendor } from './vendors';
 
@@ -552,6 +552,33 @@ function eateryHits(query: string, keep: (one: Eatery) => boolean): SearchHit[] 
 }
 
 /**
+ * The campus's own places to eat — a concourse, a mall food court.
+ *
+ * These are *rooms*, so a hit is an ordinary room hit and everything already
+ * knows what to do with it: the map jumps to it, the schedule takes it as a
+ * stop, and its own dialog opens. What is new is only that they answer under
+ * **Food** at all, where before they were reachable only by name or under
+ * Places. See `CAMPUS_FOOD` for why the list is written down.
+ */
+function campusFoodHits(query: string, keep: (bite: Bite) => boolean): SearchHit[] {
+  const hits: SearchHit[] = [];
+  for (const place of CAMPUS_FOOD) {
+    if (!keep({ place })) continue;
+    const name = place.room.name.toLowerCase();
+    const score = !query
+      ? SCORE.standName
+      : name.startsWith(query)
+        ? SCORE.standName
+        : startsWord(name, query)
+          ? SCORE.standName + 0.5
+          : null;
+    if (score === null) continue;
+    hits.push({ key: `room:${place.room.id}`, kind: 'room', room: place.room, score });
+  }
+  return hits;
+}
+
+/**
  * Whether a place filter has been asked at all.
  *
  * The two dimensions a *place* has are its building and its floor — see
@@ -796,7 +823,10 @@ export function search(
    * beside the trucks, which is the point — "where can I eat" does not stop at
    * the edge of Gen Con's catalogue.
    */
-  if (kind === 'food') hits.push(...eateryHits(query, (eatery) => keepsBite({ eatery })));
+  if (kind === 'food') {
+    hits.push(...campusFoodHits(query, keepsBite));
+    hits.push(...eateryHits(query, (eatery) => keepsBite({ eatery })));
+  }
 
   // An address is not in a building and has no floor, so any place filter drops
   // it — the same rule as an event filter dropping a room, one level down.

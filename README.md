@@ -768,7 +768,7 @@ them emptied the list. That looks exactly like a search that found nothing.
 | --- | --- |
 | **Everything** | the event dimensions; any of them silences rooms, stands and addresses |
 | **Events** | on now, day, start time, length, type, cost, tickets left, age, game system, building, room — and sort by start, end, length or cost |
-| **Food** | where (Block Party / Off site), cuisine (34), dish (26), dietary (8), open now |
+| **Food** | where (Block Party / Convention Center / Circle Centre / Off site), cuisine (34), dish (26), dietary (8), open now |
 | **Vendors** | sort of stand (7), where (15 areas), tags (74) |
 | **Places** | has an event on, building (16), floor — offered from the buildings already chosen |
 

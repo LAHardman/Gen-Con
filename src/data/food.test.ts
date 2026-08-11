@@ -29,6 +29,13 @@ import {
   openAt,
   openingFor,
   openThrough,
+  BITES,
+  CAMPUS_FOOD,
+  biteChoices,
+  biteFacets,
+  biteOpenAt,
+  biteOpening,
+  biteWhere,
 } from './food';
 import { EXHIBITORS, tagsOf, type Exhibitor } from './exhibitors';
 
@@ -243,5 +250,44 @@ describe('a vendor the catalogue has not seen', () => {
     expect(foodFacets(bare)).toEqual({ cuisine: [], dish: [], dietary: [], other: [] });
     expect(matchesFood(bare, {})).toBe(true);
     expect(matchesFood(bare, { cuisine: ['Korean'] })).toBe(false);
+  });
+});
+
+describe('somewhere to eat inside a building the map draws', () => {
+  it('carries the two the campus data actually describes as food', () => {
+    // Neither source knows about these. Gen Con files all 43 of its food
+    // vendors on the Block Party; OpenStreetMap maps zero eating places inside
+    // the convention centre's footprint. What is left is the campus data this
+    // repository already carries.
+    const names = CAMPUS_FOOD.map((one) => one.room.name);
+    expect(names).toContain('Concourse Food Court');
+    expect(names).toContain('Circle Centre Mall');
+  });
+
+  it('does not file a lobby or a club lounge as somewhere to eat', () => {
+    // They are `amenity` rooms too, which is why the list is written down
+    // rather than matched: a club lounge is ticketed and a lobby is a lobby.
+    const ids = CAMPUS_FOOD.map((one) => one.room.id);
+    for (const wrong of ['hyatt-lobby', 'westin-executive-club', 'lucas-oil-east-club']) {
+      expect(ids).not.toContain(wrong);
+    }
+  });
+
+  it('is filed under the building it is in, not under Off site', () => {
+    // The whole point: "where can I eat inside the building I am standing in"
+    // is a question asked constantly, and the answer used to be reachable only
+    // under Places.
+    const foodCourt = BITES.find((one) => one.place?.room.id === 'food-court')!;
+    expect(biteWhere(foodCourt)).toBe('Convention Center');
+    expect(biteChoices().where).toContain('Convention Center');
+  });
+
+  it('claims no cuisine and no hours, because nothing publishes either', () => {
+    // Which means it never matches a cuisine chip and never survives "open
+    // now" — the same treatment as a restaurant whose hours nobody wrote down.
+    const foodCourt = BITES.find((one) => one.place?.room.id === 'food-court')!;
+    expect(biteFacets(foodCourt)).toEqual({ cuisine: [], dish: [], dietary: [] });
+    expect(biteOpening(foodCourt)).toBeNull();
+    expect(biteOpenAt(foodCourt, Date.parse('2026-08-01T12:00:00-04:00'), -240)).toBeNull();
   });
 });
