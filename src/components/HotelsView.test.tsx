@@ -12,19 +12,22 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const BLOCK: Record<string, unknown> = {
+  w1: { placeId: 'w1', blockName: 'JW Marriott Indianapolis', low: 287, high: 620, region: 'downtown', skywalk: true, distance: 'Skywalk' },
+  w2: { placeId: 'w2', blockName: 'The Westin Indianapolis', low: 276, high: 346, region: 'downtown', skywalk: true, distance: 'Skywalk' },
+};
+
 vi.mock('../data/partners', () => ({
-  BASE_YEAR: 2019,
-  SOURCE: 'https://example.invalid/thread',
-  PARTNERS: [
-    { placeId: 'w1', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
-    { placeId: 'w2', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
-  ],
-  isPartner: (id: string) => ['w1', 'w2'].includes(id),
-  partnerFor: (id: string) =>
-    ({
-      w1: { placeId: 'w1', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
-      w2: { placeId: 'w2', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
-    })[id] ?? null,
+  BLOCK_YEAR: 2025,
+  BLOCK_GROWTH: 0.028,
+  CAVEAT: 'Starting rates that vary by room type, and before local taxes.',
+  SOURCE: 'https://example.invalid/hotelmap',
+  HISTORY_SOURCE: 'https://example.invalid/thread',
+  PARTNERS: Object.values(BLOCK),
+  CHEAPEST: { blockName: 'LaQuinta Airport', low: 109, distance: '7.2 Miles', region: 'airport' },
+  SUSPECTED_IN_BLOCK: new Set<string>(),
+  isPartner: (id: string) => id in BLOCK,
+  partnerFor: (id: string) => BLOCK[id] ?? null,
 }));
 
 vi.mock('../data/lodging', () => ({
@@ -180,26 +183,53 @@ describe('the Gen Con block, estimated', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
   };
 
-  it('says every figure in it is an estimate, and where the base came from', () => {
-    // The left column is a 2019 negotiated rate times an index. Presenting that
-    // without its provenance is presenting a guess as a price.
+  it('says these are Gen Con’s own rates, and links to the page they are on', () => {
+    // They are published prices, not estimates, and underselling them as
+    // guesses would be as wrong as overselling a guess as a price.
     openBlock();
-    const caution = page().querySelectorAll('.hotels__caution')[0];
-    expect(caution.textContent).toMatch(/every figure in the left column is an estimate/i);
-    expect(caution.textContent).toMatch(/2019 block rates/);
+    const caution = page().querySelector('.hotels__caution')!;
+    expect(caution.textContent).toMatch(/Gen Con’s real 2025 block rates|published 2025 block rates/);
     expect(within(caution as HTMLElement).getByRole('link')).toBeTruthy();
   });
 
-  it('draws the estimate differently from a quoted price', () => {
-    // Same rule as the key dates page: an estimate never sits in a column of
+  it('repeats Gen Con’s own caveat about tax and room type', () => {
+    // A rate that excludes tax and varies by room is not the number somebody
+    // will be charged, and the page has to say so where the number is.
+    openBlock();
+    expect(page().querySelector('.hotels__caution')!.textContent).toMatch(/before local taxes/i);
+  });
+
+  it('shows both ends of a published range', () => {
+    // Only the low end would make the block look cheaper than anybody pays.
+    openBlock();
+    const shown = row('JW Marriott').querySelector('.hotels__money')!.textContent!;
+    // 2027 planning year, so both ends are carried forward two years.
+    expect(shown).toMatch(/^\$\d+–\$\d+$/);
+    const [low, high] = shown.split('–').map((one) => Number(one.replace(/\D/g, '')));
+    expect(low).toBeGreaterThanOrEqual(287);
+    expect(high).toBeGreaterThanOrEqual(620);
+  });
+
+  it('says when a figure is carried forward and from where', () => {
+    openBlock();
+    const text = page().textContent ?? '';
+    expect(text).toMatch(/carried forward|projected/i);
+    expect(text).toMatch(/from \$287 in 2025|from \$276 in 2025/);
+  });
+
+  it('surfaces the block’s own cheapest room, wherever it is', () => {
+    // It is a real published price that cost no API quota, and it is usually
+    // nowhere near the hall.
+    openBlock();
+    expect(page().textContent).toMatch(/cheapest room anywhere is/i);
+    expect(page().textContent).toMatch(/\$109/);
+  });
+
+  it('draws a projected figure differently from a published one', () => {
+    // Same rule as the key dates page: a projection never sits in a column of
     // facts looking like one.
     openBlock();
     expect(page().querySelector('.hotels__money--guess')).toBeTruthy();
-  });
-
-  it('shows what it was carried forward from, on every row', () => {
-    openBlock();
-    expect(within(row('JW Marriott')).getByText(/from \$246 in 2019/)).toBeTruthy();
   });
 
   it('pairs each block hotel with a different alternative', () => {
@@ -225,6 +255,6 @@ describe('the Gen Con block, estimated', () => {
 
   it('says the block list is partial rather than implying it is whole', () => {
     openBlock();
-    expect(page().textContent).toMatch(/the rest are left out rather than guessed at/i);
+    expect(page().textContent).toMatch(/left\s+out rather than guessed at/i);
   });
 });

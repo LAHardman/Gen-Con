@@ -17,21 +17,23 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
+const BLOCK = {
+  jw: { placeId: 'jw', blockName: 'JW Marriott Indianapolis', low: 287, high: 620, region: 'downtown', skywalk: true, distance: 'Skywalk' },
+  westin: { placeId: 'westin', blockName: 'The Westin Indianapolis', low: 276, high: 346, region: 'downtown', skywalk: true, distance: 'Skywalk' },
+  hilton: { placeId: 'hilton', blockName: 'Hilton Indianapolis', low: 231, high: null, region: 'downtown', skywalk: false, distance: '3 Blocks' },
+};
+
 vi.mock('./partners', () => ({
-  BASE_YEAR: 2019,
-  SOURCE: 'https://example.invalid/thread',
-  PARTNERS: [
-    { placeId: 'jw', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
-    { placeId: 'westin', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
-    { placeId: 'hilton', blockName: 'Hilton', y2014: 162, y2015: 167, y2019: 200 },
-  ],
-  isPartner: (id: string) => ['jw', 'westin', 'hilton'].includes(id),
-  partnerFor: (id: string) =>
-    ({
-      jw: { placeId: 'jw', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
-      westin: { placeId: 'westin', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
-      hilton: { placeId: 'hilton', blockName: 'Hilton', y2014: 162, y2015: 167, y2019: 200 },
-    })[id] ?? null,
+  BLOCK_YEAR: 2025,
+  BLOCK_GROWTH: 0.028,
+  CAVEAT: 'Starting rates, before tax.',
+  SOURCE: 'https://example.invalid/hotelmap',
+  HISTORY_SOURCE: 'https://example.invalid/thread',
+  PARTNERS: Object.values(BLOCK),
+  CHEAPEST: BLOCK.hilton,
+  SUSPECTED_IN_BLOCK: new Set(['lookalike']),
+  isPartner: (id: string) => id in BLOCK,
+  partnerFor: (id: string) => (BLOCK as Record<string, unknown>)[id] ?? null,
 }));
 
 const RATES: Record<string, { placeId: string; nightly: number; currency: string; sources: string[]; at: string; spread: number }> = {
@@ -49,7 +51,7 @@ vi.mock('./rates', () => ({
 
 vi.mock('./lodging', () => ({ LODGING: [], WALKABLE: [], WALK_METRES: 1600, DRIVE_METRES: 25000, PULLED: '2026-08-11', SAMPLED: true }));
 
-const { between, blockEstimate, pairings, preference, priceIndex, tier } = await import('./blocks');
+const { between, blockRate, pairings, preference, tier } = await import('./blocks');
 
 /** Degrees are awkward; this puts places a known number of metres apart. */
 const at = (id: string, metresEast: number, extra: Record<string, unknown> = {}) => ({
@@ -63,38 +65,56 @@ const at = (id: string, metresEast: number, extra: Record<string, unknown> = {})
   ...extra,
 });
 
-describe('carrying a 2019 rate forward', () => {
-  it('uses the measured index where one exists, and says it is measured', () => {
-    // 13.0% above 2019 in June 2026, from the Travel Price Index.
-    const index = priceIndex(2026);
-    expect(index.factor).toBe(1.13);
-    expect(index.measured).toBe(true);
-    expect(blockEstimate('jw', 2026)!.nightly).toBe(278);
+describe('the block rate for a year', () => {
+  it('is a fact, not an estimate, for the year Gen Con published', () => {
+    // The distinction the whole page is built around. 2025 is what Gen Con
+    // printed; presenting it as a projection would undersell a real number.
+    const rate = blockRate('jw', 2025)!;
+    expect(rate.projected).toBe(false);
+    expect(rate.low).toBe(287);
+    expect(rate.high).toBe(620);
+    expect(rate.yearsOn).toBe(0);
   });
 
-  it('marks a projected year as not measured, however plausible it looks', () => {
-    // The whole difference between a figure somebody can check and one they
-    // cannot. 2027 is 2026's number continued, and must never claim otherwise.
-    const next = priceIndex(2027);
-    expect(next.measured).toBe(false);
-    expect(next.factor).toBeGreaterThan(1.13);
-    expect(blockEstimate('jw', 2027)!.measured).toBe(false);
+  it('carries both ends of the range forward, not just the cheap one', () => {
+    // Showing only the low end would make the block look cheaper than anybody
+    // actually pays for it.
+    const rate = blockRate('jw', 2026)!;
+    expect(rate.low).toBe(Math.round(287 * 1.028));
+    expect(rate.high).toBe(Math.round(620 * 1.028));
+  });
+
+  it('marks any year past the published one as projected, and says how far', () => {
+    expect(blockRate('jw', 2026)!.projected).toBe(true);
+    expect(blockRate('jw', 2026)!.yearsOn).toBe(1);
+    expect(blockRate('jw', 2027)!.yearsOn).toBe(2);
+    expect(blockRate('jw', 2027)!.low).toBeGreaterThan(blockRate('jw', 2026)!.low);
+  });
+
+  it('never projects backwards into a year it cannot know', () => {
+    // Deflating a published rate to invent a past year would be fabricating
+    // history that Gen Con's own page contradicts.
+    const before = blockRate('jw', 2024)!;
+    expect(before.low).toBe(287);
+    expect(before.yearsOn).toBe(0);
+  });
+
+  it('keeps a single published rate single rather than inventing a range', () => {
+    expect(blockRate('hilton', 2025)!.high).toBeNull();
+    expect(blockRate('hilton', 2027)!.high).toBeNull();
   });
 
   it('carries its base year with it wherever it goes', () => {
-    // A number with no base year is a number nobody can argue with.
-    const estimate = blockEstimate('westin', 2026)!;
-    expect(estimate.from).toEqual({ year: 2019, nightly: 221 });
-    expect(estimate.factor).toBe(1.13);
+    expect(blockRate('westin', 2027)!.from).toEqual({ year: 2025, low: 276 });
   });
 
-  it('has nothing to say about a hotel that was never in the block', () => {
-    expect(blockEstimate('near', 2026)).toBeNull();
+  it('has nothing to say about a hotel that is not in the block', () => {
+    expect(blockRate('near', 2026)).toBeNull();
   });
 
-  it('never invents cents on a seven-year projection', () => {
+  it('never invents cents', () => {
     for (const id of ['jw', 'westin', 'hilton']) {
-      expect(Number.isInteger(blockEstimate(id, 2026)!.nightly)).toBe(true);
+      expect(Number.isInteger(blockRate(id, 2027)!.low)).toBe(true);
     }
   });
 });
@@ -146,6 +166,19 @@ describe('pairing each block hotel with something to compare against', () => {
     expect(paired.filter((one) => !one.alternative).length).toBe(2);
   });
 
+  it('never offers a hotel that only looks like it is outside the block', () => {
+    /*
+     * The bug this caught in the wild. Gen Con writes "SpringHill Suites by
+     * Marriott Indianapolis Downtown" and OpenStreetMap writes "SpringHill
+     * Suites Indianapolis Downtown", so the strict matcher tied them to nothing
+     * — and an untied block hotel fell straight into the alternatives list. The
+     * page then compared two block hotels with each other.
+     */
+    const withLookalike = [...CLUSTER, at('lookalike', 10, { name: 'Also In The Block' })];
+    const paired = pairings(2026, withLookalike);
+    expect(paired.map((one) => one.alternative?.id)).not.toContain('lookalike');
+  });
+
   it('reports how far apart the pair is, so the comparison can be judged', () => {
     const paired = pairings(2026, CLUSTER);
     for (const one of paired) {
@@ -157,7 +190,7 @@ describe('pairing each block hotel with something to compare against', () => {
   it('works out the saving only where the alternative has a price', () => {
     const paired = pairings(2026, CLUSTER);
     const withRate = paired.find((one) => one.alternative?.id === 'near')!;
-    expect(withRate.saving).toBe(withRate.estimate.nightly - 150);
+    expect(withRate.saving).toBe(withRate.rate.low - 150);
 
     const noRate = pairings(2026, [at('jw', 0), at('blank', 30)]);
     expect(noRate[0].alternative?.id).toBe('blank');

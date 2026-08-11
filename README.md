@@ -741,35 +741,34 @@ there is not an option — it is one nobody has asked about, and the only reason
 sleep there is to spend less. The walk ring is the opposite: you would consider
 walking to any of them at any price, so its blanks are honest and stay visible.
 
-#### The Gen Con block, estimated — and what to compare it with
+#### The Gen Con block, from Gen Con's own page
 
-The **Gen Con block** tab does the thing the rest of the page cannot: it puts a
-number on the block rate. Every one of those numbers is an estimate and the page
-says so above them, not under them.
+The **Gen Con block** tab carries real published rates. `gencon.com/gen-con-indy/hotelmap`
+lists the whole block — 74 hotels across five regions, each with its nightly
+rate, its distance to the convention centre, and whether a skywalk reaches it —
+and `scripts/fetch-block-rates.mjs` reads it into `src/data/partners.ts`.
 
-**The base is real.** Gen Con publishes block rates nowhere a program can read,
-but in 2019 an attendee typed the whole block into a forum post — 22 hotels with
-their negotiated rate for 2014, 2015 and 2019 — and that post is still on Gen
-Con's own forums. `scripts/fetch-block-rates.mjs` reads it into
-`src/data/partners.ts`. Provenance exactly as good as that sounds: a forum post,
-not a Gen Con publication; seven years old; describing the 2019 block, which has
-since moved to Q-rooms.
+Gen Con's own two caveats travel with every figure: they are **starting prices**
+that "vary by room type and occupancy", and they are **before** local sales and
+occupancy tax. A rate that excludes tax is not what anybody is charged, and the
+page says so where the number is rather than in a footnote.
 
-**The multiplier is published.** The U.S. Travel Association's Travel Price Index
-put US hotel prices **13.0% above 2019** in June 2026. One measured number
-absorbs the whole strange run in between — down 10% in 2020, up 10% in 2021 and
-again in 2022 — which no growth rate fitted to 2014–2019 could have reproduced.
-Years past the last measured one continue at a stated 3%, and `measured: false`
-travels with them so the page can say it is an estimate built on an estimate.
+**Ranges are kept whole.** Most hotels are quoted as a span — the JW at
+$287–$620 — and showing only the low end would make the block look cheaper than
+anyone pays.
 
-**Only 14 of the 22 are shown**, because the name matcher refuses ambiguity.
-"Courtyard by Marriott Downtown" and "Marriott Indianapolis Downtown" both reduce
-to a shared word, and the first version of this put a Courtyard's block rate on
-the Marriott — which then carried two different prices. The matcher now needs two
-shared significant words (or an exact one-word name on both sides), refuses ties
-outright, and the generator throws if two block entries ever land on the same
-building. Eight hotels drop out as a result and show no block rate, which is the
-right side to fail on: a missing row costs nothing, a wrong one costs money.
+**A published year is a fact; every other year is arithmetic.** For the year on
+the page, these are Gen Con's numbers and are drawn as facts. Beyond it they are
+carried forward at **this block's own observed growth rate** — about 2.8% a
+year, the median change between the published rates and the 2019 rates in an
+attendee's forum table. That is measured from Gen Con's own prices rather than
+from a national hotel index that knows nothing about Indianapolis in the first
+week of August. A projected figure is drawn dashed and muted, says how many
+years on it is, and says what it came from.
+
+The block also answers the "cheapest within a drive" question better than any
+paid API: it reaches out to the airport and the suburbs, so its own cheapest
+room is **$109**, published, and free to know.
 
 #### Pairing each block hotel with an alternative
 
@@ -777,23 +776,40 @@ Each block hotel is matched to the nearest walkable hotel **not** in the block,
 and no hotel is ever offered twice.
 
 That last clause is the whole difficulty. Nearest-neighbour looks right and is
-not: four block hotels sit within two hundred metres of each other downtown, and
-greedy assignment hands all four the same alternative — a table that tells you
-one thing four times. So it is a **stable matching** (Gale–Shapley): block hotels
-propose down a preference list, an alternative holds the best proposal it has
-seen and rejects the rest, and the rejected move on to their next choice. When
-two want the same neighbour the nearer keeps it. Removing the matching in favour
-of greedy nearest-neighbour breaks seven tests.
+not: several block hotels sit within two hundred metres of each other downtown,
+and greedy assignment hands them all the same alternative — a table that tells
+you one thing four times. So it is a **stable matching** (Gale–Shapley): block
+hotels propose down a preference list, an alternative holds the best proposal it
+has seen and rejects the rest, and the rejected move on. When two want the same
+neighbour the nearer keeps it. Removing the matching in favour of greedy
+nearest-neighbour breaks seven tests.
 
 Preference is distance first, then two corrections deliberately worth tens of
-metres rather than hundreds — **similar quality** (a rough tier from OSM stars, or
-the brand where there is none) and **equal-or-lower price** than the block
-estimate. A dearer alternative is pushed back but not excluded, because "the
-nearest thing outside the block costs more" is itself worth knowing. If the
-alternatives run out, a block hotel is shown unpaired rather than sharing one.
+metres rather than hundreds — **similar quality** and **equal-or-lower price**
+than the block rate. A dearer alternative is pushed back but not excluded,
+because "the nearest thing outside the block costs more" is worth knowing.
 
-The saving is printed as a direction, not a sum: it subtracts an estimate from a
-quote, and the row says so.
+**And then the data says something the feature did not expect: there is almost
+nothing to compare against.** 24 of the 35 hotels within a walk of the hall are
+in Gen Con's block, and most of the rest are too — so only two pairings can be
+made at all. That is not a bug in the matching; it is the answer to "should I
+book outside the block", and the page states it rather than showing a short list
+and letting it look broken. If you want to pay less, the block's own outlying
+hotels are the realistic route.
+
+**A hotel that only looks like it is outside the block must never be offered as
+an alternative**, and this is where the sharp edge is. Name matching is strict
+where it assigns a price — a wrong match puts one hotel's rate on another — so
+some block hotels are never tied to a map id. Every one of those would otherwise
+fall into the alternatives list, and the page would compare the block with
+itself. It did: SpringHill and Fairfield were both offered as alternatives to
+hotels they share a block with, because Gen Con writes them "by Marriott" and
+OpenStreetMap does not. There are now three defences — franchise qualifiers are
+stripped before matching, a deliberately loose second pass flags anything that
+even resembles a block entry, and names made entirely of common words ("Hotel
+Indy") fall back to whole-string comparison. The asymmetry is intentional: a
+false positive shortens a list already labelled short, a false negative states
+something untrue.
 
 #### Four sources, for survival rather than coverage
 

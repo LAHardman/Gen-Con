@@ -24,10 +24,11 @@
 
 import { useMemo, useState } from 'react';
 
-import { BASE_YEAR, SOURCE, pairings } from '../data/blocks';
+import { BLOCK_YEAR, CAVEAT, SOURCE, pairings } from '../data/blocks';
+import { CHEAPEST } from '../data/partners';
 import { planningYear } from '../data/key-dates';
-import { LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
-import { isPartner } from '../data/partners';
+import { LODGING, PULLED, WALK_METRES } from '../data/lodging';
+
 import { RATES, REFRESHED, rateFor, type Rate } from '../data/rates';
 
 type Ring = 'walk' | 'drive' | 'block';
@@ -234,10 +235,11 @@ export function HotelsView({ nowMs }: Props) {
 function BlockTable({ nowMs }: { nowMs: number }) {
   const year = planningYear(nowMs);
   const rows = useMemo(() => pairings(year), [year]);
-  const measured = rows[0]?.estimate.measured ?? false;
-  const missing = LODGING.filter(
-    (place) => place.ring === 'walk' && !isPartner(place.id),
-  ).length;
+  const projected = rows[0]?.rate.projected ?? false;
+  const yearsOn = rows[0]?.rate.yearsOn ?? 0;
+  const unpaired = rows.filter((one) => !one.alternative).length;
+  const walkable = LODGING.filter((one) => one.ring === 'walk').length;
+  const inBlock = rows.length;
 
   if (rows.length === 0) {
     return <p className="hotels__empty">No block hotels are on record.</p>;
@@ -246,30 +248,45 @@ function BlockTable({ nowMs }: { nowMs: number }) {
   return (
     <>
       <p className="hotels__caution">
-        <strong>Every figure in the left column is an estimate.</strong> Gen Con publishes no block
-        rates anywhere a program can read, so these are the real {BASE_YEAR} block rates — from{' '}
+        {projected ? (
+          <>
+            <strong>
+              These are Gen Con’s real {BLOCK_YEAR} block rates, carried forward {yearsOn}{' '}
+              {yearsOn === 1 ? 'year' : 'years'}.
+            </strong>{' '}
+            Gen Con has not published {year} yet, so each figure is its {BLOCK_YEAR} rate grown at
+            the rate this block’s own prices have actually moved — about 2.8% a year, measured
+            against 2019.
+          </>
+        ) : (
+          <>
+            <strong>These are Gen Con’s published {BLOCK_YEAR} block rates.</strong> Not estimates,
+            not market prices — what Gen Con charges.
+          </>
+        )}{' '}
+        {CAVEAT}{' '}
         <a href={SOURCE} target="_blank" rel="noreferrer noopener">
-          a table an attendee posted on Gen Con’s forums
-        </a>{' '}
-        — carried forward by a published hotel-price index.{' '}
-        {measured
-          ? `For ${year} that index is measured: US hotel prices were 13% above ${BASE_YEAR} in mid-2026.`
-          : `For ${year} the index is itself projected past the last measured year, so this is an estimate built on an estimate.`}{' '}
-        The block changed hands to Q-rooms for 2026 and its hotel list will not be identical.
+          Gen Con’s hotel list ↗
+        </a>
       </p>
 
       <ol className="hotels__list">
-        {rows.map(({ partner, estimate, alternative, alternativeRate, apart, saving }) => (
+        {rows.map(({ partner, rate, alternative, alternativeRate, apart, saving }) => (
           <li key={partner.id} className="hotels__pair">
             <div className="hotels__side">
-              <span className="hotels__label">In the block · estimated</span>
+              <span className="hotels__label">
+                In the block{rate.projected ? ' · projected' : ` · ${BLOCK_YEAR}`}
+              </span>
               <h3>{partner.name}</h3>
-              <span className="hotels__money hotels__money--guess">
-                {dollars(estimate.nightly)}
+              <span className={`hotels__money${rate.projected ? ' hotels__money--guess' : ''}`}>
+                {dollars(rate.low)}
+                {/* Both ends. Showing only the low one would make the block look
+                    cheaper than anybody actually pays for it. */}
+                {rate.high !== null && rate.high !== rate.low ? `–${dollars(rate.high)}` : ''}
               </span>
               <span className="hotels__meta">
-                from {dollars(estimate.from.nightly)} in {estimate.from.year} ·{' '}
-                {walkMinutes(partner.metres)} min walk
+                {rate.partner.skywalk ? 'skywalk to the hall' : rate.partner.distance}
+                {rate.projected ? ` · from ${dollars(rate.from.low)} in ${rate.from.year}` : ''}
               </span>
             </div>
 
@@ -301,7 +318,11 @@ function BlockTable({ nowMs }: { nowMs: number }) {
                 {saving > 0
                   ? `About ${dollars(saving)} a night cheaper outside the block`
                   : `About ${dollars(-saving)} a night dearer outside the block`}
-                <span> — comparing an estimate with a quote, so treat it as a direction, not a sum.</span>
+                <span>
+                  {' '}
+                  — and the block rate is before tax while the other is a market quote, so treat it
+                  as a direction, not a sum.
+                </span>
               </p>
             )}
           </li>
@@ -309,14 +330,34 @@ function BlockTable({ nowMs }: { nowMs: number }) {
       </ol>
 
       <p className="hotels__note">
-        {rows.length} of the {BASE_YEAR} block matched to this app’s hotel list; the rest are left
+        {rows.length} of Gen Con’s block are hotels this app can place on its map; the rest are left
         out rather than guessed at, because putting one hotel’s block rate on another is the one
-        mistake here that would cost money. Alternatives are drawn from the {missing} walkable
-        hotels not in the block, and no hotel is offered twice — where two block hotels want the
-        same neighbour, the nearer keeps it and the other takes its next choice.
+        mistake here that would cost money. No hotel is offered as an alternative twice — where two
+        block hotels want the same neighbour, the nearer keeps it and the other takes its next
+        choice.
+      </p>
+
+      {/* The finding, rather than an apology for a short list. Nearly every
+          hotel you can walk to is already Gen Con's, which is the answer to
+          "should I book outside the block" for most of downtown. */}
+      {unpaired > 0 && (
+        <p className="hotels__note">
+          <strong>{unpaired} of them have no comparison at all</strong>, and that is the finding
+          rather than a gap: {inBlock} of the {walkable} hotels within a walk of the hall are in Gen
+          Con’s block, so there is very little downtown left to compare against. If you want to pay
+          less, the block’s own outlying hotels are the realistic answer, not a walkable one outside
+          it.
+        </p>
+      )}
+
+      {/* The cheapest thing in the block is usually nowhere near the hall, and
+          it is a real published price rather than one this app had to buy. */}
+      <p className="hotels__note">
+        The block reaches well past downtown: its cheapest room anywhere is{' '}
+        <strong>{dollars(CHEAPEST.low)}</strong> at {CHEAPEST.blockName}, {CHEAPEST.distance} away.
+        Those outlying rates are published by Gen Con and cost this app nothing to know, which is
+        why they are worth more than anything on the “within a drive” tab.
       </p>
     </>
   );
 }
-
-export type { Lodging };

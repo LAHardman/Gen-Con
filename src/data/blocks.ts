@@ -24,71 +24,69 @@
  */
 
 import { LODGING, type Lodging } from './lodging';
-import { BASE_YEAR, PARTNERS, SOURCE, partnerFor, type Partner } from './partners';
+import {
+  BLOCK_GROWTH,
+  BLOCK_YEAR,
+  CAVEAT,
+  PARTNERS,
+  SOURCE,
+  SUSPECTED_IN_BLOCK,
+  partnerFor,
+  type Partner,
+} from './partners';
 import { rateFor, type Rate } from './rates';
 
-export { BASE_YEAR, SOURCE };
+export { BLOCK_YEAR, BLOCK_GROWTH, CAVEAT, SOURCE };
 
 /**
- * How much dearer a hotel room is than in the base year.
+ * Carried forward at the block's own observed rate.
  *
- * 2026 is measured, not guessed: the U.S. Travel Association's Travel Price
- * Index put hotel prices **13.0% above 2019** in June 2026. That single number
- * absorbs the whole strange run in between — down 10% in 2020, up 10% in 2021
- * and again in 2022 — which no smooth growth rate fitted to 2014–2019 could
- * have reproduced.
+ * `BLOCK_GROWTH` is the median annual change between Gen Con's published 2025
+ * rates and the 2019 rates in an attendee's forum table — about 2.8% a year,
+ * measured from Gen Con's own numbers rather than from a national hotel index
+ * that knows nothing about Indianapolis in the first week of August.
  *
- * Later years are the same figure continued at `ASSUMED_ANNUAL`, and are
- * therefore an estimate built on an estimate. `confidence` says which is which
- * so the page can too.
+ * The fallback exists so a missing history cannot silently produce a flat
+ * projection, which would look like a confident forecast of no change.
  */
-const MEASURED: Record<number, number> = { 2026: 1.13 };
+const FALLBACK_GROWTH = 0.028;
 
-/**
- * Carried forward at this rate past the last measured year.
- *
- * Deliberately close to general inflation rather than to the 2021–22 spike:
- * projecting a spike forward is how a plausible number becomes a wrong one.
- */
-export const ASSUMED_ANNUAL = 0.03;
-
-/** The index for a year, and whether anybody measured it. */
-export function priceIndex(year: number): { factor: number; measured: boolean } {
-  if (MEASURED[year]) return { factor: MEASURED[year], measured: true };
-  const years = Object.keys(MEASURED).map(Number);
-  const last = Math.max(...years);
-  if (year <= last) {
-    // Before the measured year and not measured itself: interpolating backwards
-    // would invent a history, so it says so by refusing to claim measurement.
-    return { factor: MEASURED[last] / (1 + ASSUMED_ANNUAL) ** (last - year), measured: false };
-  }
-  return { factor: MEASURED[last] * (1 + ASSUMED_ANNUAL) ** (year - last), measured: false };
-}
-
-export interface BlockEstimate {
+export interface BlockRate {
   partner: Partner;
-  /** Estimated block rate per night for `year`, USD. */
-  nightly: number;
-  /** The real rate this was carried forward from. */
-  from: { year: number; nightly: number };
-  factor: number;
-  /** True only where the index for that year was actually measured. */
-  measured: boolean;
+  /** Starting nightly rate for `year`, USD, before tax. */
+  low: number;
+  /** Top of the published range, carried forward too, or null. */
+  high: number | null;
+  /**
+   * False only for the year Gen Con actually published.
+   *
+   * This is the distinction the page is built around: for the published year
+   * these are facts and are drawn as facts, and every other year is arithmetic
+   * on top of them.
+   */
+  projected: boolean;
+  /** How many years past the published block this is, zero for the block year. */
+  yearsOn: number;
+  /** What it was carried forward from. */
+  from: { year: number; low: number };
 }
 
-/** What the block probably costs at this hotel, or null if it was never in it. */
-export function blockEstimate(placeId: string, year: number): BlockEstimate | null {
+/** What the block costs at this hotel in a given year, or null if it is not in it. */
+export function blockRate(placeId: string, year: number): BlockRate | null {
   const partner = partnerFor(placeId);
   if (!partner) return null;
-  const { factor, measured } = priceIndex(year);
+  const yearsOn = year - BLOCK_YEAR;
+  const rate = BLOCK_GROWTH ?? FALLBACK_GROWTH;
+  const factor = (1 + rate) ** Math.max(0, yearsOn);
   return {
     partner,
-    // To the nearest dollar. Cents on a seven-year projection would be a claim
-    // about precision that nothing here supports.
-    nightly: Math.round(partner.y2019 * factor),
-    from: { year: BASE_YEAR, nightly: partner.y2019 },
-    factor,
-    measured,
+    // To the nearest dollar: cents on a projection claim a precision nothing
+    // here supports, and Gen Con quotes whole dollars anyway.
+    low: Math.round(partner.low * factor),
+    high: partner.high === null ? null : Math.round(partner.high * factor),
+    projected: yearsOn > 0,
+    yearsOn: Math.max(0, yearsOn),
+    from: { year: BLOCK_YEAR, low: partner.low },
   };
 }
 
@@ -154,13 +152,13 @@ export function preference(
 
 export interface Pairing {
   partner: Lodging;
-  estimate: BlockEstimate;
+  rate: BlockRate;
   /** The nearest hotel not in the block, or null if every one was taken. */
   alternative: Lodging | null;
   alternativeRate: Rate | null;
   /** Metres between the two, so the comparison can be judged. */
   apart: number | null;
-  /** Estimated block rate minus the alternative's, where both are known. */
+  /** Block rate minus the alternative's, where both are known. */
   saving: number | null;
 }
 
@@ -177,21 +175,33 @@ export interface Pairing {
  * the next closest" means when written down carefully.
  */
 export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING): Pairing[] {
-  const partnerIds = new Set(PARTNERS.map((one) => one.placeId));
+  const partnerIds = new Set(PARTNERS.map((one) => one.placeId).filter(Boolean));
   // Only the walk ring: an alternative you would have to drive to is not an
   // alternative to a hotel across the road from the hall.
   const walk = places.filter((one) => one.ring === 'walk');
   const blockHotels = walk.filter((one) => partnerIds.has(one.id));
-  const others = walk.filter((one) => !partnerIds.has(one.id));
+  /*
+   * Everything else — minus the ones that only *look* like block entries.
+   *
+   * Matching is strict, so some block hotels never get tied to an id. Each of
+   * those would otherwise land in this list and be offered as an "alternative
+   * outside the block", and the page would compare the block with itself. That
+   * happened: SpringHill and Fairfield were both offered as alternatives to
+   * hotels they share a block with, because Gen Con writes them "by Marriott"
+   * and OpenStreetMap does not.
+   */
+  const others = walk.filter(
+    (one) => !partnerIds.has(one.id) && !SUSPECTED_IN_BLOCK.has(one.id),
+  );
 
   /** Each block hotel's candidates, keenest first. */
   const wishes = new Map<string, Lodging[]>();
   for (const partner of blockHotels) {
-    const estimate = blockEstimate(partner.id, year);
+    const block = blockRate(partner.id, year);
     const ranked = [...others].sort(
       (a, b) =>
-        preference(partner, a, estimate?.nightly ?? null, rateFor(a.id)) -
-        preference(partner, b, estimate?.nightly ?? null, rateFor(b.id)),
+        preference(partner, a, block?.low ?? null, rateFor(a.id)) -
+        preference(partner, b, block?.low ?? null, rateFor(b.id)),
     );
     wishes.set(partner.id, ranked);
   }
@@ -230,16 +240,16 @@ export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING)
 
   return blockHotels
     .map((partner) => {
-      const estimate = blockEstimate(partner.id, year)!;
+      const rate = blockRate(partner.id, year)!;
       const alternative = pairedWith.get(partner.id) ?? null;
       const alternativeRate = alternative ? rateFor(alternative.id) : null;
       return {
         partner,
-        estimate,
+        rate,
         alternative,
         alternativeRate,
         apart: alternative ? between(partner, alternative) : null,
-        saving: alternativeRate ? estimate.nightly - alternativeRate.nightly : null,
+        saving: alternativeRate ? rate.low - alternativeRate.nightly : null,
       };
     })
     .sort((a, b) => a.partner.metres - b.partner.metres);
