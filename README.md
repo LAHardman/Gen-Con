@@ -708,6 +708,60 @@ any year. One field is deliberately left out: the API also carries a bare
 `registration_start` 44 days before the show, which Gen Con does not label
 anywhere, and a row whose name would have to be guessed does not belong here.
 
+### Signing in to Gen Con
+
+The **Gen Con account** page signs in to gencon.com and reads your own details
+back. It is entirely optional — every other page ignores it, and the app is
+complete having never been signed in to.
+
+**Why a server has to do it.** A browser cannot. gencon.com sends no
+`Access-Control-Allow-Origin`, so the sign-in page cannot be read for its CSRF
+token; the session cookie is `HttpOnly`, so script could not capture it; and it
+is `SameSite=Lax`, so the browser would never attach it to a request from this
+origin even if it had it. Three separate walls, all three deliberate. A server
+is bound by none of them, so `functions/gencon/login.js` does the sign-in.
+
+**What is kept, and what is not.** The password exists as a string in the Worker
+for the length of one request and is written nowhere — no KV, no cache, no log.
+What comes back is Gen Con's session, handed to the browser as an `HttpOnly`
+cookie **on this app's own origin**. That buys two things: the Worker stays
+stateless, so there is no session store here to breach; and script on this page
+cannot read it either, so an XSS on this app cannot steal a Gen Con session.
+Returning it in a response body for `sessionStorage` would have given that away
+for nothing.
+
+The one rule that file lives by is **never log the request**. "The password is
+not stored" is a property of the code rather than of the architecture, and it is
+one well-meaning `console.log(request)` away from being false.
+
+**Gen Con offers nothing better.** There is no OAuth, no SSO, and no
+authenticated API at all — `/api/v1/me`, `/profile`, `/my_events`, `/my_tickets`,
+`/orders`, `/badges` and `/registrations` are all 404, and `/api/v1/cart` only
+redirects to the sign-in page. The account pages are server-rendered HTML, so
+anything read is scraped. `whoami.js` therefore **fails loudly**: a scraper's
+real failure is not throwing, it is cheerfully returning nothing when the markup
+moves, so an empty profile reads as an empty account. It returns an error when it
+recognises no fields, and reports which ones it did find when it finds some.
+
+**The panel argues against itself,** because typing one site's password into
+another site is the exact shape of a phishing page. It says whose server it is,
+what happens to the password, and that the app works signed out — above the
+fields, not below them. It borrows none of Gen Con's branding: a sign-in that
+mimics the site it signs in to teaches a habit worth not teaching, even when it
+is honest. There is no "remember me", because a stored password would be the one
+thing that turns a session somebody chose into a credential this app keeps.
+
+**Before trusting it, run the spike.** `scripts/gencon-login-spike.mjs` answers
+the only question the tests cannot: whether Gen Con accepts a login originating
+from a datacentre at all, or whether Cloudflare challenges it first. Run with no
+credentials it posts a deliberately fake pair, which is enough — an "invalid
+credentials" answer proves the request reached Rails.
+
+**If this app is public, the login should not be.** For its author the trust
+boundary is you and your own Worker. A public sign-in form invites strangers to
+hand a password to a third party whose Worker they cannot audit. Deploy the
+authenticated build somewhere unlisted and keep the public one credential-free.
+
 ### Your own schedule
 
 The **Schedule** page is the four days of the convention — Thursday to Sunday —

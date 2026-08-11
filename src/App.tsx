@@ -6,6 +6,7 @@ import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import { PlanView } from './components/PlanView';
 import { DatesView } from './components/DatesView';
+import { AccountPanel } from './components/AccountPanel';
 import { AppMenu, type MenuPage } from './components/AppMenu';
 import { EventDialog, type Detail } from './components/EventDialog';
 import type { SearchHit } from './data/search';
@@ -18,6 +19,7 @@ import { useFollowedRoute } from './hooks/useFollowedRoute';
 import { useDeviceLocation, useLocationGranted } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
 import { usePlan } from './hooks/usePlan';
+import { useGenConAccount } from './hooks/useGenConAccount';
 import { usePlanDescriptions } from './hooks/usePlanDescriptions';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
@@ -41,12 +43,13 @@ const BASEMAP_KEY = 'genCon.basemap';
  * Two fitted in a header as tabs; three do not, on a phone already carrying a
  * title, an event count, a basemap switch and the selected room. See `AppMenu`.
  */
-type Page = 'map' | 'plan' | 'dates';
+type Page = 'map' | 'plan' | 'dates' | 'account';
 
 const PAGES: ReadonlyArray<MenuPage<Page>> = [
   { id: 'map', label: 'Map', detail: 'The campus, and how to get across it' },
   { id: 'plan', label: 'Schedule', detail: 'Your four days, drawn to scale' },
   { id: 'dates', label: 'Key dates', detail: 'Badges, housing, tickets — and when' },
+  { id: 'account', label: 'Gen Con account', detail: 'Sign in to read your own details' },
 ];
 
 export default function App() {
@@ -76,6 +79,10 @@ export default function App() {
   // Somebody's own schedule, kept on the device. Read once on load and written
   // on every change — see `usePlan` for why it lives nowhere else.
   const plan = usePlan();
+
+  // Signed out is the normal state and every other page ignores it: this is
+  // additive, and the app is complete without anybody ever signing in.
+  const account = useGenConAccount();
 
   // Descriptions for what is on the schedule, fetched once and kept, so a
   // planned event stays readable in an exhibit hall with no signal.
@@ -510,6 +517,13 @@ export default function App() {
           onPick={handlePickFloor}
         />
         {tab === 'dates' && <DatesView nowMs={nowMs} />}
+        {tab === 'account' && (
+          <AccountPanel
+            state={account.state}
+            onSignIn={account.signIn}
+            onSignOut={account.signOut}
+          />
+        )}
         {tab === 'plan' && (
           <PlanView
             plan={plan}
