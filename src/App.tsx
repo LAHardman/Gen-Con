@@ -6,6 +6,7 @@ import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import { PlanView } from './components/PlanView';
 import { DatesView } from './components/DatesView';
+import { HotelsView } from './components/HotelsView';
 import { AccountPanel } from './components/AccountPanel';
 import { AppMenu, type MenuPage } from './components/AppMenu';
 import { EventDialog, type Detail } from './components/EventDialog';
@@ -43,12 +44,13 @@ const BASEMAP_KEY = 'genCon.basemap';
  * Two fitted in a header as tabs; three do not, on a phone already carrying a
  * title, an event count, a basemap switch and the selected room. See `AppMenu`.
  */
-type Page = 'map' | 'plan' | 'dates' | 'account';
+type Page = 'map' | 'plan' | 'dates' | 'hotels' | 'account';
 
 const PAGES: ReadonlyArray<MenuPage<Page>> = [
   { id: 'map', label: 'Map', detail: 'The campus, and how to get across it' },
   { id: 'plan', label: 'Schedule', detail: 'Your four days, drawn to scale' },
   { id: 'dates', label: 'Key dates', detail: 'Badges, housing, tickets — and when' },
+  { id: 'hotels', label: 'Hotels', detail: 'Where to sleep, and roughly what it costs' },
   { id: 'account', label: 'Gen Con account', detail: 'Sign in to read your own details' },
 ];
 
@@ -517,6 +519,7 @@ export default function App() {
           onPick={handlePickFloor}
         />
         {tab === 'dates' && <DatesView nowMs={nowMs} />}
+        {tab === 'hotels' && <HotelsView nowMs={nowMs} />}
         {tab === 'account' && (
           <AccountPanel
             state={account.state}

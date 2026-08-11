@@ -2937,3 +2937,139 @@ body {
 .account__facts dd {
   margin: 0;
 }
+
+/* ------------------------------------------------------------------ hotels */
+
+.hotels {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 16px;
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.hotels > * {
+  width: min(46rem, 100%);
+  margin-inline: auto;
+}
+
+.hotels__head h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.hotels__head p,
+.hotels__note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* The one thing on this page that must be read before any number on it. */
+.hotels__caution {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hotels__rings {
+  display: flex;
+  gap: 8px;
+}
+
+.hotels__ring {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hotels__ring--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.hotels__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hotels__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.hotels__what {
+  min-width: 0;
+}
+
+.hotels__what h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hotels__where {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hotels__price {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.hotels__money {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hotels__meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* A gap, drawn as a gap. Never a zero, and never an em dash that reads as one. */
+.hotels__none {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.hotels__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}

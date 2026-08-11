@@ -708,6 +708,72 @@ any year. One field is deliberately left out: the API also carries a bare
 `registration_start` 44 days before the show, which Gen Con does not label
 anywhere, and a row whose name would have to be guessed does not belong here.
 
+### Hotels, and the prices this app is least sure of
+
+The **Hotels** page lists 35 places to sleep within a 1.6 km walk of the hall and
+201 more inside a radius standing in for a half-hour drive, with an indicative
+nightly rate where one has been collected. `scripts/fetch-lodging.mjs` generates
+the inventory from OpenStreetMap; `scripts/fetch-rates.mjs` gathers the prices.
+
+**Distance leads, because it is the number this app actually knows.** The campus
+is measured exactly; hotel prices are second-hand, from free tiers, for a sample
+night. So the walk ring is ordered by distance and the price is a column beside
+it — not the other way round.
+
+**The number everybody wants is the one that cannot be fetched.** The Gen Con
+block is behind a badge purchase and a login, opens 157 days before the
+convention, and is usually cheaper than anything on this page. That is said in a
+box above the list rather than in a footnote under it, because a confident table
+of open-market rates that quietly omits the cheapest option is worse than no
+table.
+
+#### The four rules the gathering follows
+
+| | |
+| --- | --- |
+| **Walk before drive, always** | The allowance is small enough that a run starting on the drive ring might never reach the walk ring. Walkable places are planned to exhaustion first; the drive ring gets only what is left. |
+| **Once a month each, unless there is spare** | A month-old price is worth having and worth refreshing; a weekly one costs four times as much to say nearly the same thing. Spare quota re-asks the walk ring, stalest first. |
+| **The drive ring is capped by the walk ring's cheapest** | "Only up to the cheapest walkable price" cannot be a filter *before* the call, because the price is what the call is for. So it is a **keep** rule on the answer plus a **probe order** — budget chains and far-out places first — and anything dearer than the floor is dropped *and remembered*, so next month is not spent learning it again. |
+| **No floor means no drive ring** | With nothing walkable priced there is no cap, and querying anyway would spend the whole allowance on places that may all be above a floor discovered next week. A missing floor stops the drive ring rather than defaulting to infinity. |
+
+The drive ring lists only places that have a price, because an unpriced hotel out
+there is not an option — it is one nobody has asked about, and the only reason to
+sleep there is to spend less. The walk ring is the opposite: you would consider
+walking to any of them at any price, so its blanks are honest and stay visible.
+
+#### Four sources, for survival rather than coverage
+
+SerpApi (Google Hotels), Xotelo, Amadeus and Apify. These are free tiers of
+commercial products and one unofficial community endpoint, and any of them can be
+gone on a Tuesday with no announcement — four independent ways to learn one
+number means the page keeps working when three of them stop. **A source that
+throws is out for the rest of the run** (one timeout predicts the next two
+hundred), **its quota is not spent on the attempt that broke it**, and the run
+still writes. Nothing is ever deleted, so a month where everything is down leaves
+the page exactly as it was, with real dates on the prices.
+
+#### The allowances are uncertain, deliberately low, and overridable
+
+Published free tiers disagree with each other and change quietly — SerpApi's is
+currently reported as both 100 and 250 searches a month, and Amadeus documents
+monthly quotas per API without stating one for hotels at all. Every default in
+`scripts/lib/rates/quota.mjs` is therefore the *lowest* credible figure, because
+guessing high spends somebody's account and guessing low only costs a few prices.
+`RATES_QUOTA_SERPAPI=250` corrects one; `RATES_OFF_XOTELO=1` switches one off.
+
+The ledger of what has been spent lives in `src/data/rate-store.json`, committed,
+because a repository is the only store this app has. Spending is recorded
+**before** each request rather than after: a run that dies mid-call then
+over-counts by one, which costs a request, where counting afterwards would
+under-count on the same failure, which costs the quota. A test runs twenty
+monthly passes against a five-call allowance and asserts five calls.
+
+**None of the four request shapes has been run against the live service** — every
+one of those hosts was unreachable from the machine this was written on. Each
+parser therefore treats an unfamiliar response as an error rather than as "no
+price", so a moved API announces itself instead of producing a page of blanks.
+Run `node scripts/fetch-rates.mjs --dry` first, which plans and spends nothing.
+
 ### Signing in to Gen Con
 
 The **Gen Con account** page signs in to gencon.com and reads your own details
