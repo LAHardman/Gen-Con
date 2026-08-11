@@ -5,6 +5,8 @@ import { MapView } from './components/MapView';
 import { RoomDialog } from './components/RoomDialog';
 import { SearchBar } from './components/SearchBar';
 import { PlanView } from './components/PlanView';
+import { DatesView } from './components/DatesView';
+import { AppMenu, type MenuPage } from './components/AppMenu';
 import { EventDialog, type Detail } from './components/EventDialog';
 import type { SearchHit } from './data/search';
 import type { Pin } from './data/offsite';
@@ -33,12 +35,23 @@ import {
 const SOURCE_URL = 'https://gencon.eventdb.us/';
 const BASEMAP_KEY = 'genCon.basemap';
 
-/** The two things the app is: a map of the campus, and a plan for using it. */
-type Tab = 'map' | 'plan';
-const TAB_LABEL: Record<Tab, string> = { map: 'Map', plan: 'Schedule' };
+/**
+ * The pages, behind one button.
+ *
+ * Two fitted in a header as tabs; three do not, on a phone already carrying a
+ * title, an event count, a basemap switch and the selected room. See `AppMenu`.
+ */
+type Page = 'map' | 'plan' | 'dates';
+
+const PAGES: ReadonlyArray<MenuPage<Page>> = [
+  { id: 'map', label: 'Map', detail: 'The campus, and how to get across it' },
+  { id: 'plan', label: 'Schedule', detail: 'Your four days, drawn to scale' },
+  { id: 'dates', label: 'Key dates', detail: 'Badges, housing, tickets — and when' },
+];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('map');
+  const [tab, setTab] = useState<Page>('map');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
   const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
@@ -412,23 +425,17 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="app__tabs" role="tablist" aria-label="Views">
-          {(['map', 'plan'] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              className={`app__tab${tab === id ? ' app__tab--active' : ''}`}
-              onClick={() => setTab(id)}
-            >
-              {TAB_LABEL[id]}
-              {id === 'plan' && plan.entries.length > 0 && (
-                <span className="app__tab-count">{plan.entries.length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
+        <AppMenu
+          pages={PAGES.map((page) =>
+            page.id === 'plan' && plan.entries.length > 0
+              ? { ...page, badge: plan.entries.length }
+              : page,
+          )}
+          current={tab}
+          open={menuOpen}
+          onToggle={setMenuOpen}
+          onChoose={setTab}
+        />
 
         {/* One search box at a time: the schedule has its own, and it looks for
             individual sessions rather than places. */}
@@ -496,6 +503,7 @@ export default function App() {
           level={(openVenueId && (levels[openVenueId] ?? defaultLevel(openVenueId))) ?? null}
           onPick={handlePickFloor}
         />
+        {tab === 'dates' && <DatesView nowMs={nowMs} />}
         {tab === 'plan' && (
           <PlanView
             plan={plan}

@@ -599,9 +599,75 @@ draws no such icon. Rather than scatter plausible-looking dots, the map marks
 none — `AmenityKind` already allows for water, so the day a source turns up the
 entries drop straight into `src/data/amenities.ts`.
 
+### Three pages, behind one button
+
+Two tabs fitted in the header. Three did not: on a 430-pixel phone the header is
+already carrying a title, an event count, a basemap switch and whatever room is
+selected. A tab strip is also a promise that the list is short and will stay
+short, which stops being true the moment a page is added — so the tabs became a
+hamburger, and the button says which page you are on rather than only drawing
+three lines in a box.
+
+It behaves like a menu: Escape closes it, a pointer anywhere else closes it,
+choosing closes it, the button reports whether it is open, and opening it puts
+the keyboard on the first item. The current page is **marked rather than
+omitted**, because a menu that leaves out where you already are makes you count
+what is left to work out where that is. The map stays mounted underneath every
+page — Leaflet loses track of its own size the moment its container is hidden,
+and remounting it throws away the view somebody had.
+
+### Key dates
+
+The convention is four days and the rest of the year is a queue. Badges sell out
+of the hotels attached to them; the events people actually want are gone in the
+first ten minutes of registration. Missing one of those by a day costs more than
+any wrong turn inside the building, and none of them are in the event feed. So
+the **Key dates** page counts down to them.
+
+**The rule is anchored to the convention, not to the month** — this is the part
+worth getting right and the easy thing to get wrong. Every milestone falls a
+fixed number of days before the convention's Wednesday:
+
+| | Days before | Lands on |
+| --- | --- | --- |
+| Event submission opens | 206 | Sunday, noon Eastern |
+| Badge registration opens | 171 | Sunday, noon Eastern |
+| Event catalogue goes live | 87 | Sunday, noon Eastern |
+| Event registration opens | 73 | Sunday, noon Eastern |
+
+Because that Wednesday is always a Wednesday, each one always lands on the same
+weekday — which makes it *look* like "the second Sunday in February" and it is
+not. In 2027 the convention runs a week later than in 2026 and so does every
+milestone: a month-anchored rule puts 2027's event registration on 16 May, and
+Gen Con's own API says the 23rd.
+
+**And the convention is the first Saturday of August** — Thursday to Sunday,
+with Trade Day on the Wednesday before.
+
+**Both are checked against Gen Con, not asserted.** `/api/v1/conventions`
+returns every Gen Con since 2009 with its registration timestamps on it; the
+tests record those verbatim and the rule reproduces all four dated milestones
+*to the instant* for 2024, 2025, 2026 and 2027. The show dates are checked
+against the ones Gen Con publishes at `/attend/futuredates`, out to 2030. To the
+instant matters because February is on standard time and May is on summer time,
+and an hour out on a queue that empties in ten minutes is the whole thing.
+
+**Two rows carry no date, and say so.** Gen Con publishes none for VIG rebooking
+— its own VIG page says the specifics "are detailed in the VIG newsletter, which
+is emailed in December" — and none for housing anywhere on the site. Both are
+listed with what *is* known instead: that VIGs buy before badge registration
+opens and book hotels before housing does. An invented date on a page like this
+is worse than none, because it is a diary entry somebody plans a year around,
+and it is the reason to trust the other four.
+
+Derived rather than fetched, so the page works with no network and answers for
+any year. One field is deliberately left out: the API also carries a bare
+`registration_start` 44 days before the show, which Gen Con does not label
+anywhere, and a row whose name would have to be guessed does not belong here.
+
 ### Your own schedule
 
-The **Schedule** tab is the four days of the convention — Thursday to Sunday —
+The **Schedule** page is the four days of the convention — Thursday to Sunday —
 with what you have committed to on each of them, drawn to scale.
 
 **Why a timeline rather than a list.** A list of times can be read; it cannot be
@@ -645,7 +711,7 @@ in Thursday where they are standing, and highlighting Thursday for them would
 be a day out.
 
 **Adding things.** Two places, and both offer individual *sessions* rather than
-titles. The Schedule tab's own search looks across the whole feed; a room's
+titles. The Schedule page's own search looks across the whole feed; a room's
 dialog has a `+` on every session it lists. That distinction matters: the map's
 search deliberately collapses eight showings of one game into a single result,
 which is right for "take me there" and wrong here, where the whole question is
@@ -659,7 +725,7 @@ it. From there you can add it, show it on the map, or start directions to it.
 
 **And a schedule is not only sessions.** Lunch is a commitment, twenty minutes
 at a stand is a commitment, and both of them cost the same walk a seminar costs.
-So the Schedule tab's search carries the same **Everything · Events · Food ·
+So the Schedule page's search carries the same **Everything · Events · Food ·
 Vendors · Places** row the map's does, and choosing anything but a session opens
 a small form instead of adding it, because a food truck has no times of its own:
 which day, from when, to when. Everything downstream treats what comes out
@@ -755,7 +821,7 @@ at — so the results open on a kind alone, with nothing typed. It is not counte
 on the **Filters** button, though, because it hides nothing: a "1" there would
 claim something was being held back.
 
-The Schedule tab carries the same row — see **Your own schedule** above for what
+The Schedule page carries the same row — see **Your own schedule** above for what
 happens when you pick something with no times of its own.
 
 **Each kind gets the filters that can be true of it.** This is the whole point
@@ -1738,6 +1804,7 @@ src/
     filters.ts       The kind, the event dimensions, and what pressing one leaves
     vendors.ts       What a stand is, where it is and what it sells
     plan.ts          The four days, stops, travel, lanes and the shared axis
+    key-dates.ts     Badges, housing and tickets — the rule and its provenance
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
     walkable.ts      The floor you can stand on, as a grid, and A* over it
@@ -1763,6 +1830,8 @@ src/
     SearchBar.tsx    Search box and its results
     EventFilters.tsx The kind row and the filter panel, shared by both searches
     PlanView.tsx     The four-day schedule, on one ruler
+    DatesView.tsx    The year's deadlines, counted down
+    AppMenu.tsx      One button, and the pages behind it
     NavPanel.tsx     Directions: the two ends, how to choose them, the distance
     Legend.tsx       Category key and the amenities toggle
 plans/

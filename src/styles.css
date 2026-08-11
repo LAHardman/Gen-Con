@@ -1546,42 +1546,294 @@ body {
 
 /* ---------------------------------------------------------------- the tabs */
 
-.app__tabs {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--panel-raised);
+/* ------------------------------------------------------------- the menu */
+
+/*
+ * One button, and the sheet it opens.
+ *
+ * Two tabs fitted in this header; three did not, on a phone already carrying a
+ * title, an event count, a basemap switch and the selected room. See `AppMenu`
+ * for the rest of the reasoning.
+ */
+.menu {
+  position: relative;
   flex: 0 0 auto;
 }
 
-.app__tab {
+.menu__button {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: 0;
+  gap: 9px;
+  padding: 7px 14px 7px 11px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
+  background: var(--panel-raised);
+  color: var(--text);
   font: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
 }
 
-.app__tab--active {
-  background: var(--accent);
-  color: #fff;
+.menu__button--open {
+  border-color: var(--accent);
 }
 
-.app__tab-count {
+/* Three lines, drawn rather than fetched: an icon font is a network request
+   for something a box-shadow already does. */
+.menu__bars {
+  display: grid;
+  gap: 3px;
+  width: 16px;
+}
+
+.menu__bars span {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.menu__here {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu__sheet {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 15rem;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.menu__item {
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu__item:hover {
+  background: var(--panel-raised);
+}
+
+/* Marked rather than hidden: a menu that leaves out where you already are
+   makes you count what is left to work out where that is. */
+.menu__item--current {
+  background: var(--panel-raised);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.menu__item-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.menu__item-count {
   min-width: 18px;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--accent);
+  color: #fff;
   font-size: 11px;
+  font-weight: 700;
   text-align: center;
+}
+
+.menu__item-detail {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* -------------------------------------------------------------- key dates */
+
+/*
+ * Over the map, like the schedule, and for the same reason: Leaflet loses track
+ * of its own size the moment its container is hidden.
+ */
+.dates {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  overflow-y: auto;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+.dates__head h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.dates__head p {
+  margin: 0 0 18px;
+  max-width: 46rem;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dates__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Three columns on anything wide enough: when, what, how far off. On a phone
+ * they stack, and the countdown moves up beside the date rather than sitting
+ * alone at the bottom of every card.
+ */
+.dates__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.dates__row--past {
+  opacity: 0.55;
+}
+
+.dates__row--next {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.dates__when {
+  display: grid;
+  gap: 1px;
+  grid-column: 1;
+}
+
+.dates__date {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dates__date--none {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.dates__clock {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dates__away {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dates__row--past .dates__away {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dates__what {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.dates__what h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+}
+
+.dates__next-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dates__what p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* What is known when the date is not — never printed beside a guess at one. */
+.dates__instead {
+  color: var(--text) !important;
+  font-size: 12px !important;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.dates__what a {
+  justify-self: start;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.dates__note {
+  max-width: 46rem;
+  margin: 18px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (min-width: 700px) {
+  .dates__row {
+    grid-template-columns: 13rem minmax(0, 1fr) 7rem;
+  }
+
+  .dates__what {
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: 0;
+  }
+
+  .dates__away {
+    grid-column: 3;
+    text-align: right;
+  }
 }
 
 /* ------------------------------------------------------------ the schedule */
