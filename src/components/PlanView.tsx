@@ -30,8 +30,8 @@ import { useMemo, useState } from 'react';
 import {
   dayAt,
   formatClock,
+  formatTime,
   formatTimeRange,
-  offsetMinutesOf,
   type ConEvent,
 } from '../data/events';
 import {
@@ -42,11 +42,22 @@ import {
   minutesInto,
   planDay,
   sharedAxis,
+  SHORTEST_BLOCK,
   type DayAxis,
   type PlanEntry,
   type PlannedItem,
+  type Stop,
 } from '../data/plan';
-import { searchSessions, type EventSearchIndex, type SessionHit } from '../data/search';
+import {
+  hitLabel,
+  search,
+  searchSessions,
+  type EventSearchIndex,
+  type SearchHit,
+  type SessionHit,
+} from '../data/search';
+import { openingFor, type Opening } from '../data/food';
+import { AddStop } from './AddStop';
 import {
   isAsking,
   formatCost,
@@ -65,11 +76,16 @@ interface Props {
   feedDays: readonly string[];
   events: EventSearchIndex;
   choices: FilterChoices;
+  /**
+   * The convention's own offset — see `conventionOffset`. Null when nothing has
+   * said what it is, and then nothing here is today and no stop can be timed.
+   */
+  offsetMinutes: number | null;
   nowMs: number;
-  /** Show a planned entry on the map. */
-  onShowRoom: (roomId: string) => void;
   /** Open a session in full, which is where adding actually happens. */
   onOpenEvent: (hit: SessionHit) => void;
+  /** Open something already on the schedule — where removing it happens. */
+  onOpenEntry: (entry: PlanEntry) => void;
 }
 
 /**
@@ -80,9 +96,6 @@ interface Props {
  * than four. A half-hour seminar still gets a block you can hit with a thumb.
  */
 const PER_MINUTE = 1.1;
-
-/** Minutes below which a block is drawn at a fixed minimum, to stay readable. */
-const SHORTEST_BLOCK = 24;
 
 /**
  * Room above the first hour line for its own label.
@@ -96,22 +109,23 @@ const LABEL_ROOM = 12;
 
 const RESULT_LIMIT = 20;
 
-export function PlanView({ plan, feedDays, events, choices, nowMs, onShowRoom, onOpenEvent }: Props) {
+export function PlanView({
+  plan,
+  feedDays,
+  events,
+  choices,
+  offsetMinutes,
+  nowMs,
+  onOpenEvent,
+  onOpenEntry,
+}: Props) {
   const days = useMemo(() => conventionDays(feedDays, plan.entries), [feedDays, plan.entries]);
 
   /*
-   * Which day it is *there*. The offset comes from the data rather than from a
-   * constant, and from the plan before the feed so that a plan outliving its
-   * feed still highlights the right column. With neither, nothing is today —
-   * which is correct: nothing has said when the convention is.
+   * Which day it is *there*, at the offset the data carries rather than a
+   * constant. With nothing to take one from, nothing is today — which is
+   * correct: nothing has said when the convention is.
    */
-  const offsetMinutes = useMemo(() => {
-    for (const entry of plan.entries) {
-      const offset = offsetMinutesOf(entry.start);
-      if (offset !== null) return offset;
-    }
-    return null;
-  }, [plan.entries]);
   const today = offsetMinutes === null ? null : dayAt(nowMs, offsetMinutes);
 
   const [chosen, setChosen] = useState<string | null>(null);
@@ -134,6 +148,8 @@ export function PlanView({ plan, feedDays, events, choices, nowMs, onShowRoom, o
         events={events}
         choices={choices}
         feedDays={feedDays}
+        day={shown}
+        offsetMinutes={offsetMinutes}
         onOpenEvent={onOpenEvent}
       />
 
@@ -211,8 +227,7 @@ export function PlanView({ plan, feedDays, events, choices, nowMs, onShowRoom, o
                       axis={axis}
                       offsetMinutes={offsetMinutes ?? 0}
                       nowMinutes={day === today ? nowMinutes : null}
-                      onRemove={plan.remove}
-                      onShowRoom={onShowRoom}
+                      onOpen={onOpenEntry}
                     />
                   ))}
                 </div>
@@ -239,9 +254,16 @@ const atMinute = (axis: DayAxis, minute: number) =>
  */
 const clockAt = (minute: number) => formatClock((minute % (24 * 60)) * 60_000, 0);
 
+/**
+ * How much is on a day.
+ *
+ * "Planned" rather than "events", because a day can hold a seminar, a food
+ * truck and twenty minutes at a stand, and calling those three events would be
+ * calling two of them something they are not.
+ */
 const countOn = (entries: readonly PlanEntry[], day: string) => {
   const on = entries.filter((entry) => entry.start.slice(0, 10) === day).length;
-  return on === 0 ? 'nothing yet' : on === 1 ? '1 event' : `${on} events`;
+  return on === 0 ? 'nothing yet' : `${on} planned`;
 };
 
 /* ------------------------------------------------------------------ a day */
@@ -254,8 +276,7 @@ function DayColumn({
   axis,
   offsetMinutes,
   nowMinutes,
-  onRemove,
-  onShowRoom,
+  onOpen,
 }: {
   day: string;
   shown: boolean;
@@ -266,8 +287,7 @@ function DayColumn({
   offsetMinutes: number;
   /** Where now sits on the shared ruler, or null on any day that is not today. */
   nowMinutes: number | null;
-  onRemove: (id: string) => void;
-  onShowRoom: (roomId: string) => void;
+  onOpen: (entry: PlanEntry) => void;
 }) {
   const top = (atMs: number) => atMinute(axis, minutesInto(atMs, day, offsetMinutes));
 
@@ -279,7 +299,7 @@ function DayColumn({
       {items.length === 0 && <p className="plan__empty plan__empty--column">Nothing planned</p>}
 
       {items.map((item) => (
-        <Block key={item.entry.id} item={item} top={top} onRemove={onRemove} onShowRoom={onShowRoom} />
+        <Block key={item.entry.id} item={item} top={top} onOpen={onOpen} />
       ))}
 
       {/*
@@ -303,17 +323,43 @@ function DayColumn({
 function Block({
   item,
   top,
-  onRemove,
-  onShowRoom,
+  onOpen,
 }: {
   item: PlannedItem;
   top: (atMs: number) => number;
-  onRemove: (id: string) => void;
-  onShowRoom: (roomId: string) => void;
+  onOpen: (entry: PlanEntry) => void;
 }) {
-  const { entry, startMs, endMs, travelMinutes, leaveByMs, clash } = item;
+  const { entry, startMs, endMs, travelMinutes, leaveByMs, clash, lane, lanes } = item;
   const minutes = Math.max(SHORTEST_BLOCK, (endMs - startMs) / 60_000);
   const where = entryWhere(entry);
+
+  /*
+   * Twenty minutes is twenty-six pixels, and three stacked lines are sixty.
+   *
+   * Stacked in a box that short the flex items shrink to nothing, so a short
+   * block is laid out as one line instead: the time, the name and the walk,
+   * which are the three things it exists to say. The place goes, into the
+   * tooltip and the panel — it is the one thing already visible on the map.
+   */
+  const short = minutes * PER_MINUTE < 62;
+
+  /*
+   * A walk of no minutes is not a walk.
+   *
+   * Two stops at the same food truck, or two sessions in one hall, measure zero
+   * — and "0 min" beside a band of no height says nothing except that something
+   * was calculated. The clash colour still applies where it applies: that one is
+   * about the times overlapping, not about the distance.
+   */
+  const walk = travelMinutes !== null && travelMinutes > 0 ? travelMinutes : null;
+
+  // Side by side where two things overlap — see `inLanes`. A percentage of the
+  // column rather than a fraction of a fixed width, because a column is a
+  // quarter of a phone on one layout and a third of a desktop on another.
+  const across = {
+    left: `${(lane / lanes) * 100}%`,
+    width: `${100 / lanes}%`,
+  };
 
   return (
     <>
@@ -326,74 +372,132 @@ function Block({
         * which is exactly the shortest band on the page. So the band is the
         * picture and the block below carries the words.
         */}
-      {travelMinutes !== null && leaveByMs !== null && (
+      {walk !== null && leaveByMs !== null && (
         <div
           className={`plan__travel${clash ? ' plan__travel--clash' : ''}`}
-          style={{ top: `${top(leaveByMs)}px`, height: `${travelMinutes * PER_MINUTE}px` }}
+          style={{
+            top: `${top(leaveByMs)}px`,
+            height: `${walk * PER_MINUTE}px`,
+            ...across,
+          }}
           aria-hidden="true"
         />
       )}
 
-      <article
-        className={`plan__block${clash ? ' plan__block--clash' : ''}`}
-        style={{ top: `${top(startMs)}px`, height: `${minutes * PER_MINUTE}px` }}
+      {/*
+        * The block is the button.
+        *
+        * It used to carry a "Map" and a "Remove" of its own, and on a stop —
+        * twenty-six pixels tall in a column a quarter of a phone wide — those
+        * two links were the only thing that fitted, so the block said "Map
+        * Remove" and not what it was. Now the whole block opens what it is, and
+        * both actions live in the panel that opens. Removing something from a
+        * schedule is not an action to be one mis-tap away from either.
+        */}
+      <button
+        type="button"
+        className={`plan__block${clash ? ' plan__block--clash' : ''}${short ? ' plan__block--short' : ''}`}
+        style={{ top: `${top(startMs)}px`, height: `${minutes * PER_MINUTE}px`, ...across }}
+        onClick={() => onOpen(entry)}
         // The colour carries the alarm and the line beside the time carries the
         // number; a column can be a quarter of a phone wide, so the sentence
-        // that explains it lives here rather than being truncated on screen.
+        // that explains it lives here rather than being truncated on screen —
+        // along with the place, which a short block has no room to print.
         title={
-          clash
-            ? `The event before this one is still running when you would have to leave for it — a ${travelMinutes} minute walk.`
-            : undefined
+          [
+            short ? `${entry.title} · ${where}` : null,
+            clash
+              ? `The event before this one is still running when you would have to leave for it — a ${travelMinutes} minute walk.`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' — ') || undefined
         }
       >
+        {/*
+          * On a short block the range becomes a start and the walk moves out of
+          * the time into its own place at the end. Both for the same reason:
+          * one line has room for the name or for "1:00 PM – 1:25 PM · 14 min
+          * walk", and the name is what the block is for.
+          */}
         <span className="plan__block-time">
-          {formatTimeRange(entry as ConEvent & PlanEntry)}
-          {travelMinutes !== null && (
+          {short ? formatTime(entry.start) : formatTimeRange(entry as ConEvent & PlanEntry)}
+          {walk !== null && !short && (
             <span className={`plan__block-walk${clash ? ' plan__block-walk--clash' : ''}`}>
-              {clash ? ` · ${travelMinutes} min walk · tight` : ` · ${travelMinutes} min walk`}
+              {clash ? ` · ${walk} min walk · tight` : ` · ${walk} min walk`}
             </span>
           )}
         </span>
         <span className="plan__block-title">{entry.title}</span>
-        <span className="plan__block-where">{where}</span>
-        <span className="plan__block-actions">
-          {entry.roomId && (
-            <button type="button" className="plan__link" onClick={() => onShowRoom(entry.roomId!)}>
-              Map
-            </button>
-          )}
-          <button
-            type="button"
-            className="plan__link"
-            onClick={() => onRemove(entry.id)}
-            aria-label={`Remove ${entry.title} from your schedule`}
-          >
-            Remove
-          </button>
-        </span>
-      </article>
+        {short && walk !== null && (
+          // No "tight" here: the colour says it, the band above says it, and
+          // the word costs four characters the name needs more.
+          <span className={`plan__block-walk${clash ? ' plan__block-walk--clash' : ''}`}>
+            {`${walk} min`}
+          </span>
+        )}
+        {!short && <span className="plan__block-where">{where}</span>}
+      </button>
     </>
   );
 }
 
 /* --------------------------------------------------------------- adding */
 
+/**
+ * A search hit as something to be somewhere at.
+ *
+ * The key is the *thing* rather than the entry: a stand keeps Gen Con's own id
+ * where it has one and its name where it does not, and a room keeps its room id.
+ * `stopEntry` is what puts the time on the end of it, so that the same truck at
+ * nine in the morning and at seven in the evening are two entries and not one
+ * overwriting the other.
+ *
+ * The room is the hall, exactly as it is for a session: nobody walks to a booth,
+ * they walk to the hall and then look for the aisle — which is also why the walk
+ * to a stand costs what the walk to a session in the same hall costs.
+ */
+function stopFor(hit: SearchHit, title: string, where: string): Stop {
+  const key = hit.exhibitor
+    ? `vendor:${hit.exhibitor.id ?? `${hit.exhibitor.name}:${hit.exhibitor.spot}`}`
+    : hit.room
+      ? `place:${hit.room.id}`
+      : `pin:${hit.pin!.id}`;
+  return {
+    key,
+    title,
+    where,
+    roomId: hit.room?.id,
+    at: hit.pin ? { lat: hit.pin.lat, lng: hit.pin.lng } : undefined,
+  };
+}
+
 function PlanSearch({
   plan,
   events,
   choices,
   feedDays,
+  day,
+  offsetMinutes,
   onOpenEvent,
 }: {
   plan: Plan;
   events: EventSearchIndex;
   choices: FilterChoices;
   feedDays: readonly string[];
+  /** The day the schedule is showing, which a new stop lands on by default. */
+  day: string | null;
+  /** The convention's own offset. Null when nothing has said what it is. */
+  offsetMinutes: number | null;
   onOpenEvent: (hit: SessionHit) => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<EventFilter>({});
   const [sort, setSort] = useState<SortKey | undefined>(undefined);
+  /** The thing whose times are being chosen, once one has been picked. */
+  const [placing, setPlacing] = useState<{ stop: Stop; opening: Opening | null } | null>(null);
+  const kind = filter.kind ?? 'all';
+  const days = useMemo(() => conventionDays(feedDays, plan.entries), [feedDays, plan.entries]);
 
   /*
    * Only the four days can be offered.
@@ -411,8 +515,23 @@ function PlanSearch({
         .slice(0, RESULT_LIMIT),
     [query, events, filter, sort],
   );
+
+  /*
+   * The things that are not sessions, when those are what is being asked for.
+   *
+   * A different search, because they are a different question: `searchSessions`
+   * answers with showings and these have none. Only run when a kind that can
+   * produce one is chosen, so the ordinary case pays nothing for it.
+   */
+  const stops = useMemo(
+    () =>
+      kind === 'food' || kind === 'vendor' || kind === 'place'
+        ? search(query, events, RESULT_LIMIT, filter, sort).filter((hit) => hit.room || hit.pin)
+        : [],
+    [kind, query, events, filter, sort],
+  );
   // A filter alone is a question — "everything free on Saturday afternoon" has
-  // no word in it — so the list opens on either.
+  // no word in it, and neither has "food" — so the list opens on either.
   const asked = query.trim().length >= 2 || isAsking(filter);
 
   return (
@@ -428,27 +547,79 @@ function PlanSearch({
       />
 
       {/*
-        * No kind row here, unlike the map's search.
+        * The kind row is here too, but it can only offer what a day can hold.
         *
-        * A schedule holds sessions: they start, they end, and the walk between
-        * two of them is the whole point of the column. A taco truck has none of
-        * that, so offering "Food" above a box that can only add events would be
-        * offering something the schedule cannot then hold. The map's search is
-        * where you find lunch; this one is where you decide your Saturday.
+        * A session brings its own times; a truck, a stand and a hall do not, so
+        * those three are added through the little form below instead. Where
+        * nothing has said what the convention's offset is there is no day to put
+        * one on and no clock to read a typed time against, so only sessions —
+        * which carry their own timestamps — can be added at all.
         */}
       <EventFilters
         filter={filter}
         sort={sort}
-        kinds={false}
+        kinds={offsetMinutes !== null && days.length > 0}
         days={feedDays.filter(isConventionDay)}
         choices={choices}
         events={events}
         query={query}
-        onChange={setFilter}
+        onChange={(next) => {
+          setFilter(next);
+          setPlacing(null);
+        }}
         onSort={setSort}
       />
 
-      {asked && (
+      {placing && offsetMinutes !== null && days.length > 0 && (
+        <AddStop
+          stop={placing.stop}
+          opening={placing.opening}
+          days={days}
+          day={day && days.includes(day) ? day : days[0]}
+          offsetMinutes={offsetMinutes}
+          entries={plan.entries}
+          onAdd={(entry) => {
+            plan.add(entry);
+            setPlacing(null);
+          }}
+          onCancel={() => setPlacing(null)}
+        />
+      )}
+
+      {asked && stops.length > 0 && (
+        <ul className="plan__hits" aria-label="Places to add">
+          {stops.map((hit) => {
+            const { title, detail } = hitLabel(hit);
+            return (
+              <li key={hit.key}>
+                <button
+                  type="button"
+                  className="plan__hit"
+                  onClick={() =>
+                    setPlacing({
+                      stop: stopFor(hit, title, detail),
+                      opening: hit.exhibitor ? openingFor(hit.exhibitor) : null,
+                    })
+                  }
+                >
+                  <span className="search__hit-main">{title}</span>
+                  <span className="search__hit-sub">{detail}</span>
+                  <span className="plan__hit-mark" aria-hidden="true">
+                    ＋
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/*
+        * Sessions, unless something else was asked for. `searchSessions` has no
+        * idea what a kind is — it answers with showings and only showings — so
+        * the question of whether showings were wanted is asked here.
+        */}
+      {asked && (kind === 'all' || kind === 'event') && (
         <ul className="plan__hits" aria-label="Matching sessions">
           {hits.length === 0 && <li className="search__empty">Nothing matches</li>}
           {hits.map((hit) => {

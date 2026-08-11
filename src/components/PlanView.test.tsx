@@ -13,7 +13,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PlanView } from './PlanView';
-import { planEntry, type PlanEntry } from '../data/plan';
+import { planEntry, stopEntry, type PlanEntry } from '../data/plan';
 import type { ConEvent } from '../data/events';
 import type { EventSearchIndex } from '../data/search';
 import type { Plan } from '../hooks/usePlan';
@@ -34,7 +34,10 @@ const session = (over: Partial<ConEvent> & { id: string; start: string }): ConEv
 });
 
 /** A plan holding exactly these, with the calls recorded. */
-function planOf(entries: PlanEntry[]): Plan & { toggle: ReturnType<typeof vi.fn> } {
+function planOf(entries: PlanEntry[]): Plan & {
+  toggle: ReturnType<typeof vi.fn>;
+  add: ReturnType<typeof vi.fn>;
+} {
   const toggle = vi.fn();
   return {
     entries,
@@ -56,6 +59,7 @@ const indexOf = (sessions: ConEvent[], roomId = 'hall-a'): EventSearchIndex => (
 });
 
 const opened = vi.fn();
+const openedEntry = vi.fn();
 
 const show = (plan: Plan, events: EventSearchIndex = indexOf([]), nowMs = SATURDAY_AFTERNOON) =>
   render(
@@ -64,9 +68,10 @@ const show = (plan: Plan, events: EventSearchIndex = indexOf([]), nowMs = SATURD
       feedDays={FEED_DAYS}
       events={events}
       choices={filterChoices(events.entries.map((entry) => entry.event))}
+      offsetMinutes={-240}
       nowMs={nowMs}
-      onShowRoom={vi.fn()}
       onOpenEvent={opened}
+      onOpenEntry={openedEntry}
     />,
   );
 
@@ -82,6 +87,7 @@ const afternoon = planEntry(
 afterEach(() => {
   cleanup();
   opened.mockClear();
+  openedEntry.mockClear();
 });
 
 describe('the four days', () => {
@@ -125,8 +131,8 @@ describe('the four days', () => {
 
   it('counts what is on each day', () => {
     show(planOf([morning, afternoon, planEntry(session({ id: 't', start: `${THURSDAY}T10:00:00-04:00` }), { id: 'hall-a' })]));
-    expect(screen.getByRole('tab', { name: /^Saturday/ }).textContent).toContain('2 events');
-    expect(screen.getByRole('tab', { name: /^Thursday/ }).textContent).toContain('1 event');
+    expect(screen.getByRole('tab', { name: /^Saturday/ }).textContent).toContain('2 planned');
+    expect(screen.getByRole('tab', { name: /^Thursday/ }).textContent).toContain('1 planned');
     expect(screen.getByRole('tab', { name: /^Sunday/ }).textContent).toContain('nothing yet');
   });
 });
@@ -225,6 +231,41 @@ describe('the mark for now', () => {
   });
 });
 
+describe('a block on the day', () => {
+  const blocks = () => [...document.querySelectorAll('.plan__block')] as HTMLElement[];
+
+  it('opens what it is rather than carrying its own buttons', () => {
+    // A twenty-minute stop is twenty-six pixels of a column a quarter of a
+    // phone wide: room for its own name or for a "Map" and a "Remove", not
+    // both — and the version with the buttons showed neither name nor place.
+    show(planOf([morning]));
+    expect(screen.queryByRole('button', { name: /^Map$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull();
+
+    fireEvent.click(blocks()[0]);
+    expect(openedEntry).toHaveBeenCalledTimes(1);
+    expect(openedEntry.mock.calls[0][0].id).toBe('morning');
+  });
+
+  it('draws two visits to the same place as two separate blocks', () => {
+    // Breakfast and dinner at one truck. They share a key and differ by the
+    // clock in their ids, which is what keeps them apart here and what lets
+    // either be removed without touching the other.
+    const truck = { key: 'vendor:1', title: 'Arepas', where: 'Food Truck 12', roomId: 'block-party-street' };
+    const when = { day: SATURDAY, offsetMinutes: -240 };
+    const breakfast = stopEntry(truck, { ...when, fromMinutes: 8 * 60, toMinutes: 8 * 60 + 30 });
+    const dinner = stopEntry(truck, { ...when, fromMinutes: 19 * 60, toMinutes: 19 * 60 + 30 });
+    expect(breakfast.id).not.toBe(dinner.id);
+
+    show(planOf([breakfast, dinner]));
+    const arepas = blocks().filter((one) => one.textContent?.includes('Arepas'));
+    expect(arepas).toHaveLength(2);
+
+    fireEvent.click(arepas[1]);
+    expect(openedEntry.mock.calls[0][0].id).toBe(dinner.id);
+  });
+});
+
 describe('adding a session', () => {
   const sessions = [
     session({ id: 'thu', title: 'Painting workshop', start: `${THURSDAY}T10:00:00-04:00`, end: `${THURSDAY}T12:00:00-04:00` }),
@@ -294,13 +335,113 @@ describe('adding a session', () => {
     expect(offered[0]).toContain('Saturday');
   });
 
-  it('does not offer a kind of thing a schedule cannot hold', () => {
-    // The map's search has Food, Vendors and Places above it. A column here is
-    // drawn from a start, an end and the walk in between, and a taco truck has
-    // none of the three — so offering it would be offering something that
-    // could then only be refused.
-    show(planOf([]), indexOf(sessions));
-    expect(screen.queryByRole('group', { name: /what to search for/i })).toBeNull();
+});
+
+describe('adding something that is not a session', () => {
+  const kind = (label: string) =>
+    within(screen.getByRole('group', { name: /what to search for/i })).getByRole('button', {
+      name: label,
+    });
+
+  it('offers a food truck, and asks when rather than adding it blind', () => {
+    // A session brings its own times; a truck brings none. So the question a
+    // result answers here is not "is this the one" but "when are you going".
+    show(planOf([]));
+    fireEvent.click(kind('Food'));
+    const offered = within(screen.getByRole('list', { name: /places to add/i })).getAllByRole(
+      'button',
+    );
+    expect(offered.length).toBeGreaterThan(0);
+    fireEvent.click(offered[0]);
+    expect(screen.getByLabelText('From')).toBeTruthy();
+    expect(screen.getByLabelText('To')).toBeTruthy();
+  });
+
+  it('puts it on the plan at the times that were typed', () => {
+    const plan = planOf([]);
+    show(plan);
+    fireEvent.click(kind('Food'));
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
+    );
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: SATURDAY } });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '13:00' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '13:20' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Add to schedule$/ }));
+
+    expect(plan.add).toHaveBeenCalledTimes(1);
+    const entry = plan.add.mock.calls[0][0] as PlanEntry;
+    expect(entry.kind).toBe('stop');
+    // The convention's own clock, not the viewer's — the one thing that would
+    // otherwise be wrong by hours for anybody planning from another zone.
+    expect(entry.start).toBe(`${SATURDAY}T13:00:00-04:00`);
+    expect(entry.end).toBe(`${SATURDAY}T13:20:00-04:00`);
+    expect(entry.roomId).toBeTruthy();
+  });
+
+  it('is walked to like anything else once it is on the day', () => {
+    // The whole reason it is worth adding: a truck across the campus from the
+    // morning game costs the same walk a seminar there would cost, and the
+    // schedule has to say so.
+    const lunch = {
+      id: 'vendor:1@2026-08-01T13:30',
+      kind: 'stop' as const,
+      title: 'Arepas',
+      start: `${SATURDAY}T13:30:00-04:00`,
+      end: `${SATURDAY}T14:00:00-04:00`,
+      roomId: 'block-party-street',
+      where: 'Block Party',
+    };
+    show(planOf([morning, lunch]));
+    const block = [...document.querySelectorAll('.plan__block')].find((one) =>
+      one.textContent?.includes('Arepas'),
+    )! as HTMLElement;
+    expect(within(block).getByText(/^\d+ min/).textContent).toMatch(/^\d+ min/);
+  });
+
+  it('says whether they are open then, and whose hours those are', () => {
+    // Gen Con publishes no hours for 2026 anywhere a program can reach. Showing
+    // last year's without the year would be telling somebody when to turn up
+    // using a different convention's times.
+    show(planOf([]));
+    fireEvent.click(kind('Food'));
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
+    );
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '13:00' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '13:20' } });
+    expect(screen.getByText(/open then, by 2025/i)).toBeTruthy();
+
+    // Two in the morning: shut, and it has to say so before the Add is pressed.
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '02:00' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '02:30' } });
+    expect(screen.getByText(/shut then, by 2025/i)).toBeTruthy();
+  });
+
+  it('catches the span that starts open and ends shut', () => {
+    // The mistake a check on the start time alone calls fine: half past eight
+    // until half past nine at a truck that shuts at nine.
+    show(planOf([]));
+    fireEvent.click(kind('Food'));
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
+    );
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '20:30' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '21:30' } });
+    expect(screen.getByText(/only part of that/i)).toBeTruthy();
+  });
+
+  it('says nothing about hours nobody publishes', () => {
+    // Rather than a reassuring silence that reads the same as "checked, fine".
+    show(planOf([]));
+    fireEvent.click(kind('Places'));
+    fireEvent.change(screen.getByLabelText('Search events to add to your schedule'), {
+      target: { value: 'exhibit hall a' },
+    });
+    fireEvent.click(
+      within(screen.getByRole('list', { name: /places to add/i })).getAllByRole('button')[0],
+    );
+    expect(screen.getByText(/nobody publishes hours for this one/i)).toBeTruthy();
   });
 });
 

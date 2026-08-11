@@ -20,6 +20,7 @@ import { usePlanDescriptions } from './hooks/usePlanDescriptions';
 import { isHappeningAt } from './data/events';
 import { buildEventSearchIndex } from './data/search';
 import { filterChoices } from './data/filters';
+import { conventionOffset } from './data/plan';
 import {
   pinPlace,
   placeRoom,
@@ -92,6 +93,20 @@ export default function App() {
   const choices = useMemo(
     () => filterChoices(eventSearchIndex.entries.map((entry) => entry.event)),
     [eventSearchIndex],
+  );
+
+  /*
+   * The convention's own offset, worked out once for everything that needs it.
+   *
+   * The schedule needs it to know which column is today; adding a food truck at
+   * half past one needs it to know whose half past one. Taken from the plan
+   * first so a plan that outlives its feed still reads its own days right, then
+   * from the feed. Null when neither has said, and null is a real answer — see
+   * `conventionOffset`.
+   */
+  const offsetMinutes = useMemo(
+    () => conventionOffset(plan.entries, feed?.events[0]?.start),
+    [plan.entries, feed],
   );
 
   /*
@@ -473,10 +488,21 @@ export default function App() {
             feedDays={index?.days ?? []}
             events={eventSearchIndex}
             choices={choices}
+            offsetMinutes={offsetMinutes}
             nowMs={nowMs}
-            onShowRoom={handleShowPlannedRoom}
             onOpenEvent={(hit) =>
               setOpenDetail({ kind: 'event', event: hit.event, room: hit.room, pin: hit.pin })
+            }
+            // A block on the schedule opens what it is rather than acting: the
+            // map and the removal both live in that panel now, because a
+            // twenty-minute stop is twenty-six pixels of column and had room
+            // for its own buttons or for its own name, not both.
+            onOpenEntry={(entry) =>
+              setOpenDetail({
+                kind: 'planned',
+                entry,
+                room: entry.roomId ? ROOMS_BY_ID[entry.roomId] : undefined,
+              })
             }
           />
         )}
@@ -504,6 +530,8 @@ export default function App() {
         <EventDialog
           detail={openDetail}
           plan={plan}
+          feedDays={index?.days ?? []}
+          offsetMinutes={offsetMinutes}
           onClose={() => setOpenDetail(null)}
           onShowOnMap={(roomId) => {
             setOpenDetail(null);

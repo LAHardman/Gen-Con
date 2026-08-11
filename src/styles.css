@@ -1676,6 +1676,89 @@ body {
   color: #fff;
 }
 
+/*
+ * Choosing when to be somewhere that has no times of its own.
+ *
+ * In the flow rather than floated, unlike the results list above it: it is a
+ * form being filled in, and a form that hangs over the page it belongs to is a
+ * form that closes when a thumb lands anywhere near it.
+ */
+.stop {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.stop__what {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.stop__where {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.stop__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stop__field {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stop__field select,
+.stop__field input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* What is known about whether they are open — never coloured louder than the
+   certainty behind it, since the hours themselves are last year's. */
+.stop__hours {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.stop__hours--open {
+  color: #6fbf73;
+}
+
+/* The same amber a walk that does not fit is drawn in: both are "this will not
+   work as typed", and two different warning colours would be two alarms. */
+.stop__hours--partly,
+.stop__hours--shut {
+  color: #f0b429;
+}
+
+.stop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* The four days. Always all four, so which day it is stays visible whichever
    day is being looked at. */
 .plan__days {
@@ -1865,16 +1948,24 @@ body {
  */
 .plan__block {
   position: absolute;
+  /* `left` and `width` are set per block: two things at once are drawn side by
+     side rather than one hiding the other. See `inLanes`. */
   left: 0;
-  right: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 1px;
   padding: 6px 8px;
-  border-radius: 8px;
+  border: 0;
   border-left: 3px solid var(--accent);
+  border-radius: 8px;
   background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .plan__block-time {
@@ -1884,6 +1975,13 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.plan__block-walk {
+  /* Its own size rather than the time's: on a short block it is a child of the
+     block instead of the time, and it would otherwise come out at the block's
+     own font size and push the name off the line. */
+  font-size: 11px;
 }
 
 .plan__block-walk--clash {
@@ -1913,6 +2011,43 @@ body {
   margin-top: auto;
 }
 
+/*
+ * A block too short to stack anything in.
+ *
+ * Twenty minutes is twenty-six pixels and the four stacked lines need sixty,
+ * so in a column they shrink to nothing and the only survivor is the actions
+ * row — a block that says "Map Remove" and not what it is. One line instead:
+ * the time, the name, and the two links pushed to the end.
+ */
+.plan__block--short {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 2px 8px;
+}
+
+.plan__block--short .plan__block-title {
+  /* The name wins the line. Everything else on it shrinks ten times faster —
+     without that, "14 min · tight" is bold and unshrinkable and "Arepas"
+     ellipsises down to "A". */
+  flex: 1 1 auto;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.plan__block--short .plan__block-time {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.plan__block--short .plan__block-walk {
+  flex: 0 10 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .plan__link {
   padding: 0;
   border: 0;
@@ -1937,7 +2072,7 @@ body {
 .plan__travel {
   position: absolute;
   left: 0;
-  right: 0;
+  width: 100%;
   min-height: 4px;
   padding: 0;
   border-radius: 6px;

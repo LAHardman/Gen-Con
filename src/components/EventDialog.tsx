@@ -38,22 +38,37 @@ import {
 } from '../data/events';
 import { formatCost, formatLength, lengthMinutes } from '../data/filters';
 import { kindName } from '../data/event-kinds';
-import { planEntry } from '../data/plan';
-import { foodFacets, formatOpening, isFood, openingFor } from '../data/food';
+import { conventionDays, entryWhere, planEntry, type PlanEntry } from '../data/plan';
+import { AddStop } from './AddStop';
+import { subjectFor } from '../hooks/usePlanDescriptions';
+import { foodFacets, formatOpening, isFood, openingFor, vendorById } from '../data/food';
 import { VENUES_BY_ID, type Room } from '../data/venues';
 import type { Exhibitor } from '../data/exhibitors';
 import type { Pin } from '../data/offsite';
 import type { Plan } from '../hooks/usePlan';
 import { useEventNotes, type NotesSubject } from '../hooks/useEventNotes';
 
-/** What the panel is open on. Exactly one of the two. */
+/**
+ * What the panel is open on. Exactly one of the three.
+ *
+ * `planned` is something already on the schedule, and it is deliberately not
+ * the same as `event`: what a plan holds is a *copy* — see `plan.ts` — and the
+ * panel for it has to work with no feed, underground, next year. So it reads
+ * from the entry rather than looking the event back up, and it is where the
+ * schedule's own actions live now that a block on the day carries none.
+ */
 export type Detail =
   | { kind: 'event'; event: ConEvent; room?: Room; pin?: Pin }
-  | { kind: 'vendor'; exhibitor: Exhibitor; room?: Room };
+  | { kind: 'vendor'; exhibitor: Exhibitor; room?: Room }
+  | { kind: 'planned'; entry: PlanEntry; room?: Room };
 
 interface Props {
   detail: Detail;
   plan: Plan;
+  /** The days the feed knows about, for putting a vendor on one of them. */
+  feedDays: readonly string[];
+  /** The convention's own offset, so a typed clock means the clock there. */
+  offsetMinutes: number | null;
   onClose: () => void;
   /** Take the map to where this is. Only offered when it is in a room. */
   onShowOnMap: (roomId: string) => void;
@@ -61,7 +76,33 @@ interface Props {
   onNavigate: (room: Room | undefined, pin: Pin | undefined) => void;
 }
 
-export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: Props) {
+/** The stand a stop's id points at, where it points at one. */
+const vendorFor = (id: string) => {
+  const found = /^vendor:(\d+)@/.exec(id);
+  return found ? vendorById(Number(found[1])) : undefined;
+};
+
+/**
+ * A planned entry with no room, as directions want it.
+ *
+ * Somewhere off campus — a restaurant, an address — is a coordinate and a name,
+ * which is exactly what a pin is. Built here rather than saved, because the
+ * plan stores what it needs and nothing more.
+ */
+const plannedPin = (entry: PlanEntry | null): Pin | undefined =>
+  entry?.at
+    ? { id: entry.id, name: entry.title, address: entry.where, lat: entry.at.lat, lng: entry.at.lng }
+    : undefined;
+
+export function EventDialog({
+  detail,
+  plan,
+  feedDays,
+  offsetMinutes,
+  onClose,
+  onShowOnMap,
+  onNavigate,
+}: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const room = detail.room;
   const pin = detail.kind === 'event' ? detail.pin : undefined;
@@ -69,6 +110,7 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
 
   const event = detail.kind === 'event' ? detail.event : null;
   const vendor = detail.kind === 'vendor' ? detail.exhibitor : null;
+  const planned = detail.kind === 'planned' ? detail.entry : null;
   const held = !!event && plan.planned(event.id);
 
   /*
@@ -80,17 +122,55 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
    * means the source was asked and had nothing, which is different from not
    * having asked.
    */
-  const saved = event ? plan.entries.find((entry) => entry.id === event.id)?.description : undefined;
+  const saved = planned
+    ? planned.description
+    : event
+      ? plan.entries.find((entry) => entry.id === event.id)?.description
+      : // A vendor on the schedule is saved under `vendor:<id>@<when>`, and the
+        // same truck can be on it twice — so the first copy of the words, from
+        // whichever visit fetched them first.
+        vendor?.id !== undefined
+        ? plan.entries.find((entry) => entry.id.startsWith(`vendor:${vendor.id}@`))?.description
+        : undefined;
 
-  const subject: NotesSubject | null = event
-    ? { kind: 'event', id: event.id }
-    : vendor?.id !== undefined
-      ? { kind: 'vendor', id: vendor.id }
-      : null;
+  const subject: NotesSubject | null = planned
+    ? subjectFor(planned.id)
+    : event
+      ? { kind: 'event', id: event.id }
+      : vendor?.id !== undefined
+        ? { kind: 'vendor', id: vendor.id }
+        : null;
 
   const [asked, setAsked] = useState(false);
   const notes = useEventNotes(subject, asked);
   const description = saved || notes.description;
+
+  /*
+   * The vendor a planned stop is a stop at.
+   *
+   * A stop holds `vendor:14179@…` and nothing else about the truck, so the
+   * catalogue is asked. It is bundled rather than fetched, so this answers with
+   * no network — which matters, because their own page is the nearest thing to
+   * a menu that exists anywhere, and the schedule is where somebody standing on
+   * South Street at one o'clock actually wants it.
+   */
+  const plannedVendor = planned?.kind === 'stop' ? vendorFor(planned.id) : undefined;
+
+  /*
+   * Putting a vendor on a day.
+   *
+   * A session brings its own times and this panel only has to say yes to them.
+   * A food truck brings none, so "add" here opens the same little form the
+   * schedule's own search uses — and the entry it makes is an entry like any
+   * other, walked to and drawn like any other.
+   */
+  const [placing, setPlacing] = useState(false);
+  const days = conventionDays(feedDays, plan.entries);
+  // Nothing to put it on, or nothing to read a typed clock against. Both mean
+  // the same thing — nobody has said when the convention is — and offering a
+  // form that could only produce a timestamp at the wrong hour would be worse
+  // than not offering one.
+  const canPlace = !!vendor && days.length > 0 && offsetMinutes !== null;
 
   useEffect(() => closeRef.current?.focus(), []);
   useEffect(() => {
@@ -107,16 +187,17 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
    * rather than special-cased, because the same is true of anywhere else whose
    * room is its whole building.
    */
-  const where =
-    [
-      room ? (room.shortName ?? room.name) : (pin?.name ?? event?.locationText),
-      venue?.shortName ?? venue?.name,
-      event?.tableText && `Table ${event.tableText}`,
-      vendor?.spot,
-    ]
-      .filter(Boolean)
-      .filter((part, at, all) => all.indexOf(part) === at)
-      .join(' · ') || 'Not given';
+  const where = planned
+    ? entryWhere(planned)
+    : [
+        room ? (room.shortName ?? room.name) : (pin?.name ?? event?.locationText),
+        venue?.shortName ?? venue?.name,
+        event?.tableText && `Table ${event.tableText}`,
+        vendor?.spot,
+      ]
+        .filter(Boolean)
+        .filter((part, at, all) => all.indexOf(part) === at)
+        .join(' · ') || 'Not given';
 
   /*
    * Everything the source holds, in the order somebody decides in. A row is
@@ -124,6 +205,19 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
    * absence of a row is already the honest statement that nothing said.
    */
   const rows: Array<[string, string]> = [];
+  if (planned) {
+    /*
+     * From the copy on the device, not from the feed.
+     *
+     * The whole reason a plan holds a copy is that this panel has to open in an
+     * exhibit hall with no signal, and next year, when the feed that made it is
+     * a different convention. So it prints what was saved rather than looking
+     * anything back up.
+     */
+    const as = planned as ConEvent & PlanEntry;
+    rows.push(['When', `${formatDayLabel(dayKey(planned.start))} · ${formatTimeRange(as)}`]);
+    rows.push(['Runs for', formatLength(lengthMinutes(as))]);
+  }
   if (event) {
     rows.push(['When', `${formatDayLabel(dayKey(event.start))} · ${formatTimeRange(event)}`]);
     rows.push(['Runs for', formatLength(lengthMinutes(event))]);
@@ -158,10 +252,19 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
   }
   rows.push(['Where', where]);
 
-  const link = vendor?.website
-    ? { href: vendor.website, label: 'Open their own site ↗' }
-    : event && eventUrl(event)
-      ? { href: eventUrl(event)!, label: 'Open this event on gencon.com ↗' }
+  /*
+   * Where to read more about it, on somebody else's site.
+   *
+   * A planned *session* still links to its page — the id is the one Gen Con
+   * uses. A planned stop does not: its id ends in a clock, and `eventUrl` would
+   * happily turn "…T13:00" into gencon.com/events/00.
+   */
+  const linkedEvent = event ?? (planned?.kind !== 'stop' ? (planned as ConEvent | null) : null);
+  const site = vendor?.website ?? plannedVendor?.website;
+  const link = site
+    ? { href: site, label: 'Open their own site ↗' }
+    : linkedEvent && eventUrl(linkedEvent)
+      ? { href: eventUrl(linkedEvent)!, label: 'Open this event on gencon.com ↗' }
       : null;
 
   return (
@@ -174,14 +277,16 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
         onPointerDown={(pointer) => pointer.stopPropagation()}
       >
         <div className="dialog__header">
-          <span className="dialog__tag">{event ? (event.type ?? 'Event') : (vendor?.kind ?? 'Vendor')}</span>
+          <span className="dialog__tag">
+            {event ? (event.type ?? 'Event') : planned ? 'On your schedule' : (vendor?.kind ?? 'Vendor')}
+          </span>
           <button ref={closeRef} type="button" className="dialog__close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
 
         <h2 className="dialog__title" id="event-dialog-title">
-          {event ? event.title : vendor?.name}
+          {event ? event.title : (planned?.title ?? vendor?.name)}
         </h2>
 
         <dl className="event-dialog__facts">
@@ -221,7 +326,33 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
           </button>
         )}
 
+        {placing && canPlace && (
+          <AddStop
+            stop={{
+              key: `vendor:${vendor!.id ?? `${vendor!.name}:${vendor!.spot}`}`,
+              title: vendor!.name,
+              where,
+              roomId: room?.id,
+            }}
+            opening={opening}
+            days={days}
+            day={days[0]}
+            offsetMinutes={offsetMinutes!}
+            entries={plan.entries}
+            onAdd={(entry) => {
+              plan.add(entry);
+              setPlacing(false);
+            }}
+            onCancel={() => setPlacing(false)}
+          />
+        )}
+
         <div className="dialog__actions">
+          {canPlace && !placing && (
+            <button type="button" className="button button--primary" onClick={() => setPlacing(true)}>
+              Add to schedule
+            </button>
+          )}
           {event && (
             <button
               type="button"
@@ -234,15 +365,42 @@ export function EventDialog({ detail, plan, onClose, onShowOnMap, onNavigate }: 
           {room && (
             <button
               type="button"
-              className={`button${vendor ? ' button--primary' : ''}`}
+              // The primary action of a panel opened *from* the schedule is the
+              // map: you already know when it is — you put it there.
+              className={`button${planned || (vendor && !canPlace) ? ' button--primary' : ''}`}
               onClick={() => onShowOnMap(room.id)}
             >
               Show on map
             </button>
           )}
-          {(room || pin) && (
-            <button type="button" className="button" onClick={() => onNavigate(room, pin)}>
+          {(room || pin || planned?.at) && (
+            <button
+              type="button"
+              className="button"
+              onClick={() => onNavigate(room, pin ?? plannedPin(planned))}
+            >
               Directions
+            </button>
+          )}
+          {/*
+            * Removing lives here rather than on the block.
+            *
+            * A block is a quarter of a phone wide and twenty-six pixels tall
+            * for a stop, and two links in it left no room for the thing's own
+            * name. Removing something from a schedule is also not an action
+            * anybody should be one mis-tap away from, and this is the panel
+            * they opened to check what it was.
+            */}
+          {planned && (
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                plan.remove(planned.id);
+                onClose();
+              }}
+            >
+              Remove from schedule
             </button>
           )}
         </div>

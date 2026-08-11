@@ -121,6 +121,42 @@ describe('filling in what is missing', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('asks the exhibitor endpoint for a food truck, not the event one', async () => {
+    // A stop carries what it is in its own id. Asked for as an event, this
+    // would search 27,467 game codes for "vendor:14179@2026-08-01T13:00" — once
+    // per visit, for the rest of the convention, and never find anything.
+    const asked: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        asked.push(url);
+        return new Response(JSON.stringify({ id: 14179, description: 'Arepas, made to order.' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }),
+    );
+    const { result } = running();
+    act(() => result.current.add(entry('vendor:14179@2026-08-01T13:00', { kind: 'stop' })));
+    await waitFor(() =>
+      expect(result.current.entries[0].description).toBe('Arepas, made to order.'),
+    );
+    expect(asked[0]).toContain('exhibitor_profiles/14179');
+  });
+
+  it('asks for nothing at all about a room', async () => {
+    // Nothing publishes a description of Exhibit Hall A. Asking is a request
+    // that can only fail, so it is not made.
+    vi.stubGlobal('fetch', answering());
+    const { result } = running();
+    act(() => result.current.add(entry('place:hall-a@2026-08-01T13:00', { kind: 'stop' })));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(result.current.entries[0].description).toBeUndefined();
+  });
+
   it('asks for nothing when everything already has one', () => {
     vi.stubGlobal('fetch', answering());
     window.localStorage.setItem(

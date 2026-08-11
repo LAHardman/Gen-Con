@@ -28,9 +28,16 @@ import {
   planEntry,
   sharedAxis,
   weekdayOf,
+  clockMinutes,
+  clockValue,
+  entryEndMs,
+  formatOffset,
+  NOON,
+  stopEntry,
+  suggestedStart,
   type PlanEntry,
 } from './plan';
-import { dayAt, offsetMinutesOf, type ConEvent } from './events';
+import { dayKey, dayAt, offsetMinutesOf, type ConEvent } from './events';
 import { roughMinutes } from './nearby';
 
 /** Gen Con 2026: Trade Day on the Wednesday, then the four days. */
@@ -270,5 +277,184 @@ describe('what an entry remembers', () => {
     const saved = planEntry({ ...event, locationText: 'Some Restaurant' }, undefined, pin);
     expect(saved.where).toBe('Some Restaurant');
     expect(entrySpot(saved)).toEqual({ roomId: undefined, at: { lat: 39.77, lng: -86.16 } });
+  });
+});
+
+/* --------------------------------------------------------------- stops */
+
+describe('somewhere to be that is not a session', () => {
+  const truck = { key: 'vendor:14179', title: 'Arepas', where: 'Block Party', roomId: 'block-party-street' };
+  const EAST = -240;
+
+  it('writes the times in the convention’s own offset', () => {
+    // The one thing that would otherwise be wrong by hours for anybody planning
+    // from another zone: "half past one" has to mean half past one *there*.
+    const lunch = stopEntry(truck, {
+      day: SATURDAY,
+      fromMinutes: 13 * 60 + 30,
+      toMinutes: 14 * 60,
+      offsetMinutes: EAST,
+    });
+    expect(lunch.start).toBe(`${SATURDAY}T13:30:00-04:00`);
+    expect(lunch.end).toBe(`${SATURDAY}T14:00:00-04:00`);
+    expect(dayKey(lunch.start)).toBe(SATURDAY);
+    expect(offsetMinutesOf(lunch.start)).toBe(EAST);
+  });
+
+  it('is walked to exactly like a session, because that is the point', () => {
+    // The whole reason a truck is worth putting on a schedule: the walk to it
+    // costs what the walk to a seminar in the same place costs.
+    const game = entry({ id: 'game', start: `${SATURDAY}T09:00:00-04:00`, roomId: 'hall-a' });
+    const lunch = stopEntry(truck, {
+      day: SATURDAY,
+      fromMinutes: 11 * 60,
+      toMinutes: 11 * 60 + 30,
+      offsetMinutes: EAST,
+    });
+    const [, second] = planDay([game, lunch], SATURDAY);
+    expect(second.entry.id).toBe(lunch.id);
+    expect(second.travelMinutes).toBe(roughMinutes({ roomId: 'hall-a' }, { roomId: 'block-party-street' }));
+    expect(second.travelMinutes).toBeGreaterThan(0);
+  });
+
+  it('keeps two visits to the same place apart', () => {
+    // Breakfast and dinner at the same truck are two commitments on two parts
+    // of the day. An id that was only the truck would make the second one
+    // silently replace the first.
+    const when = { day: SATURDAY, toMinutes: 9 * 60, offsetMinutes: EAST };
+    const breakfast = stopEntry(truck, { ...when, fromMinutes: 8 * 60, toMinutes: 8 * 60 + 30 });
+    const dinner = stopEntry(truck, { ...when, fromMinutes: 19 * 60, toMinutes: 19 * 60 + 30 });
+    expect(breakfast.id).not.toBe(dinner.id);
+    // The same place at the same minute twice is still one thing, which is what
+    // a double-tap should do.
+    expect(stopEntry(truck, { ...when, fromMinutes: 8 * 60, toMinutes: 8 * 60 + 30 }).id).toBe(
+      breakfast.id,
+    );
+  });
+
+  it('reads an end before its start as the next morning', () => {
+    // `<input type="time">` gives back a clock, and a clock has no date on it,
+    // so eleven to half past midnight arrives as 1380 → 30. Refusing it would
+    // refuse the span most likely to be typed at a beer garden.
+    const late = stopEntry(truck, {
+      day: SATURDAY,
+      fromMinutes: 23 * 60,
+      toMinutes: 30,
+      offsetMinutes: EAST,
+    });
+    expect(late.end).toBe(`${SUNDAY}T00:30:00-04:00`);
+    expect(dayKey(late.start)).toBe(SATURDAY);
+    expect(entryEndMs(late) - Date.parse(late.start)).toBe(90 * 60_000);
+  });
+
+  it('suggests a start after whatever is already on that day', () => {
+    // Somebody adding lunch to a Saturday with a game running until one means
+    // lunch after the game, and noon is inside it.
+    const game = entry({
+      id: 'game',
+      start: `${SATURDAY}T09:00:00-04:00`,
+      end: `${SATURDAY}T12:50:00-04:00`,
+      roomId: 'hall-a',
+    });
+    // Up to the next quarter hour, so it reads as a time somebody would pick.
+    expect(suggestedStart([game], SATURDAY)).toBe(13 * 60);
+    // Nothing on the day is nothing to be after.
+    expect(suggestedStart([game], SUNDAY)).toBe(NOON);
+  });
+
+  it('survives a clock that is not one', () => {
+    expect(clockMinutes('13:30')).toBe(13 * 60 + 30);
+    expect(clockMinutes('')).toBeNull();
+    expect(clockMinutes('25:00')).toBeNull();
+    expect(clockValue(13 * 60 + 5)).toBe('13:05');
+    // Past midnight wraps, which is what a clock does.
+    expect(clockValue(25 * 60)).toBe('01:00');
+  });
+
+  it('writes the offset the way the feed writes it', () => {
+    expect(formatOffset(-240)).toBe('-04:00');
+    expect(formatOffset(0)).toBe('+00:00');
+    expect(formatOffset(330)).toBe('+05:30');
+  });
+
+  it('reads back as an entry a plan saved before stops existed', () => {
+    // `kind` is absent on every entry saved by an older release, and absent has
+    // to keep meaning "event" or a saved plan reads as a page of food trucks.
+    expect(entry({ start: `${SATURDAY}T09:00:00-04:00` }).kind).toBeUndefined();
+    expect(stopEntry(truck, { day: SATURDAY, fromMinutes: 60, toMinutes: 90, offsetMinutes: EAST }).kind).toBe('stop');
+  });
+});
+
+describe('what a block says about where it is', () => {
+  const event: ConEvent = {
+    id: 'RPG26ND123',
+    title: 'A game of something',
+    locationText: 'ICC',
+    start: `${THURSDAY}T09:00:00-04:00`,
+  };
+
+  it('keeps a stop’s own label, which is more specific than its room', () => {
+    // "Food Truck 12 · Block Party" against a room called Block Party inside a
+    // venue called Block Party. The room lookup would print the street twice
+    // and lose the only part of it anybody navigates by.
+    const lunch = {
+      ...stopEntry(
+        { key: 'vendor:1', title: 'Arepas', where: 'Food Truck 12 · Block Party', roomId: 'block-party-street' },
+        { day: SATURDAY, fromMinutes: 13 * 60, toMinutes: 13 * 60 + 30, offsetMinutes: -240 },
+      ),
+    };
+    expect(entryWhere(lunch)).toBe('Food Truck 12 · Block Party');
+  });
+
+  it('still prefers the live room for a session, and says the place once', () => {
+    const stale = { ...planEntry(event, { id: 'hall-a' }), where: 'whatever it was called last year' };
+    expect(entryWhere(stale)).toContain('Hall A');
+    const onTheStreet = { ...planEntry(event, { id: 'block-party-street' }), where: 'old' };
+    expect(entryWhere(onTheStreet)).toBe('Block Party');
+  });
+});
+
+describe('two things at the same time', () => {
+  const at = (id: string, from: string, to: string, roomId = 'hall-a'): PlanEntry =>
+    entry({ id, start: `${SATURDAY}T${from}:00-04:00`, end: `${SATURDAY}T${to}:00-04:00`, roomId });
+
+  it('draws them side by side rather than one behind the other', () => {
+    // Twenty minutes at a food truck during a four-hour game is a completely
+    // ordinary thing to plan, and the whole point of drawing it is to see that
+    // it does not fit. Behind the game it says nothing at all.
+    const items = planDay([at('game', '10:00', '14:00'), at('lunch', '13:00', '13:20')], SATURDAY);
+    expect(items.map((one) => one.lane)).toEqual([0, 1]);
+    expect(items.every((one) => one.lanes === 2)).toBe(true);
+  });
+
+  it('gives the whole width back once nothing overlaps', () => {
+    const items = planDay([at('morning', '09:00', '10:00'), at('afternoon', '14:00', '15:00')], SATURDAY);
+    expect(items.every((one) => one.lanes === 1 && one.lane === 0)).toBe(true);
+  });
+
+  it('narrows only the run that clashes, not the rest of the day', () => {
+    // One clash in the morning must not squeeze an afternoon that is fine.
+    const items = planDay(
+      [at('a', '09:00', '11:00'), at('b', '10:00', '10:30'), at('c', '15:00', '16:00')],
+      SATURDAY,
+    );
+    expect(items.map((one) => one.lanes)).toEqual([2, 2, 1]);
+  });
+
+  it('reuses a lane once the thing in it has finished', () => {
+    const items = planDay(
+      [at('a', '09:00', '12:00'), at('b', '09:30', '10:00'), at('c', '10:30', '11:00')],
+      SATURDAY,
+    );
+    // b and c never overlap each other, so c goes back into lane 1.
+    expect(items.map((one) => one.lane)).toEqual([0, 1, 1]);
+  });
+
+  it('counts the height a block is actually drawn at, not the minutes it holds', () => {
+    // A five-minute stop is drawn at the readable minimum, so it covers more of
+    // the column than it owns — and two blocks that only overlap once they are
+    // drawn are still two blocks on top of each other.
+    const items = planDay([at('quick', '09:00', '09:05'), at('next', '09:10', '10:00')], SATURDAY);
+    expect(items.map((one) => one.lane)).toEqual([0, 1]);
   });
 });

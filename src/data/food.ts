@@ -98,6 +98,21 @@ export const FOOD_KIND = 'Food & Drink';
 
 export const isFood = (exhibitor: Exhibitor) => exhibitor.kind === FOOD_KIND;
 
+const BY_ID = new Map(
+  EXHIBITORS.filter((one) => one.id !== undefined).map((one) => [one.id!, one] as const),
+);
+
+/**
+ * A vendor by the id Gen Con files it under.
+ *
+ * Which is what a stop on somebody's schedule holds — `vendor:14179@…` — so a
+ * food truck already on a Saturday can still be shown what it sells and linked
+ * to its own page. Looked up rather than copied into the entry: the catalogue
+ * is bundled, not fetched, so this works with no network, and a vendor whose
+ * website changed between releases reads the new one.
+ */
+export const vendorById = (id: number): Exhibitor | undefined => BY_ID.get(id);
+
 /** A vendor's tags, split into the three questions and the rest. */
 export function foodFacets(exhibitor: Exhibitor): Record<FoodFacet, string[]> & { other: string[] } {
   const out = { cuisine: [] as string[], dish: [] as string[], dietary: [] as string[], other: [] as string[] };
@@ -235,6 +250,53 @@ export function openAt(opening: Opening, atMs: number, offsetMinutes: number): b
   return opening.hours.some(
     (span) => span.days.includes(day) && minute >= span.from && minute < span.to,
   );
+}
+
+/** How much of a span they are open for. */
+export type Coverage = 'open' | 'partly' | 'shut';
+
+/**
+ * Whether they are open for the *whole* of a planned stop, part of it, or none.
+ *
+ * The whole of it, because the failure this is for is not turning up to a locked
+ * door — that one is obvious — but planning to eat from half past eight to half
+ * past nine at a truck that shuts at nine. A check on the start time alone calls
+ * that fine.
+ *
+ * Measured in minutes from the start of the day the stop begins on, so a stop
+ * running past midnight compares against the next day's hours rather than
+ * wrapping round to that morning's.
+ */
+export function openThrough(
+  opening: Opening,
+  day: string,
+  fromMinutes: number,
+  toMinutes: number,
+): Coverage {
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay();
+  const open: Array<[number, number]> = [];
+  // Today's hours, and tomorrow's shifted a day along — a stop is at most a day
+  // long, so those two are all it can reach.
+  for (const shift of [0, 1]) {
+    const on = (weekday + shift) % 7;
+    for (const span of opening.hours) {
+      if (span.days.includes(on)) open.push([span.from + shift * 1440, span.to + shift * 1440]);
+    }
+  }
+
+  // Merged before they are added up, so a future edit that writes two
+  // overlapping spans for one day cannot count the overlap twice and call a
+  // stop covered that is not.
+  open.sort((a, b) => a[0] - b[0]);
+  let covered = 0;
+  let reached = fromMinutes;
+  for (const [from, to] of open) {
+    const start = Math.max(from, reached);
+    covered += Math.max(0, Math.min(to, toMinutes) - Math.max(start, fromMinutes));
+    reached = Math.max(reached, to);
+  }
+  if (covered <= 0) return 'shut';
+  return covered >= toMinutes - fromMinutes ? 'open' : 'partly';
 }
 
 /* ------------------------------------------------------------ filtering */

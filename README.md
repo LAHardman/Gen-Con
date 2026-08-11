@@ -656,6 +656,61 @@ any tickets are left, whether it runs six hours — all of that is in the feed,
 none of it fits on a result row, and every one of them is a reason not to add
 it. From there you can add it, show it on the map, or start directions to it.
 
+**And a schedule is not only sessions.** Lunch is a commitment, twenty minutes
+at a stand is a commitment, and both of them cost the same walk a seminar costs.
+So the Schedule tab's search carries the same **Everything · Events · Food ·
+Vendors · Places** row the map's does, and choosing anything but a session opens
+a small form instead of adding it, because a food truck has no times of its own:
+which day, from when, to when. Everything downstream treats what comes out
+identically — the walk to it, the block on the day, the clash with the thing
+before.
+
+The suggested start is *the end of the last thing already on that day*, rounded
+up, because somebody adding lunch to a Saturday with a game running until one
+means lunch after the game, and offering them noon makes them redo arithmetic
+the page has already done. An end before its start is read as the next morning:
+`<input type="time">` hands back a clock and a clock has no date on it, so 11pm
+to half past midnight arrives as 1380 → 30, and refusing it would refuse the one
+span most likely to be typed at a beer garden.
+
+**Where hours are known they are checked, across the whole span.** The mistake
+worth catching is not a locked door at nine in the morning — that one is obvious
+— it is planning to eat from half past eight until half past nine at a truck
+that shuts at nine, which a check on the start time alone calls fine. It **warns
+and does not refuse**, and says which year it is warning from: the only hours
+that exist anywhere reachable are 2025's, and refusing a plan on last year's
+numbers would refuse a correct plan the moment they change. A vendor nobody
+publishes hours for says exactly that, rather than staying quiet and letting "no
+warning" mean two different things.
+
+The same truck can go on twice — breakfast and dinner are two commitments — so
+an entry's id carries its start time as well as what it is, and removing one
+leaves the other alone. Adding the same place at the same minute twice still
+collapses to one, which is what a double-tap should do.
+
+**A block on the day has no buttons; the block *is* the button.** It used to
+carry a "Map" and a "Remove" of its own, and on a twenty-minute stop — twenty-six
+pixels tall in a column a quarter of a phone wide — those two links were the only
+thing that fitted, so the block read "Map Remove" and never said what it was.
+Now it opens what it is, and the map and the removal live in that panel.
+Removing something from a schedule is not an action to be one mis-tap away from
+either. That panel reads from the *copy* the plan holds rather than looking the
+event back up, so it opens underground, and next year. A planned food stop keeps
+the link to the truck's own page there too — the nearest thing to a menu that
+exists anywhere, looked up from the bundled catalogue by the id in the entry, so
+it is there with no network at one o'clock on South Street.
+
+**Two things at once are drawn side by side.** Overlapping blocks used to be
+drawn on top of each other and the shorter one simply disappeared — survivable
+while everything came from the feed, and not survivable the moment somebody can
+type their own times, because "twenty minutes at a food truck during a four-hour
+game" is an ordinary thing to plan and the whole point of drawing it is to see
+that it does not fit. Lanes are shared across the *run* of overlapping entries,
+so one clash in the morning does not narrow the afternoon, and the overlap is
+measured at the height a block is actually drawn rather than the minutes it
+holds — two blocks that only overlap once drawn are still two blocks on top of
+each other.
+
 **The description is asked for, not assumed.** Gen Con's descriptions run to a
 paragraph each; across 27,467 events that is several megabytes on a file a phone
 fetches before it can show anything, so the feed drops them. A **Show full
@@ -699,10 +754,8 @@ at — so the results open on a kind alone, with nothing typed. It is not counte
 on the **Filters** button, though, because it hides nothing: a "1" there would
 claim something was being held back.
 
-The Schedule tab has no kind row. A column there is drawn from a start, an end
-and the walk in between, and a food truck has none of the three, so offering it
-above a box that can only add sessions would be offering something that could
-then only be refused.
+The Schedule tab carries the same row — see **Your own schedule** above for what
+happens when you pick something with no times of its own.
 
 **Food: cuisine, dish, dietary.** Gen Con files every exhibitor under tags of
 its own and all 43 Block Party vendors carry them, but the 49 tags in use are
@@ -1605,7 +1658,7 @@ src/
     food.ts          Which tags are cuisine, dish or dietary — and the hours
     search.ts        Ranking rooms, stands, events and addresses against a query
     filters.ts       The kind, the nine dimensions, and what pressing one leaves
-    plan.ts          The four days, travel between entries, and the shared axis
+    plan.ts          The four days, stops, travel, lanes and the shared axis
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
     walkable.ts      The floor you can stand on, as a grid, and A* over it
@@ -1626,7 +1679,8 @@ src/
   components/
     MapView.tsx      Leaflet map, venue/room layers, labels, amenities, routes
     RoomDialog.tsx   Room details and its schedule
-    EventDialog.tsx  One event or one vendor, in full, before committing to it
+    EventDialog.tsx  One event, vendor or planned entry, in full
+    AddStop.tsx      When are you going to be there — the only question a stop asks
     SearchBar.tsx    Search box and its results
     EventFilters.tsx The kind row and the filter panel, shared by both searches
     PlanView.tsx     The four-day schedule, on one ruler

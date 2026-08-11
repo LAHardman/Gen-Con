@@ -17,6 +17,7 @@ import { ROOMS_BY_ID } from '../data/venues';
 import type { ConEvent } from '../data/events';
 import type { Plan } from '../hooks/usePlan';
 import { EXHIBITORS } from '../data/exhibitors';
+import { planEntry, stopEntry } from '../data/plan';
 
 const event: ConEvent = {
   id: 'BGM26ND306429',
@@ -48,7 +49,14 @@ function show(over: Partial<ConEvent> = {}, plan: Plan = planOf()) {
   return open({ kind: 'event', event: { ...event, ...over }, room: ROOMS_BY_ID['hall-a'] }, plan);
 }
 
-function open(detail: Detail, plan: Plan = planOf()) {
+/** The four days, as the feed hands them over. */
+const FEED_DAYS = ['2026-07-30', '2026-07-31', '2026-08-01', '2026-08-02'];
+
+function open(
+  detail: Detail,
+  plan: Plan = planOf(),
+  over: { feedDays?: readonly string[]; offsetMinutes?: number | null } = {},
+) {
   const onClose = vi.fn();
   const onShowOnMap = vi.fn();
   const onNavigate = vi.fn();
@@ -56,6 +64,8 @@ function open(detail: Detail, plan: Plan = planOf()) {
     <EventDialog
       detail={detail}
       plan={plan}
+      feedDays={over.feedDays ?? FEED_DAYS}
+      offsetMinutes={over.offsetMinutes === undefined ? -240 : over.offsetMinutes}
       onClose={onClose}
       onShowOnMap={onShowOnMap}
       onNavigate={onNavigate}
@@ -350,8 +360,31 @@ describe('a vendor rather than an event', () => {
     expect(screen.queryByText('Somebody else entirely.')).toBeNull();
   });
 
-  it('cannot be put on the schedule, because it is not a session', () => {
-    showVendor();
+  it('can be put on the schedule, once somebody says when', () => {
+    // A session brings its own times and this panel only says yes to them. A
+    // truck brings none, so "add" opens the form rather than adding on the spot.
+    const plan = planOf();
+    open({ kind: 'vendor', exhibitor: truck, room: ROOMS_BY_ID['block-party-street'] }, plan);
+    fireEvent.click(screen.getByRole('button', { name: /add to schedule/i }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '18:00' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '18:30' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Add to schedule$/ }));
+
+    const entry = (plan.add as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(entry.kind).toBe('stop');
+    expect(entry.title).toBe('Arepas');
+    expect(entry.start).toBe('2026-07-30T18:00:00-04:00');
+    expect(entry.roomId).toBe('block-party-street');
+  });
+
+  it('offers no form when nothing has said when the convention is', () => {
+    // No feed and an empty plan: there is no day to put it on and no clock to
+    // read "18:00" against, and inventing one would put it on the wrong
+    // afternoon. The map and directions still work, because they always can.
+    open({ kind: 'vendor', exhibitor: truck, room: ROOMS_BY_ID['block-party-street'] }, planOf(), {
+      feedDays: [],
+      offsetMinutes: null,
+    });
     expect(screen.queryByRole('button', { name: /add to schedule/i })).toBeNull();
     expect(screen.getByRole('button', { name: 'Show on map' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Directions' })).toBeTruthy();
@@ -360,5 +393,61 @@ describe('a vendor rather than an event', () => {
   it('says nothing about a website it does not have', () => {
     showVendor({ website: undefined });
     expect(screen.queryByRole('link')).toBeNull();
+  });
+});
+
+describe('something already on the schedule', () => {
+  const lunch = stopEntry(
+    { key: 'vendor:14179', title: 'Arepas', where: 'Food Truck 12 · Block Party', roomId: 'block-party-street' },
+    { day: '2026-08-01', fromMinutes: 13 * 60, toMinutes: 13 * 60 + 25, offsetMinutes: -240 },
+  );
+
+  it('reads from the copy on the device rather than looking the event up', () => {
+    // The point of a plan holding a copy: this panel has to open underground,
+    // and next year, when the feed that made it is a different convention.
+    open({ kind: 'planned', entry: lunch, room: ROOMS_BY_ID['block-party-street'] });
+    expect(screen.getByRole('heading', { name: 'Arepas' })).toBeTruthy();
+    expect(fact('When')).toContain('1:00');
+    expect(fact('Where')).toBe('Food Truck 12 · Block Party');
+  });
+
+  it('is where removing happens, now that a block has no buttons', () => {
+    const plan = planOf();
+    const { onClose } = open({ kind: 'planned', entry: lunch }, plan);
+    fireEvent.click(screen.getByRole('button', { name: /remove from schedule/i }));
+    expect((plan.remove as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(lunch.id);
+    // And it closes: the thing the panel was about is no longer there.
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('shows the description it saved, with nothing fetched', () => {
+    open({ kind: 'planned', entry: { ...lunch, description: 'Arepas, made to order.' } });
+    expect(screen.getByText('Arepas, made to order.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /show full description/i })).toBeNull();
+  });
+
+  it('links a food stop to the truck’s own page', () => {
+    // The nearest thing to a menu that exists anywhere, and the schedule is
+    // where somebody standing on South Street at one o'clock wants it. Looked
+    // up from the bundled catalogue by the id in the entry, so it works with no
+    // network — the id is `vendor:14179@…` and 14179 is Arepas.
+    const arepas = EXHIBITORS.find((one) => one.name === 'Arepas')!;
+    open({ kind: 'planned', entry: { ...lunch, id: `vendor:${arepas.id}@2026-08-01T13:00` } });
+    const link = screen.getByRole('link');
+    expect(link.getAttribute('href')).toBe(arepas.website);
+    expect(link.textContent).toMatch(/their own site/i);
+  });
+
+  it('does not offer a gencon.com link for a stop that has no page', () => {
+    // A stop's id ends in a clock, and the event URL is built from trailing
+    // digits — so a room or an unlisted stand would link to /events/00.
+    open({ kind: 'planned', entry: { ...lunch, id: 'place:hall-a@2026-08-01T13:00' } });
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('still links a planned session to its own page', () => {
+    const planned = { ...planEntry(event, ROOMS_BY_ID['hall-a']), description: 'Saved.' };
+    open({ kind: 'planned', entry: planned, room: ROOMS_BY_ID['hall-a'] });
+    expect(screen.getByRole('link').getAttribute('href')).toContain('gencon.com/events/');
   });
 });

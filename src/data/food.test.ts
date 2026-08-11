@@ -28,6 +28,7 @@ import {
   matchesFood,
   openAt,
   openingFor,
+  openThrough,
 } from './food';
 import { EXHIBITORS, tagsOf, type Exhibitor } from './exhibitors';
 
@@ -184,6 +185,32 @@ describe('the hours, and the year they belong to', () => {
     expect(openAt(FOOD_TRUCK_HOURS, Date.parse('2026-08-02T17:00:00-04:00'), east)).toBe(false);
     // The beer garden does not open on the Sunday at all.
     expect(openAt(BEER_GARDEN_HOURS, Date.parse('2026-08-02T13:00:00-04:00'), east)).toBe(false);
+  });
+
+  it('checks the whole of a stop, not the minute it starts', () => {
+    // The mistake worth catching. A locked door at nine in the morning is
+    // obvious; half past eight until half past nine at a truck that shuts at
+    // nine is not, and a check on the start time alone calls it fine.
+    expect(openThrough(FOOD_TRUCK_HOURS, '2026-08-01', 12 * 60, 12 * 60 + 30)).toBe('open');
+    expect(openThrough(FOOD_TRUCK_HOURS, '2026-08-01', 20 * 60 + 30, 21 * 60 + 30)).toBe('partly');
+    expect(openThrough(FOOD_TRUCK_HOURS, '2026-08-01', 2 * 60, 2 * 60 + 30)).toBe('shut');
+  });
+
+  it('reads the day off the date rather than being told it', () => {
+    // Sunday: the trucks shut at four, and the beer garden does not open at all.
+    expect(openThrough(FOOD_TRUCK_HOURS, '2026-08-02', 15 * 60, 15 * 60 + 30)).toBe('open');
+    expect(openThrough(FOOD_TRUCK_HOURS, '2026-08-02', 17 * 60, 17 * 60 + 30)).toBe('shut');
+    expect(openThrough(BEER_GARDEN_HOURS, '2026-08-02', 13 * 60, 14 * 60)).toBe('shut');
+  });
+
+  it('compares a stop past midnight against the next day’s hours', () => {
+    // Eleven at night until half past midnight on the Saturday is measured
+    // against Sunday morning, not against Saturday morning wrapped round.
+    // The beer garden shuts at ten on the Saturday and opens at noon; both
+    // halves of that span are outside, which is 'shut' rather than 'partly'.
+    expect(openThrough(BEER_GARDEN_HOURS, '2026-08-01', 23 * 60, 24 * 60 + 30)).toBe('shut');
+    // Nine in the evening until half past midnight: open for the first hour.
+    expect(openThrough(BEER_GARDEN_HOURS, '2026-08-01', 21 * 60, 24 * 60 + 30)).toBe('partly');
   });
 
   it('does not read the viewer’s clock', () => {
