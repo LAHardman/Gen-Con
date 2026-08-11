@@ -17,25 +17,39 @@
  * registration on 16 May; Gen Con's own API says 23 May.
  *
  * WHERE THE NUMBERS COME FROM. `https://www.gencon.com/api/v1/conventions`
- * returns every Gen Con since 2009 with its registration timestamps on it. The
- * five offsets below reproduce all four dated milestones exactly for 2024,
- * 2025, 2026 and 2027, and three of the four for 2023. Before that the show was
- * still settling after 2020 and the numbers wander; the tests record the API's
- * own values so a change to this file has to disagree with Gen Con out loud.
+ * returns every Gen Con since 2009 with its registration timestamps on it. Four
+ * of the offsets below reproduce its dated milestones exactly for 2024, 2025,
+ * 2026 and 2027, and three of the four for 2023. Before that the show was still
+ * settling after 2020 and the numbers wander; the tests record the API's own
+ * values so a change to this file has to disagree with Gen Con out loud.
+ *
+ * HOUSING IS THE ONE THE API DOES NOT CARRY. It is published all the same, in
+ * prose, on `gencon.com/gen-con-indy/housing_travel` — "housing registration
+ * will open at noon Eastern on February 22, 2026". Read off that page and the
+ * two before it, housing is **157 days** before the convention Wednesday: 25
+ * February 2024, 23 February 2025, 22 February 2026, each of them a Sunday at
+ * noon, each of them exactly a fortnight after badge registration. Three years
+ * agreeing to the day is the same standard the other four are held to, so it is
+ * a published date here rather than an estimate.
+ *
+ * The fortnight matters more than it looks. Housing is not the same day as
+ * badges — you buy a badge, and only then, two weeks later, can you ask for a
+ * room. Somebody who books leave around one date and assumes the other rides
+ * along with it finds out in February.
  *
  * AND THE CONVENTION ITSELF IS THE FIRST SATURDAY OF AUGUST. Thursday to
  * Sunday, with Trade Day on the Wednesday before — checked against the API for
  * 2022 to 2027 and against Gen Con's published future dates through 2030.
  *
- * WHAT IS ESTIMATED, AND HOW. Gen Con publishes no date for VIG rebooking, for
- * new VIG packages or for housing. What it does publish is how they *relate* to
- * the dates above — its own VIG page says VIGs "can purchase their VIG badge
- * before Badge Registration opens to the public and procure their first choice
- * of hotel before housing officially opens", and that the specifics "are
- * detailed in the VIG newsletter, which is emailed in December". So those three
- * carry an estimate derived from a milestone that *is* published, along with the
- * sentence it was derived from — and the page marks every one of them as an
- * estimate rather than letting it sit in a column of facts.
+ * WHAT IS ESTIMATED, AND HOW. Gen Con publishes no date for VIG rebooking or
+ * for new VIG packages. What it does publish is how they *relate* to the dates
+ * above — its own VIG page says VIGs "can purchase their VIG badge before Badge
+ * Registration opens to the public and procure their first choice of hotel
+ * before housing officially opens", and that the specifics "are detailed in the
+ * VIG newsletter, which is emailed in December". So those two carry an estimate
+ * derived from a milestone that *is* published, along with the sentence it was
+ * derived from — and the page marks both of them as estimates rather than
+ * letting them sit in a column of facts.
  *
  * The distinction is the whole point. A derived date somebody can check the
  * reasoning of is useful; a plausible date with no provenance is a diary entry
@@ -72,21 +86,21 @@ export interface Milestone {
   };
 }
 
-/** Noon Eastern, which is when Gen Con opens all four of its dated gates. */
+/** Noon Eastern, which is when Gen Con opens every one of its dated gates. */
 const NOON = 12 * 60;
 
 /**
  * The milestones, soonest-in-the-year first.
  *
- * The four with a `daysBefore` are Gen Con's own timestamps, reduced to the
- * offset that reproduces them. The two without are the ones it does not
- * publish.
+ * The five with a `daysBefore` are Gen Con's own dates, reduced to the offset
+ * that reproduces them — four from its API, housing from its housing page. The
+ * two without are the ones it does not publish anywhere.
  */
 export const MILESTONES: ReadonlyArray<Milestone> = [
   {
     id: 'vig',
     name: 'VIG rebooking',
-    what: 'Returning VIGs buy next year’s package before anybody else, and pick a hotel before housing opens.',
+    what: 'Returning VIGs buy next year’s package before anybody else, and pick a hotel before housing opens to everybody.',
     daysBefore: null,
     estimate: {
       before: 'badges',
@@ -106,7 +120,7 @@ export const MILESTONES: ReadonlyArray<Milestone> = [
   {
     id: 'badges',
     name: 'Badge registration opens',
-    what: 'Badges go on sale. Housing opens alongside it, and the hotels nearest the hall are gone the same day.',
+    what: 'Badges go on sale, and you need one before you can ask for a room in the block a fortnight later.',
     daysBefore: 171,
     atMinutes: NOON,
     href: 'https://www.gencon.com/badge_selection',
@@ -126,13 +140,12 @@ export const MILESTONES: ReadonlyArray<Milestone> = [
   {
     id: 'housing',
     name: 'Housing registration',
-    what: 'The block of convention hotel rooms opens to everybody who has a badge.',
-    daysBefore: null,
-    estimate: {
-      sameAs: 'badges',
-      because:
-        'Gen Con publishes no housing date. Its VIG page has VIGs booking “before housing officially opens”, and housing has opened alongside badge registration in recent years.',
-    },
+    what: 'The block of discounted convention hotel rooms opens to everybody who has already bought a badge. Two weeks after the badges themselves, not the same day.',
+    // 157, not 171: housing is a fortnight behind badge registration, every
+    // year it can be checked. See the note above the table.
+    daysBefore: 157,
+    atMinutes: NOON,
+    href: 'https://www.gencon.com/gen-con-indy/housing_travel',
   },
   {
     id: 'catalogue',

@@ -156,11 +156,40 @@ describe('the milestones, against the API that produced them', () => {
     }
   });
 
-  it('carries no published date of its own for the three Gen Con does not give', () => {
+  it('reproduces the housing dates Gen Con prints in prose', () => {
+    /*
+     * The one milestone its API does not carry, and the one most likely to be
+     * assumed rather than looked up. Gen Con says it on the housing page —
+     * "housing registration will open at noon Eastern on February 22, 2026" —
+     * and these are the three years that page and its predecessors state.
+     *
+     * The fortnight is the point. Housing is *not* the same day as badges, and
+     * a rule that put it there would still look plausible on every row.
+     */
+    const published: Record<number, string> = {
+      2024: '2024-02-25',
+      2025: '2025-02-23',
+      2026: '2026-02-22',
+    };
+    const housing = MILESTONES.find((one) => one.id === 'housing')!;
+    const badges = MILESTONES.find((one) => one.id === 'badges')!;
+    for (const [year, date] of Object.entries(published)) {
+      const at = milestoneAt(housing, Number(year))!;
+      expect(day(at), year).toBe(date);
+      // Noon Eastern, which in February is 17:00Z.
+      expect(at.toISOString().slice(11, 16), year).toBe('17:00');
+      // A Sunday, and a fortnight behind the badges — never the same day.
+      expect(at.getUTCDay(), year).toBe(0);
+      const gap = (at.getTime() - milestoneAt(badges, Number(year))!.getTime()) / 86_400_000;
+      expect(gap, year).toBe(14);
+    }
+  });
+
+  it('carries no published date of its own for the two Gen Con does not give', () => {
     // The estimate is built in `keyDates` from a milestone that *is* published.
     // `milestoneAt` is the published answer and has to stay empty here, or an
     // estimate would leak into somewhere that never marks one.
-    for (const id of ['vig', 'vig-new', 'housing']) {
+    for (const id of ['vig', 'vig-new']) {
       const milestone = MILESTONES.find((one) => one.id === id)!;
       expect(milestone.daysBefore).toBeNull();
       expect(milestoneAt(milestone, 2026)).toBeNull();
@@ -222,14 +251,14 @@ describe('the list a page draws', () => {
     expect(registration.daysAway).toBe(77);
   });
 
-  it('estimates the three Gen Con does not publish, and marks every one', () => {
+  it('estimates the two Gen Con does not publish, and marks both', () => {
     // The contract this page stands on: a derived date is useful, and a derived
     // date that looks like a published one is worse than no date at all.
     const rows = keyDates(2026, NOW);
     const badges = rows.find((one) => one.milestone.id === 'badges')!;
     expect(badges.kind).toBe('published');
 
-    for (const id of ['vig', 'vig-new', 'housing']) {
+    for (const id of ['vig', 'vig-new']) {
       const row = rows.find((one) => one.milestone.id === id)!;
       expect(row.kind, id).toBe('estimated');
       expect(row.at, id).not.toBeNull();
@@ -242,12 +271,22 @@ describe('the list a page draws', () => {
   });
 
   it('keeps the estimated ones in the order Gen Con describes', () => {
-    // They share a date with badge registration, so the tie has to break on the
-    // ordering Gen Con does publish: rebook, then what is left, then housing.
+    // Both share a date with badge registration, so the tie has to break on the
+    // ordering Gen Con does publish: rebook, then whatever is left of it.
     const ids = keyDates(2026, NOW).map((one) => one.milestone.id);
     expect(ids.indexOf('vig')).toBeLessThan(ids.indexOf('vig-new'));
-    expect(ids.indexOf('vig-new')).toBeLessThan(ids.indexOf('housing'));
     expect(ids.indexOf('event-submission')).toBeLessThan(ids.indexOf('vig'));
     expect(ids[ids.length - 1]).toBe('event-registration');
+  });
+
+  it('puts housing two weeks after the badges rather than beside them', () => {
+    // The ordering a reader is most likely to assume wrong, and the one this
+    // page exists to correct: badges first, then a fortnight, then housing.
+    const ids = keyDates(2026, NOW).map((one) => one.milestone.id);
+    expect(ids.indexOf('badges')).toBeLessThan(ids.indexOf('housing'));
+    const rows = keyDates(2026, NOW);
+    const housing = rows.find((one) => one.milestone.id === 'housing')!;
+    expect(housing.kind).toBe('published');
+    expect(housing.bound).toBeUndefined();
   });
 });

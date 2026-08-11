@@ -649,12 +649,24 @@ the **Key dates** page counts down to them.
 worth getting right and the easy thing to get wrong. Every milestone falls a
 fixed number of days before the convention's Wednesday:
 
-| | Days before | Lands on |
-| --- | --- | --- |
-| Event submission opens | 206 | Sunday, noon Eastern |
-| Badge registration opens | 171 | Sunday, noon Eastern |
-| Event catalogue goes live | 87 | Sunday, noon Eastern |
-| Event registration opens | 73 | Sunday, noon Eastern |
+| | Days before | Lands on | Source |
+| --- | --- | --- | --- |
+| Event submission opens | 206 | Sunday, noon Eastern | API |
+| Badge registration opens | 171 | Sunday, noon Eastern | API |
+| Housing registration opens | 157 | Sunday, noon Eastern | housing page |
+| Event catalogue goes live | 87 | Sunday, noon Eastern | API |
+| Event registration opens | 73 | Sunday, noon Eastern | API |
+
+**Housing is a fortnight behind the badges, and that is the one people get
+wrong.** Gen Con's API does not carry a housing date; its housing page states it
+in prose — *"housing registration will open at noon Eastern on February 22,
+2026"* — and that page and the two before it give 25 February 2024, 23 February
+2025 and 22 February 2026: every one a Sunday at noon, every one exactly 14 days
+after badge registration. Three years agreeing to the day is the same standard
+the other four are held to, so it is a published row here rather than an
+estimate. You buy a badge, and only then, two weeks later, can you ask for a
+room — somebody who books leave around one date assuming the other rides along
+with it finds out in February.
 
 Because that Wednesday is always a Wednesday, each one always lands on the same
 weekday — which makes it *look* like "the second Sunday in February" and it is
@@ -673,16 +685,14 @@ against the ones Gen Con publishes at `/attend/futuredates`, out to 2030. To the
 instant matters because February is on standard time and May is on summer time,
 and an hour out on a queue that empties in ten minutes is the whole thing.
 
-**Three rows are estimated, and every one of them says so.** Gen Con publishes
-no date for VIG rebooking, for new VIG packages, or for housing. What it does
-publish is how they *relate* to the four above, so each carries a date derived
-from one of them:
+**Two rows are estimated, and both say so.** Gen Con publishes no date for VIG
+rebooking or for new VIG packages. What it does publish is how they *relate* to
+the rows above, so each carries a date derived from one of them:
 
 | | Estimated as | The sentence it rests on |
 | --- | --- | --- |
 | VIG rebooking | **by** badge registration | VIGs "can purchase their VIG badge before Badge Registration opens to the public"; the date goes out in the December VIG newsletter |
 | New VIG packages | with badge registration | a VIG package is a badge type, so what returning VIGs have not taken sells in the badge store from the moment it opens |
-| Housing registration | with badge registration | Gen Con's VIG page has VIGs booking "before housing officially opens", and housing has opened alongside badges in recent years |
 
 An estimate never sits in a column of facts. Each of those rows is drawn with a
 dashed date rather than a solid one, tagged `estimated`, carries "time not

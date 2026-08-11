@@ -14,8 +14,8 @@
  * only question is which is next.
  *
  * AN ESTIMATE NEVER SITS IN A COLUMN OF FACTS. Gen Con publishes no date for
- * VIG rebooking, new VIG packages or housing, so those three are derived from
- * one it does publish — and each says, on the row, that it is an estimate and
+ * VIG rebooking or new VIG packages, so those two are derived from one it does
+ * publish — and each says, on the row, that it is an estimate and
  * the sentence of Gen Con's it was derived from. A date somebody can check the
  * reasoning of is useful; a plausible one with no provenance is a diary entry
  * they have no way to doubt. So an estimate is drawn differently, carries no
