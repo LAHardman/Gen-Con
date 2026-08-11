@@ -13,6 +13,13 @@
  * The current page is marked rather than hidden, because a menu that omits
  * where you already are makes you count the remaining items to work out where
  * you are.
+ *
+ * THE BUTTON IS THE ICON AND NOTHING ELSE. Where you are is a fact about the
+ * app, not about the menu, so it is printed beside the title where it stays put
+ * — a name that lives inside the control changes width as you move between
+ * pages and drags the rest of the header with it. The button still *says* the
+ * page in its accessible name, because three lines drawn in a box announce
+ * nothing, and a screen reader should not have to go looking for the label.
  */
 
 import { useEffect, useId, useRef } from 'react';
@@ -69,8 +76,9 @@ export function AppMenu<T extends string>({ pages, current, open, onToggle, onCh
         aria-expanded={open}
         aria-controls={id}
         aria-haspopup="menu"
-        // The page's name is in the accessible name as well as beside the
-        // icon: three lines drawn in a box say nothing to a screen reader.
+        // The page's name is in the accessible name even though it is no
+        // longer printed inside the button: three lines drawn in a box say
+        // nothing to a screen reader.
         aria-label={`Menu — ${here?.label ?? 'Pages'}`}
         onClick={() => onToggle(!open)}
       >
@@ -79,7 +87,6 @@ export function AppMenu<T extends string>({ pages, current, open, onToggle, onCh
           <span />
           <span />
         </span>
-        <span className="menu__here">{here?.label}</span>
       </button>
 
       {open && (

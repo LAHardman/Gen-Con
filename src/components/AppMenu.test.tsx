@@ -35,7 +35,17 @@ describe('the button', () => {
   it('says where you are, for anybody who cannot see three lines in a box', () => {
     show('dates');
     expect(button().getAttribute('aria-label')).toBe('Menu — Key dates');
-    expect(button().textContent).toContain('Key dates');
+  });
+
+  it('prints nothing inside itself, so it never changes width', () => {
+    // The page name is printed beside the title instead. A label that lives in
+    // the button makes the button resize as you move between pages, and drags
+    // the rest of the header along with it.
+    show('dates');
+    expect(button().textContent).toBe('');
+    // And the icon it does draw is hidden from the accessible name, or the
+    // label above would have three empty spans read out after it.
+    expect(button().querySelector('.menu__bars')!.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('says whether the menu is open', () => {

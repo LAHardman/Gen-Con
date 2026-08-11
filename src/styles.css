@@ -67,6 +67,9 @@ body {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  /* Takes the slack, so the menu and the title stay together on the left and
+     everything else is pushed to the right regardless of what else is up here. */
+  margin-right: auto;
 }
 
 .app__logo {
@@ -91,9 +94,25 @@ body {
 }
 
 .app__header p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* Where you are, beside the title rather than inside the menu button. Drawn
+   in the text colour against the muted status beside it, so the page reads as
+   the answer and the event count as the footnote. */
+.app__page {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .app__tools {
@@ -1560,18 +1579,19 @@ body {
   flex: 0 0 auto;
 }
 
+/* Square rather than a pill, because there is nothing beside the icon to make
+   a pill of — and 40px so a thumb hits it without aiming. */
 .menu__button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 14px 7px 11px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 11px;
   background: var(--panel-raised);
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1580,11 +1600,11 @@ body {
 }
 
 /* Three lines, drawn rather than fetched: an icon font is a network request
-   for something a box-shadow already does. */
+   for something a border-radius already does. */
 .menu__bars {
   display: grid;
-  gap: 3px;
-  width: 16px;
+  gap: 4px;
+  width: 18px;
 }
 
 .menu__bars span {
@@ -1593,17 +1613,12 @@ body {
   background: var(--accent);
 }
 
-.menu__here {
-  max-width: 8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .menu__sheet {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  /* Hangs from the same corner the button sits in, now that corner is the
+     left one — a sheet anchored to the far edge would open across the title. */
+  left: 0;
   z-index: 20;
   display: grid;
   gap: 2px;

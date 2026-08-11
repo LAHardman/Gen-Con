@@ -407,24 +407,8 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <div className="app__brand">
-          <span className="app__logo" aria-hidden="true">
-            20
-          </span>
-          <div>
-            <h1>Gen Con Trip</h1>
-            <p>
-              {status === 'ready' && index
-                ? `${index.total.toLocaleString()} events${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
-                : status === 'absent'
-                  ? 'Venue map · no event data'
-                  : status === 'error'
-                    ? 'Venue map · event data failed to load'
-                    : 'Venue map'}
-            </p>
-          </div>
-        </div>
-
+        {/* Leftmost, before the brand: a menu somebody reaches for without
+            looking is one that is always in the same corner. */}
         <AppMenu
           pages={PAGES.map((page) =>
             page.id === 'plan' && plan.entries.length > 0
@@ -436,6 +420,28 @@ export default function App() {
           onToggle={setMenuOpen}
           onChoose={setTab}
         />
+
+        <div className="app__brand">
+          <span className="app__logo" aria-hidden="true">
+            20
+          </span>
+          <div>
+            <h1>Gen Con Trip</h1>
+            {/* Where you are, outside the control that took you there. The
+                second line was already the app's status; the page it is
+                showing is part of the same sentence. */}
+            <p>
+              <span className="app__page">{PAGES.find((page) => page.id === tab)?.label}</span>
+              {status === 'ready' && index
+                ? `${index.total.toLocaleString()} events${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
+                : status === 'absent'
+                  ? 'Venue map · no event data'
+                  : status === 'error'
+                    ? 'Venue map · event data failed to load'
+                    : 'Venue map'}
+            </p>
+          </div>
+        </div>
 
         {/* One search box at a time: the schedule has its own, and it looks for
             individual sessions rather than places. */}

@@ -65,6 +65,28 @@ describe('starting up', () => {
   });
 });
 
+describe('finding the other pages', () => {
+  const menu = () => screen.getByRole('button', { name: /^Menu —/ });
+
+  it('says which page you are on outside the button that switches them', () => {
+    // The menu button is the icon and nothing else, so if the name is not
+    // printed in the header there is nowhere left that says where you are.
+    render(<App />);
+    expect(document.querySelector('.app__page')!.textContent).toBe('Map');
+    expect(menu().textContent).toBe('');
+  });
+
+  it('moves the name along with the page', () => {
+    render(<App />);
+    fireEvent.click(menu());
+    fireEvent.click(screen.getByRole('menuitem', { name: /Key dates/ }));
+    expect(document.querySelector('.app__page')!.textContent).toBe('Key dates');
+    expect(screen.getByRole('region', { name: 'Key dates' })).toBeTruthy();
+    // And the button follows it, for anybody who cannot see the header.
+    expect(menu().getAttribute('aria-label')).toBe('Menu — Key dates');
+  });
+});
+
 describe('going to a room', () => {
   it('opens its building on its floor, not on the ground floor', () => {
     // The room is on the 3rd and drawing it over the 1st would put it in the

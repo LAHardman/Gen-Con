@@ -605,8 +605,15 @@ Two tabs fitted in the header. Three did not: on a 430-pixel phone the header is
 already carrying a title, an event count, a basemap switch and whatever room is
 selected. A tab strip is also a promise that the list is short and will stay
 short, which stops being true the moment a page is added — so the tabs became a
-hamburger, and the button says which page you are on rather than only drawing
-three lines in a box.
+hamburger, in the top-left corner, where somebody reaching for it does not have
+to look first.
+
+**The page name is beside the title, not inside the button.** Where you are is a
+fact about the app rather than about the menu, and a label that lives in the
+control changes width as you move between pages, dragging the rest of the header
+with it. The button still *says* the page in its accessible name — three lines
+drawn in a box announce nothing, and a screen reader should not have to go
+hunting for the label.
 
 It behaves like a menu: Escape closes it, a pointer anywhere else closes it,
 choosing closes it, the button reports whether it is open, and opening it puts
