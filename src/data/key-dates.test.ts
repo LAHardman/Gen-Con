@@ -156,14 +156,17 @@ describe('the milestones, against the API that produced them', () => {
     }
   });
 
-  it('says nothing rather than guessing where Gen Con publishes no date', () => {
-    // A page somebody plans a year around. An invented date here is worse than
-    // none, because it is a diary entry rather than a note.
-    for (const id of ['vig', 'housing']) {
+  it('carries no published date of its own for the three Gen Con does not give', () => {
+    // The estimate is built in `keyDates` from a milestone that *is* published.
+    // `milestoneAt` is the published answer and has to stay empty here, or an
+    // estimate would leak into somewhere that never marks one.
+    for (const id of ['vig', 'vig-new', 'housing']) {
       const milestone = MILESTONES.find((one) => one.id === id)!;
       expect(milestone.daysBefore).toBeNull();
       expect(milestoneAt(milestone, 2026)).toBeNull();
-      expect(milestone.instead).toBeTruthy();
+      // And each says what its estimate rests on, in Gen Con's own words.
+      expect(milestone.estimate?.because).toBeTruthy();
+      expect(milestone.estimate?.sameAs ?? milestone.estimate?.before).toBeTruthy();
     }
   });
 });
@@ -219,13 +222,32 @@ describe('the list a page draws', () => {
     expect(registration.daysAway).toBe(77);
   });
 
-  it('keeps the undated ones in place rather than sweeping them to the end', () => {
-    // VIG rebooking happens before badge registration and housing alongside it.
-    // That ordering is the whole of what Gen Con publishes about them, and it
-    // is worth more here than a date would be worth if it were invented.
+  it('estimates the three Gen Con does not publish, and marks every one', () => {
+    // The contract this page stands on: a derived date is useful, and a derived
+    // date that looks like a published one is worse than no date at all.
+    const rows = keyDates(2026, NOW);
+    const badges = rows.find((one) => one.milestone.id === 'badges')!;
+    expect(badges.kind).toBe('published');
+
+    for (const id of ['vig', 'vig-new', 'housing']) {
+      const row = rows.find((one) => one.milestone.id === id)!;
+      expect(row.kind, id).toBe('estimated');
+      expect(row.at, id).not.toBeNull();
+      expect(row.at!.getTime(), id).toBe(badges.at!.getTime());
+    }
+    // Rebooking is a bound — Gen Con says before, not when. The other two are
+    // estimated to be the day itself.
+    expect(rows.find((one) => one.milestone.id === 'vig')!.bound).toBe('before');
+    expect(rows.find((one) => one.milestone.id === 'vig-new')!.bound).toBe('on');
+  });
+
+  it('keeps the estimated ones in the order Gen Con describes', () => {
+    // They share a date with badge registration, so the tie has to break on the
+    // ordering Gen Con does publish: rebook, then what is left, then housing.
     const ids = keyDates(2026, NOW).map((one) => one.milestone.id);
-    expect(ids.indexOf('vig')).toBeLessThan(ids.indexOf('badges'));
-    expect(ids.indexOf('housing')).toBeLessThan(ids.indexOf('catalogue'));
+    expect(ids.indexOf('vig')).toBeLessThan(ids.indexOf('vig-new'));
+    expect(ids.indexOf('vig-new')).toBeLessThan(ids.indexOf('housing'));
+    expect(ids.indexOf('event-submission')).toBeLessThan(ids.indexOf('vig'));
     expect(ids[ids.length - 1]).toBe('event-registration');
   });
 });

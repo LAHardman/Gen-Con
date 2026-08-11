@@ -10,13 +10,17 @@
  *
  * IT COUNTS DOWN RATHER THAN LISTING. "17 May" is a fact; "in 78 days" is the
  * thing somebody wants to know, and the one that decides whether to act now.
- * The next one still to come is marked, because on a page of six dates the only
- * question is which is next.
+ * The next one still to come is marked, because on a page of seven dates the
+ * only question is which is next.
  *
- * WHAT HAS NO DATE SAYS SO. Gen Con publishes none for VIG rebooking or
- * housing, so those two rows carry what *is* known — the ordering, and where
- * the date is actually announced — instead of a plausible date nobody checked.
- * That is the whole reason to trust the other four.
+ * AN ESTIMATE NEVER SITS IN A COLUMN OF FACTS. Gen Con publishes no date for
+ * VIG rebooking, new VIG packages or housing, so those three are derived from
+ * one it does publish — and each says, on the row, that it is an estimate and
+ * the sentence of Gen Con's it was derived from. A date somebody can check the
+ * reasoning of is useful; a plausible one with no provenance is a diary entry
+ * they have no way to doubt. So an estimate is drawn differently, carries no
+ * clock, counts down as a bound rather than a promise, and can never be the
+ * row marked "next" — nobody should be told to act on a guess.
  */
 
 import { keyDates, planningYear, type DatedMilestone } from '../data/key-dates';
@@ -54,28 +58,31 @@ const clock = (at: Date) =>
     new Date(at.getTime() + easternShift(at)),
   );
 
-/** "in 78 days", "tomorrow", "today", "gone". */
+/** "in 78 days", "within 78 days", "tomorrow", "today", "gone". */
 function away(row: DatedMilestone): string {
   if (row.daysAway === null) return '';
   if (row.past) return row.daysAway === 0 ? 'today' : 'gone';
   if (row.daysAway === 0) return 'today';
   if (row.daysAway === 1) return 'tomorrow';
+  // An estimate counts down like anything else, and says what it is while it
+  // does — "within 188 days" is a different promise from "in 188 days".
+  if (row.kind === 'estimated' && row.bound === 'before') return `within ${row.daysAway} days`;
   return `in ${row.daysAway} days`;
 }
 
 export function DatesView({ nowMs }: Props) {
   const year = planningYear(nowMs);
   const rows = keyDates(year, nowMs);
-  // The one to act on. Undated rows can never be it, because there is nothing
-  // to be next about.
-  const next = rows.find((row) => row.at && !row.past);
+  // The one to act on, and it has to be a published date: marking an estimate
+  // "next" would be telling somebody to act on a guess.
+  const next = rows.find((row) => row.at && !row.past && row.kind === 'published');
 
   return (
     <section className="dates" aria-label="Key dates">
       <header className="dates__head">
         <h2>Gen Con {year}</h2>
         <p>
-          Every date below is {' '}
+          Every date below is{' '}
           <strong>a fixed number of days before the convention’s Wednesday</strong>, which is why
           they land on the same weekday every year and a week later when the show does. Checked
           against Gen Con’s own API for 2024–2027.
@@ -85,6 +92,7 @@ export function DatesView({ nowMs }: Props) {
       <ol className="dates__list">
         {rows.map((row) => {
           const { milestone, at, past } = row;
+          const estimated = row.kind === 'estimated';
           const isNext = row === next;
           return (
             <li
@@ -96,8 +104,16 @@ export function DatesView({ nowMs }: Props) {
               <div className="dates__when">
                 {at ? (
                   <>
-                    <span className="dates__date">{longDate(at)}</span>
-                    <span className="dates__clock">{clock(at)} Eastern</span>
+                    <span className={`dates__date${estimated ? ' dates__date--guess' : ''}`}>
+                      {row.bound === 'before' ? 'By ' : ''}
+                      {longDate(at)}
+                    </span>
+                    <span className="dates__clock">
+                      {/* Never a clock on an estimate. The milestone it was
+                          derived from has one, and borrowing it would claim a
+                          precision to the minute that nothing supports. */}
+                      {estimated ? 'time not published' : `${clock(at)} Eastern`}
+                    </span>
                   </>
                 ) : (
                   <span className="dates__date dates__date--none">No date published</span>
@@ -107,10 +123,15 @@ export function DatesView({ nowMs }: Props) {
               <div className="dates__what">
                 <h3>
                   {milestone.name}
+                  {estimated && <span className="dates__guess-tag">estimated</span>}
                   {isNext && <span className="dates__next-tag">next</span>}
                 </h3>
                 <p>{milestone.what}</p>
-                {milestone.instead && <p className="dates__instead">{milestone.instead}</p>}
+                {estimated && milestone.estimate && (
+                  <p className="dates__instead">
+                    <strong>Why this date:</strong> {milestone.estimate.because}
+                  </p>
+                )}
                 {milestone.href && (
                   <a href={milestone.href} target="_blank" rel="noreferrer noopener">
                     Gen Con’s own page ↗
@@ -128,7 +149,9 @@ export function DatesView({ nowMs }: Props) {
 
       <p className="dates__note">
         Derived rather than fetched, so this page works with no network and answers for any year.
-        Gen Con has published show dates through 2030 and the rule matches all of them.
+        Gen Con has published show dates through 2030 and the rule matches all of them. The rows
+        marked <em>estimated</em> are the ones Gen Con publishes no date for at all — each is worked
+        out from one it does, and says which.
       </p>
     </section>
   );

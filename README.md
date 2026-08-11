@@ -652,13 +652,25 @@ against the ones Gen Con publishes at `/attend/futuredates`, out to 2030. To the
 instant matters because February is on standard time and May is on summer time,
 and an hour out on a queue that empties in ten minutes is the whole thing.
 
-**Two rows carry no date, and say so.** Gen Con publishes none for VIG rebooking
-— its own VIG page says the specifics "are detailed in the VIG newsletter, which
-is emailed in December" — and none for housing anywhere on the site. Both are
-listed with what *is* known instead: that VIGs buy before badge registration
-opens and book hotels before housing does. An invented date on a page like this
-is worse than none, because it is a diary entry somebody plans a year around,
-and it is the reason to trust the other four.
+**Three rows are estimated, and every one of them says so.** Gen Con publishes
+no date for VIG rebooking, for new VIG packages, or for housing. What it does
+publish is how they *relate* to the four above, so each carries a date derived
+from one of them:
+
+| | Estimated as | The sentence it rests on |
+| --- | --- | --- |
+| VIG rebooking | **by** badge registration | VIGs "can purchase their VIG badge before Badge Registration opens to the public"; the date goes out in the December VIG newsletter |
+| New VIG packages | with badge registration | a VIG package is a badge type, so what returning VIGs have not taken sells in the badge store from the moment it opens |
+| Housing registration | with badge registration | Gen Con's VIG page has VIGs booking "before housing officially opens", and housing has opened alongside badges in recent years |
+
+An estimate never sits in a column of facts. Each of those rows is drawn with a
+dashed date rather than a solid one, tagged `estimated`, carries "time not
+published" where the others print a clock, counts down as "*within* 188 days"
+rather than "in 188 days" where the derivation is only an upper bound, prints
+the sentence of Gen Con's it was derived from under **Why this date**, and can
+never be the row marked **next** — nobody should be told to act on a guess. A
+date whose reasoning somebody can check is useful; a plausible one with no
+provenance is a diary entry they plan a year around and have no way to doubt.
 
 Derived rather than fetched, so the page works with no network and answers for
 any year. One field is deliberately left out: the API also carries a bare

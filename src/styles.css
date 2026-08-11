@@ -1743,6 +1743,19 @@ body {
   font-style: italic;
 }
 
+/*
+ * A derived date, drawn so it cannot be mistaken for one of Gen Con's at a
+ * glance: dashed underline, muted, and never the same weight as a fact. The
+ * word "estimated" is on the row too — this is the part that works before
+ * anybody has read a word.
+ */
+.dates__date--guess {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: underline dashed currentColor 1px;
+  text-underline-offset: 3px;
+}
+
 .dates__clock {
   color: var(--text-muted);
   font-size: 12px;
@@ -1789,6 +1802,20 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* Same shape as the "next" tag, deliberately without its colour: a badge that
+ * shouts would make the estimate look like the important row rather than the
+ * uncertain one. */
+.dates__guess-tag {
+  padding: 1px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .dates__what p {
   margin: 0;
   color: var(--text-muted);
@@ -1796,7 +1823,8 @@ body {
   line-height: 1.45;
 }
 
-/* What is known when the date is not — never printed beside a guess at one. */
+/* The sentence of Gen Con's an estimate was derived from, set apart so it reads
+ * as evidence for the date above rather than more description of the event. */
 .dates__instead {
   color: var(--text) !important;
   font-size: 12px !important;

@@ -27,13 +27,19 @@
  * Sunday, with Trade Day on the Wednesday before — checked against the API for
  * 2022 to 2027 and against Gen Con's published future dates through 2030.
  *
- * WHAT IS NOT HERE, AND WHY. Gen Con publishes no date for VIG rebooking or for
- * housing: its own VIG page says the specifics "are detailed in the VIG
- * newsletter, which is emailed in December", and there is no housing date on
- * the site at all. Both are listed anyway, without a date and with what *is*
- * known — that VIGs buy before badge registration opens and book hotels before
- * housing does. An invented date on a page like this is worse than none: it
- * would be a diary entry somebody plans a year around.
+ * WHAT IS ESTIMATED, AND HOW. Gen Con publishes no date for VIG rebooking, for
+ * new VIG packages or for housing. What it does publish is how they *relate* to
+ * the dates above — its own VIG page says VIGs "can purchase their VIG badge
+ * before Badge Registration opens to the public and procure their first choice
+ * of hotel before housing officially opens", and that the specifics "are
+ * detailed in the VIG newsletter, which is emailed in December". So those three
+ * carry an estimate derived from a milestone that *is* published, along with the
+ * sentence it was derived from — and the page marks every one of them as an
+ * estimate rather than letting it sit in a column of facts.
+ *
+ * The distinction is the whole point. A derived date somebody can check the
+ * reasoning of is useful; a plausible date with no provenance is a diary entry
+ * somebody plans a year around and has no way to doubt.
  */
 
 /** One thing that happens on the way to the convention. */
@@ -52,10 +58,18 @@ export interface Milestone {
   /** Where Gen Con says it, for anybody who wants to check. */
   href?: string;
   /**
-   * What is known when the date is not. Printed instead of a date, never
-   * alongside a guess at one.
+   * What to do when Gen Con publishes no date: derive one from a milestone that
+   * it does publish, and say so.
+   *
+   * `sameAs` for "it happens with that one", `before` for "it happens by then
+   * and Gen Con does not say when". `because` is the sentence the derivation
+   * rests on, printed on the row so anybody can judge it for themselves.
    */
-  instead?: string;
+  estimate?: {
+    sameAs?: string;
+    before?: string;
+    because: string;
+  };
 }
 
 /** Noon Eastern, which is when Gen Con opens all four of its dated gates. */
@@ -74,7 +88,11 @@ export const MILESTONES: ReadonlyArray<Milestone> = [
     name: 'VIG rebooking',
     what: 'Returning VIGs buy next year’s package before anybody else, and pick a hotel before housing opens.',
     daysBefore: null,
-    instead: 'Before badge registration. Gen Con emails the date to VIGs in December and publishes it nowhere.',
+    estimate: {
+      before: 'badges',
+      because:
+        'Gen Con: VIGs “can purchase their VIG badge before Badge Registration opens to the public”. The date itself goes out in the VIG newsletter, emailed each December.',
+    },
     href: 'https://www.gencon.com/attend/vig',
   },
   {
@@ -94,11 +112,27 @@ export const MILESTONES: ReadonlyArray<Milestone> = [
     href: 'https://www.gencon.com/badge_selection',
   },
   {
+    id: 'vig-new',
+    name: 'New VIG packages',
+    what: 'Whatever is left after returning VIGs have rebooked goes on sale to everybody else. Access is limited and it does not last.',
+    daysBefore: null,
+    estimate: {
+      sameAs: 'badges',
+      because:
+        'A VIG package is a badge type, so what returning VIGs have not taken is sold in the badge store from the moment it opens. Gen Con publishes no separate date.',
+    },
+    href: 'https://www.gencon.com/attend/vig',
+  },
+  {
     id: 'housing',
     name: 'Housing registration',
     what: 'The block of convention hotel rooms opens to everybody who has a badge.',
     daysBefore: null,
-    instead: 'Gen Con publishes no date for this. It has opened with badge registration in recent years.',
+    estimate: {
+      sameAs: 'badges',
+      because:
+        'Gen Con publishes no housing date. Its VIG page has VIGs booking “before housing officially opens”, and housing has opened alongside badge registration in recent years.',
+    },
   },
   {
     id: 'catalogue',
@@ -182,9 +216,19 @@ export function milestoneAt(milestone: Milestone, year: number): Date | null {
 
 export interface DatedMilestone {
   milestone: Milestone;
-  /** Null where nothing publishes a date. */
+  /** Null only when there is neither a published date nor one to derive from. */
   at: Date | null;
-  /** Whole days from now until it, negative once it has gone. Null with no date. */
+  /**
+   * How the date was arrived at.
+   *
+   * `published` is Gen Con's own; `estimated` is derived from one that is, and
+   * the page has to say so — a column of dates where one is a guess and nothing
+   * marks it is worse than a column with a gap in it.
+   */
+  kind: 'published' | 'estimated';
+  /** `estimated` only: whether the date is the day itself or an upper bound. */
+  bound?: 'on' | 'before';
+  /** Whole days from now until it, negative once it has gone. */
   daysAway: number | null;
   past: boolean;
 }
@@ -205,11 +249,23 @@ export function planningYear(nowMs: number): number {
 
 /** The milestones for a year, in the order they happen, with the clock applied. */
 export function keyDates(year: number, nowMs: number): DatedMilestone[] {
-  const dated = MILESTONES.map((milestone) => {
-    const at = milestoneAt(milestone, year);
+  const byId = new Map(MILESTONES.map((one) => [one.id, one]));
+  /** The milestone an estimate leans on, where it has a date of its own. */
+  const anchor = (id: string | undefined) => {
+    const found = id ? byId.get(id) : undefined;
+    return found ? milestoneAt(found, year) : null;
+  };
+
+  const dated: DatedMilestone[] = MILESTONES.map((milestone) => {
+    const published = milestoneAt(milestone, year);
+    const estimate = milestone.estimate;
+    const at =
+      published ?? anchor(estimate?.sameAs) ?? anchor(estimate?.before) ?? null;
     return {
       milestone,
       at,
+      kind: published ? ('published' as const) : ('estimated' as const),
+      bound: published ? undefined : estimate?.sameAs ? ('on' as const) : ('before' as const),
       // Whole days, rounded up, so something later today reads "today" rather
       // than "in 0 days" and something tomorrow morning does not read "today".
       daysAway: at ? Math.ceil((at.getTime() - nowMs) / MS_DAY) : null,
@@ -218,15 +274,16 @@ export function keyDates(year: number, nowMs: number): DatedMilestone[] {
   });
 
   /*
-   * Undated ones sit where they belong rather than at the end.
+   * By date, and by the listed order where two share one.
    *
-   * VIG rebooking happens before badge registration and housing with it; those
-   * are the two facts Gen Con does publish about them, and an ordering is worth
-   * more on this page than a date would be worth if it were invented.
+   * Three of these are estimated to land *on or before* badge registration, so
+   * they tie with it and with each other. The order they are written in is the
+   * order they happen — rebooking, then what is left of it, then housing — and
+   * that ordering is itself something Gen Con publishes.
    */
   const order = MILESTONES.map((one) => one.id);
   return dated.sort((a, b) => {
-    if (a.at && b.at) return a.at.getTime() - b.at.getTime();
-    return order.indexOf(a.milestone.id) - order.indexOf(b.milestone.id);
+    const byTime = (a.at?.getTime() ?? Infinity) - (b.at?.getTime() ?? Infinity);
+    return byTime || order.indexOf(a.milestone.id) - order.indexOf(b.milestone.id);
   });
 }
