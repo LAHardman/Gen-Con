@@ -43,7 +43,7 @@ import { AddStop } from './AddStop';
 import { subjectFor } from '../hooks/usePlanDescriptions';
 import { foodFacets, formatOpening, isFood, openingFor, vendorById } from '../data/food';
 import { VENUES_BY_ID, type Room } from '../data/venues';
-import type { Exhibitor } from '../data/exhibitors';
+import { tagsOf, type Exhibitor } from '../data/exhibitors';
 import type { Pin } from '../data/offsite';
 import type { Plan } from '../hooks/usePlan';
 import { useEventNotes, type NotesSubject } from '../hooks/useEventNotes';
@@ -261,6 +261,21 @@ export function EventDialog({
     if (facets.dish.length) rows.push(['Serves', facets.dish.join(', ')]);
     if (facets.dietary.length) rows.push(['Dietary', facets.dietary.join(', ')]);
     if (facets.other.length) rows.push(['Also', facets.other.join(', ')]);
+  } else if (stand) {
+    /*
+     * Everything else keeps its tags in one row, unsplit.
+     *
+     * The food ones are filed into three because somebody looking for lunch is
+     * asking exactly one of "what kitchen", "what dish", "can I eat it". A
+     * stand's 74 are not three questions wearing one coat — they are what it
+     * is (`Publisher`, `Retailer`), what it sells (`Board Games`, `Apparel`),
+     * what genre (`Fantasy`, `Horror`) and who runs it (`LGBTQIA Plus Owned`),
+     * and inventing a classification for them would be inventing four labels
+     * Gen Con has not written and nobody has checked. Its own word is "tags",
+     * and it is the word the filter uses too.
+     */
+    const held = tagsOf(stand);
+    if (held.length) rows.push(['Tags', held.join(', ')]);
   }
 
   rows.push(['Where', where]);

@@ -140,7 +140,7 @@ describe('the top-level kind', () => {
 
     fireEvent.click(kindButton('Vendors'));
     fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
-    expect(legends()).toEqual(['Sort of stand', 'Where', 'Sells']);
+    expect(legends()).toEqual(['Sort of stand', 'Where', 'Tags']);
 
     fireEvent.click(kindButton('Places'));
     expect(legends()).toEqual(['Building', 'Floor']);

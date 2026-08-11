@@ -320,12 +320,14 @@ export function EventFilters({
             ))}
           </Group>
 
-          {/* 116 tags is not a row of buttons on a phone. One at a time, for the
-              same reason the game system is a text box. */}
-          <Group label="Sells">
+          {/* 74 tags is not a row of buttons on a phone. One at a time, for the
+              same reason the game system is a text box — and "Tags" rather than
+              "Sells", because `Publisher` is not something anybody sells. It is
+              the word on the vendor's own panel too. */}
+          <Group label="Tags">
             <select
               className="filters__text"
-              aria-label="Sells"
+              aria-label="Tags"
               value={filter.tags?.[0] ?? ''}
               onChange={(change) => set({ tags: change.target.value ? [change.target.value] : [] })}
             >

@@ -16,7 +16,7 @@ import { EventDialog, type Detail } from './EventDialog';
 import { ROOMS_BY_ID } from '../data/venues';
 import type { ConEvent } from '../data/events';
 import type { Plan } from '../hooks/usePlan';
-import { EXHIBITORS } from '../data/exhibitors';
+import { EXHIBITORS, tagsOf } from '../data/exhibitors';
 import { planEntry, stopEntry } from '../data/plan';
 
 const event: ConEvent = {
@@ -471,5 +471,41 @@ describe('something already on the schedule', () => {
     const planned = { ...planEntry(event, ROOMS_BY_ID['hall-a']), description: 'Saved.' };
     open({ kind: 'planned', entry: planned, room: ROOMS_BY_ID['hall-a'] });
     expect(screen.getByRole('link').getAttribute('href')).toContain('gencon.com/events/');
+  });
+});
+
+const showVendorPanel = () =>
+  open({
+    kind: 'vendor',
+    exhibitor: EXHIBITORS.find((one) => one.name === 'Arepas')!,
+    room: ROOMS_BY_ID['block-party-street'],
+  });
+
+describe('a vendor that is not food', () => {
+  const kenzer = EXHIBITORS.find((one) => tagsOf(one).length > 2 && one.kind === 'Exhibitors')!;
+
+  it('says what Gen Con tags it with, in one row', () => {
+    // The food ones are filed into cuisine, dish and dietary because somebody
+    // looking for lunch is asking exactly one of those. A stand's tags are what
+    // it is, what it sells, what genre and who runs it, and inventing four
+    // labels Gen Con has not written would be inventing them.
+    open({ kind: 'vendor', exhibitor: kenzer, room: ROOMS_BY_ID['hall-a'] });
+    const shown = fact('Tags')!;
+    for (const tag of tagsOf(kenzer)) expect(shown).toContain(tag);
+    // Not split into the food facets, which mean nothing here.
+    expect(screen.queryByText('Cuisine')).toBeNull();
+    expect(screen.queryByText('Serves')).toBeNull();
+  });
+
+  it('leaves the row out for a stand Gen Con tags with nothing', () => {
+    open({ kind: 'vendor', exhibitor: { ...kenzer, tags: [] }, room: ROOMS_BY_ID['hall-a'] });
+    expect(screen.queryByText('Tags')).toBeNull();
+  });
+
+  it('keeps the food panel’s three rows for a food stand', () => {
+    // The two paths are exclusive: a truck gets the split and nothing gets both.
+    showVendorPanel();
+    expect(fact('Cuisine')).toBe('Venezuelan');
+    expect(screen.queryByText('Tags')).toBeNull();
   });
 });

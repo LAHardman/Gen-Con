@@ -768,7 +768,7 @@ them emptied the list. That looks exactly like a search that found nothing.
 | **Everything** | the event dimensions; any of them silences rooms, stands and addresses |
 | **Events** | day, start time, length, type, cost, tickets left, age, game system, building, room — and sort by start, end, length or cost |
 | **Food** | cuisine (12), dish (26), dietary (5) |
-| **Vendors** | sort of stand (7), where (15 areas), sells (74 tags) |
+| **Vendors** | sort of stand (7), where (15 areas), tags (74) |
 | **Places** | building (16), floor — offered from the buildings already chosen |
 
 Every one of those numbers is read off the live catalogue rather than written
@@ -783,7 +783,13 @@ areas are also its own words, from `Exhibit Hall` (572) down to `Stadium : West
 Club Lounge` (1). The tags are a vocabulary of 116 across the catalogue, 74 of
 them outside food, from `Publisher` (347) and `Board Games` (301) down to the
 one-offs — which is not a row of buttons on a phone, so that one is a list and
-one at a time, for the same reason the game system is a text box.
+one at a time, for the same reason the game system is a text box. A vendor's own
+panel prints them in one row, unsplit: the food tags are filed into cuisine,
+dish and dietary because somebody looking for lunch is asking exactly one of
+those three, and a stand's are what it is (`Publisher`, `Retailer`), what it
+sells (`Board Games`, `Apparel`), what genre (`Fantasy`, `Horror`) and who runs
+it (`LGBTQIA Plus Owned`) — four labels Gen Con has not written and nobody has
+checked.
 
 **Places: a building and a floor.** The floors are Gen Con's own words too, and
 they disagree between buildings — "Level 1" in the convention centre, "1st
