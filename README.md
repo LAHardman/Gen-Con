@@ -741,6 +741,60 @@ there is not an option — it is one nobody has asked about, and the only reason
 sleep there is to spend less. The walk ring is the opposite: you would consider
 walking to any of them at any price, so its blanks are honest and stay visible.
 
+#### The Gen Con block, estimated — and what to compare it with
+
+The **Gen Con block** tab does the thing the rest of the page cannot: it puts a
+number on the block rate. Every one of those numbers is an estimate and the page
+says so above them, not under them.
+
+**The base is real.** Gen Con publishes block rates nowhere a program can read,
+but in 2019 an attendee typed the whole block into a forum post — 22 hotels with
+their negotiated rate for 2014, 2015 and 2019 — and that post is still on Gen
+Con's own forums. `scripts/fetch-block-rates.mjs` reads it into
+`src/data/partners.ts`. Provenance exactly as good as that sounds: a forum post,
+not a Gen Con publication; seven years old; describing the 2019 block, which has
+since moved to Q-rooms.
+
+**The multiplier is published.** The U.S. Travel Association's Travel Price Index
+put US hotel prices **13.0% above 2019** in June 2026. One measured number
+absorbs the whole strange run in between — down 10% in 2020, up 10% in 2021 and
+again in 2022 — which no growth rate fitted to 2014–2019 could have reproduced.
+Years past the last measured one continue at a stated 3%, and `measured: false`
+travels with them so the page can say it is an estimate built on an estimate.
+
+**Only 14 of the 22 are shown**, because the name matcher refuses ambiguity.
+"Courtyard by Marriott Downtown" and "Marriott Indianapolis Downtown" both reduce
+to a shared word, and the first version of this put a Courtyard's block rate on
+the Marriott — which then carried two different prices. The matcher now needs two
+shared significant words (or an exact one-word name on both sides), refuses ties
+outright, and the generator throws if two block entries ever land on the same
+building. Eight hotels drop out as a result and show no block rate, which is the
+right side to fail on: a missing row costs nothing, a wrong one costs money.
+
+#### Pairing each block hotel with an alternative
+
+Each block hotel is matched to the nearest walkable hotel **not** in the block,
+and no hotel is ever offered twice.
+
+That last clause is the whole difficulty. Nearest-neighbour looks right and is
+not: four block hotels sit within two hundred metres of each other downtown, and
+greedy assignment hands all four the same alternative — a table that tells you
+one thing four times. So it is a **stable matching** (Gale–Shapley): block hotels
+propose down a preference list, an alternative holds the best proposal it has
+seen and rejects the rest, and the rejected move on to their next choice. When
+two want the same neighbour the nearer keeps it. Removing the matching in favour
+of greedy nearest-neighbour breaks seven tests.
+
+Preference is distance first, then two corrections deliberately worth tens of
+metres rather than hundreds — **similar quality** (a rough tier from OSM stars, or
+the brand where there is none) and **equal-or-lower price** than the block
+estimate. A dearer alternative is pushed back but not excluded, because "the
+nearest thing outside the block costs more" is itself worth knowing. If the
+alternatives run out, a block hotel is shown unpaired rather than sharing one.
+
+The saving is printed as a direction, not a sum: it subtracts an estimate from a
+quote, and the row says so.
+
 #### Four sources, for survival rather than coverage
 
 SerpApi (Google Hotels), Xotelo, Amadeus and Apify. These are free tiers of

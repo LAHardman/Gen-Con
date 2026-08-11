@@ -12,6 +12,21 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../data/partners', () => ({
+  BASE_YEAR: 2019,
+  SOURCE: 'https://example.invalid/thread',
+  PARTNERS: [
+    { placeId: 'w1', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
+    { placeId: 'w2', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
+  ],
+  isPartner: (id: string) => ['w1', 'w2'].includes(id),
+  partnerFor: (id: string) =>
+    ({
+      w1: { placeId: 'w1', blockName: 'JW Marriott', y2014: 212, y2015: 218, y2019: 246 },
+      w2: { placeId: 'w2', blockName: 'The Westin', y2014: 195, y2015: 201, y2019: 221 },
+    })[id] ?? null,
+}));
+
 vi.mock('../data/lodging', () => ({
   WALK_METRES: 1600,
   DRIVE_METRES: 25000,
@@ -21,6 +36,7 @@ vi.mock('../data/lodging', () => ({
     { id: 'w1', name: 'JW Marriott Indianapolis', kind: 'hotel', metres: 124, ring: 'walk', lat: 0, lng: 0 },
     { id: 'w2', name: 'The Westin Indianapolis', kind: 'hotel', metres: 280, ring: 'walk', lat: 0, lng: 0 },
     { id: 'w3', name: 'Nestle Inn', kind: 'guest_house', metres: 900, ring: 'walk', lat: 0, lng: 0 },
+    { id: 'w4', name: 'Holiday Inn Express', kind: 'hotel', metres: 1200, ring: 'walk', lat: 0, lng: 0 },
     { id: 'd1', name: 'Motel 6 Southport', kind: 'motel', metres: 14000, ring: 'drive', lat: 0, lng: 0, city: 'Southport' },
     { id: 'd2', name: 'Super 8 Airport', kind: 'motel', metres: 9000, ring: 'drive', lat: 0, lng: 0 },
   ],
@@ -32,6 +48,7 @@ vi.mock('../data/rates', () => {
     { placeId: 'd1', nightly: 71, currency: 'USD', sources: ['xotelo'], at: '2026-08-09', spread: 0 },
     { placeId: 'w1', nightly: 289, currency: 'USD', sources: ['serpapi', 'xotelo'], at: '2026-06-02', spread: 40 },
     { placeId: 'w2', nightly: 240, currency: 'USD', sources: ['serpapi'], at: '2026-08-10', spread: 0 },
+    { placeId: 'w4', nightly: 165, currency: 'USD', sources: ['xotelo'], at: '2026-08-08', spread: 0 },
   ];
   return {
     RATES,
@@ -110,6 +127,7 @@ describe('the two rings', () => {
       'JW Marriott Indianapolis',
       'The Westin Indianapolis',
       'Nestle Inn',
+      'Holiday Inn Express',
     ]);
     expect(within(row('JW Marriott')).getByText(/min walk/)).toBeTruthy();
   });
@@ -152,5 +170,61 @@ describe('the two rings', () => {
     render(<HotelsView nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
     expect(page().textContent).toMatch(/at or below the cheapest walkable rate/i);
+  });
+});
+
+
+describe('the Gen Con block, estimated', () => {
+  const openBlock = () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
+  };
+
+  it('says every figure in it is an estimate, and where the base came from', () => {
+    // The left column is a 2019 negotiated rate times an index. Presenting that
+    // without its provenance is presenting a guess as a price.
+    openBlock();
+    const caution = page().querySelectorAll('.hotels__caution')[0];
+    expect(caution.textContent).toMatch(/every figure in the left column is an estimate/i);
+    expect(caution.textContent).toMatch(/2019 block rates/);
+    expect(within(caution as HTMLElement).getByRole('link')).toBeTruthy();
+  });
+
+  it('draws the estimate differently from a quoted price', () => {
+    // Same rule as the key dates page: an estimate never sits in a column of
+    // facts looking like one.
+    openBlock();
+    expect(page().querySelector('.hotels__money--guess')).toBeTruthy();
+  });
+
+  it('shows what it was carried forward from, on every row', () => {
+    openBlock();
+    expect(within(row('JW Marriott')).getByText(/from \$246 in 2019/)).toBeTruthy();
+  });
+
+  it('pairs each block hotel with a different alternative', () => {
+    // The reason this is a matching and not a lookup.
+    openBlock();
+    const alternatives = [...page().querySelectorAll('.hotels__pair')].map(
+      (pair) => pair.querySelectorAll('.hotels__side h3')[1]?.textContent,
+    );
+    expect(new Set(alternatives.filter(Boolean)).size).toBe(alternatives.filter(Boolean).length);
+  });
+
+  it('says how far apart a pair is', () => {
+    openBlock();
+    expect(page().textContent).toMatch(/\d+ m away/);
+  });
+
+  it('calls the saving a direction rather than a sum', () => {
+    // It subtracts an estimate from a quote. Printing that as a firm figure
+    // would be the most confident wrong number on the page.
+    openBlock();
+    expect(page().textContent).toMatch(/treat it as a direction, not a sum/i);
+  });
+
+  it('says the block list is partial rather than implying it is whole', () => {
+    openBlock();
+    expect(page().textContent).toMatch(/the rest are left out rather than guessed at/i);
   });
 });

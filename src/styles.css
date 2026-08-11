@@ -3073,3 +3073,79 @@ body {
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/*
+ * The block comparison: two numbers of very different quality, side by side.
+ *
+ * Each side is labelled and the estimate is drawn like the estimates on the key
+ * dates page — dashed, muted, never the same weight as a quote. A table that
+ * lined them up in matching type would invite a comparison neither number
+ * supports on its own.
+ */
+.hotels__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.hotels__side {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+}
+
+.hotels__side h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hotels__label {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hotels__money--guess {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-decoration: underline dashed currentColor 1px;
+  text-underline-offset: 3px;
+}
+
+.hotels__saving {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.hotels__saving--worse {
+  color: var(--text-muted);
+}
+
+/* The caveat travels with the figure rather than living in a footnote. */
+.hotels__saving span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.hotels__caution a {
+  color: var(--accent);
+}
+
+@media (max-width: 420px) {
+  .hotels__pair {
+    grid-template-columns: 1fr;
+  }
+}

@@ -363,10 +363,27 @@ describe('tying their name for a hotel to ours', () => {
       place('b', 'walk', 800, { name: 'Hampton Inn Indianapolis Downtown IUPUI' }),
     ];
     expect(matchByName(places, 'Hampton Inn Indianapolis Downtown IUPUI')?.id).toBe('b');
-    // Ambiguous on its own: it must not silently pick one.
-    const guess = matchByName(places, 'Hampton Inn Indianapolis');
-    expect(guess === null || guess.id === 'a' || guess.id === 'b').toBe(true);
+    // Ambiguous on its own, so it must answer nothing rather than pick one.
+    expect(matchByName(places, 'Hampton Inn Indianapolis')).toBeNull();
     expect(matchByName(places, 'Motel 6')).toBeNull();
+  });
+
+  it('will not put a Courtyard’s price on the Marriott', () => {
+    /*
+     * A real false match, caught when the block rates were first generated.
+     * "Courtyard by Marriott Downtown" reduces to {courtyard, marriott} and
+     * "Marriott Indianapolis Downtown" to {marriott} — contained, one word
+     * shared. The Marriott ended up with two different block rates, its own
+     * and a Courtyard's, and nothing downstream could have told.
+     */
+    const places = [
+      place('a', 'walk', 200, { name: 'Marriott Indianapolis Downtown' }),
+      place('b', 'walk', 210, { name: 'Courtyard Indianapolis Downtown' }),
+      place('c', 'walk', 740, { name: 'Courtyard Indianapolis at the Capitol' }),
+    ];
+    expect(matchByName(places, 'Courtyard by Marriott Downtown')).toBeNull();
+    // And the Marriott still matches itself.
+    expect(matchByName(places, 'Marriott Indianapolis Downtown')?.id).toBe('a');
   });
 
   it('throws away the words every hotel in this city shares', () => {

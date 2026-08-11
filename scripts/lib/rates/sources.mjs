@@ -302,22 +302,41 @@ export function words(name) {
 export function matchByName(places, name) {
   const theirs = words(name);
   if (theirs.size === 0) return null;
-  let best = null;
+
+  const candidates = [];
   for (const place of places) {
     const ours = words(place.name);
     if (ours.size === 0) continue;
     const shared = [...theirs].filter((word) => ours.has(word)).length;
     // One side must be wholly contained in the other: every distinguishing word
     // of the shorter name has to appear in the longer one.
-    const contained = shared === Math.min(theirs.size, ours.size);
-    if (!contained) continue;
-    // Among containments, prefer the one that leaves least unexplained.
-    const slack = Math.abs(theirs.size - ours.size);
-    if (!best || slack < best.slack) best = { place, slack };
+    if (shared !== Math.min(theirs.size, ours.size)) continue;
+    /*
+     * A single shared word is only enough when it is the whole of both names.
+     *
+     * This is the rule that took a real scalp. "Courtyard by Marriott Downtown"
+     * reduces to {courtyard, marriott} and "Marriott Indianapolis Downtown" to
+     * {marriott} — contained, one word shared, and the block rate for a
+     * Courtyard landed on the Marriott. Requiring two shared words, or an exact
+     * one-word name on both sides, refuses that pairing instead of guessing.
+     */
+    if (shared < 2 && !(theirs.size === 1 && ours.size === 1)) continue;
+    candidates.push({ place, slack: Math.abs(theirs.size - ours.size) });
   }
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => a.slack - b.slack);
   // Two words left unaccounted for is where "Hampton Inn Downtown" stops being
   // one hotel and starts being a chain in a city.
-  return best && best.slack <= 2 ? best.place : null;
+  if (candidates[0].slack > 2) return null;
+  /*
+   * A tie is an ambiguity, and an ambiguity resolved by array order is a
+   * coin toss dressed up as an answer. Two Hampton Inns four streets apart both
+   * reduce to {hampton}; picking whichever came first would put one's price on
+   * the other, and nothing downstream could tell.
+   */
+  if (candidates.length > 1 && candidates[1].slack === candidates[0].slack) return null;
+  return candidates[0].place;
 }
 
 /** In the order the run loop should try them: cheapest allowance spent last. */
