@@ -1613,27 +1613,112 @@ body {
   background: var(--accent);
 }
 
+/*
+ * The drawer, floor to ceiling against the left edge.
+ *
+ * Fixed rather than absolute: it is not hanging off the header, it has covered
+ * it. The z-index clears the filter panel (1200), which lives in the same
+ * stacking context because the search box is inside the header too.
+ */
 .menu__sheet {
-  position: absolute;
-  top: calc(100% + 8px);
-  /* Hangs from the same corner the button sits in, now that corner is the
-     left one — a sheet anchored to the far edge would open across the title. */
+  position: fixed;
+  top: 0;
+  bottom: 0;
   left: 0;
-  z-index: 20;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  /* Never the whole width: the strip of map still showing is what says this is
+     a drawer over the app rather than a page the app has navigated to. */
+  width: min(20rem, 84vw);
+  padding: 10px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  padding-left: calc(10px + env(safe-area-inset-left));
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+  overflow-y: auto;
+  animation: menu-slide 170ms ease-out;
+}
+
+/* Only on the way in. The drawer unmounts when it closes, so there is nothing
+   left to animate out — and a close that waits 170ms to happen feels broken in
+   a way an instant one does not. */
+@keyframes menu-slide {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+.menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1290;
+  background: rgba(8, 9, 14, 0.6);
+  animation: menu-fade 170ms ease-out;
+}
+
+@keyframes menu-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu__sheet,
+  .menu__scrim {
+    animation: none;
+  }
+}
+
+.menu__sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px 10px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.menu__sheet-title {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.menu__close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.menu__close:hover {
+  color: var(--text);
+}
+
+.menu__list {
   display: grid;
   gap: 2px;
-  min-width: 15rem;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  align-content: start;
 }
 
 .menu__item {
   display: grid;
   gap: 2px;
-  padding: 9px 11px;
+  padding: 12px;
   border: 0;
   border-radius: 8px;
   background: transparent;

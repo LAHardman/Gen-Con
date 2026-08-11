@@ -619,7 +619,21 @@ It behaves like a menu: Escape closes it, a pointer anywhere else closes it,
 choosing closes it, the button reports whether it is open, and opening it puts
 the keyboard on the first item. The current page is **marked rather than
 omitted**, because a menu that leaves out where you already are makes you count
-what is left to work out where that is. The map stays mounted underneath every
+what is left to work out where that is.
+
+**It is a full-height drawer, which makes it a mode.** A panel hanging off the
+header is a hint; one that runs floor to ceiling has covered the map, the search
+box and the button that opened it, so it owes three things a dropdown does not —
+a **scrim**, so what is behind is visibly out of reach rather than merely
+obscured (and tapping it closes, which is the gesture people already have); its
+own **close button**, because the hamburger is now underneath it; and a **focus
+trap**, because Tab off the end of a panel you cannot see past leaves the
+keyboard somewhere the eye has no way to follow and the next Enter presses a
+button nobody can see. It stops short of the full width on purpose: the strip of
+map still showing is what says this is a drawer over the app rather than a page
+the app has navigated to. The slide is on the way in only — the drawer unmounts
+when it closes, and a close that takes 170ms to happen feels broken in a way an
+instant one does not — and `prefers-reduced-motion` turns both off. The map stays mounted underneath every
 page — Leaflet loses track of its own size the moment its container is hidden,
 and remounting it throws away the view somebody had.
 

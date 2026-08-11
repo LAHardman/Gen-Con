@@ -20,6 +20,14 @@
  * pages and drags the rest of the header with it. The button still *says* the
  * page in its accessible name, because three lines drawn in a box announce
  * nothing, and a screen reader should not have to go looking for the label.
+ *
+ * IT IS A FULL-HEIGHT DRAWER, WHICH MAKES IT A MODE. A panel hanging off the
+ * header is a hint; one that runs floor to ceiling has covered the map, the
+ * search box and the button that opened it, so it owes three things a dropdown
+ * does not. A scrim, so the thing behind is visibly out of reach rather than
+ * merely obscured. Its own close button, because the hamburger is now
+ * underneath it. And a focus trap, because Tab out of a panel you cannot see
+ * past leaves the keyboard somewhere the eye has no way to follow.
  */
 
 import { useEffect, useId, useRef } from 'react';
@@ -43,10 +51,12 @@ interface Props<T extends string> {
 
 export function AppMenu<T extends string>({ pages, current, open, onToggle, onChoose }: Props<T>) {
   const id = useId();
+  const titleId = `${id}-title`;
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
   const firstRef = useRef<HTMLButtonElement | null>(null);
 
-  // Opening moves focus into the menu, so a keyboard lands on the first page
+  // Opening moves focus into the drawer, so a keyboard lands on the first page
   // rather than back at the top of the document.
   useEffect(() => {
     if (open) firstRef.current?.focus();
@@ -54,7 +64,30 @@ export function AppMenu<T extends string>({ pages, current, open, onToggle, onCh
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (key: KeyboardEvent) => key.key === 'Escape' && onToggle(false);
+    const onKeyDown = (key: KeyboardEvent) => {
+      if (key.key === 'Escape') {
+        onToggle(false);
+        return;
+      }
+      if (key.key !== 'Tab') return;
+      /*
+       * The trap. Everything behind the drawer is covered, so tabbing off the
+       * end of it would move the focus ring somewhere with nothing to look at
+       * — and the next Enter would press a button nobody can see.
+       */
+      const stops = sheetRef.current?.querySelectorAll<HTMLElement>('button, [href]');
+      if (!stops || stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      const on = document.activeElement;
+      if (key.shiftKey && (on === first || !sheetRef.current?.contains(on))) {
+        key.preventDefault();
+        last.focus();
+      } else if (!key.shiftKey && on === last) {
+        key.preventDefault();
+        first.focus();
+      }
+    };
     const onPointerDown = (pointer: PointerEvent) => {
       if (!boxRef.current?.contains(pointer.target as Node)) onToggle(false);
     };
@@ -90,28 +123,57 @@ export function AppMenu<T extends string>({ pages, current, open, onToggle, onCh
       </button>
 
       {open && (
-        <div className="menu__sheet" id={id} role="menu" aria-label="Pages">
-          {pages.map((page, index) => (
-            <button
-              key={page.id}
-              ref={index === 0 ? firstRef : undefined}
-              type="button"
-              role="menuitem"
-              aria-current={page.id === current ? 'page' : undefined}
-              className={`menu__item${page.id === current ? ' menu__item--current' : ''}`}
-              onClick={() => {
-                onChoose(page.id);
-                onToggle(false);
-              }}
-            >
-              <span className="menu__item-name">
-                {page.label}
-                {page.badge ? <span className="menu__item-count">{page.badge}</span> : null}
+        <>
+          {/* Under the drawer and over everything else: the map is still there
+              and is visibly not what you are working with. Closing on it is
+              the gesture people already have for a drawer. */}
+          <div
+            className="menu__scrim"
+            aria-hidden="true"
+            onPointerDown={() => onToggle(false)}
+          />
+
+          <div className="menu__sheet" ref={sheetRef}>
+            <div className="menu__sheet-head">
+              <span className="menu__sheet-title" id={titleId}>
+                Pages
               </span>
-              <span className="menu__item-detail">{page.detail}</span>
-            </button>
-          ))}
-        </div>
+              {/* The hamburger is underneath the drawer now, so the way out
+                  has to be inside it. */}
+              <button
+                type="button"
+                className="menu__close"
+                aria-label="Close menu"
+                onClick={() => onToggle(false)}
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
+
+            <div className="menu__list" id={id} role="menu" aria-labelledby={titleId}>
+              {pages.map((page, index) => (
+                <button
+                  key={page.id}
+                  ref={index === 0 ? firstRef : undefined}
+                  type="button"
+                  role="menuitem"
+                  aria-current={page.id === current ? 'page' : undefined}
+                  className={`menu__item${page.id === current ? ' menu__item--current' : ''}`}
+                  onClick={() => {
+                    onChoose(page.id);
+                    onToggle(false);
+                  }}
+                >
+                  <span className="menu__item-name">
+                    {page.label}
+                    {page.badge ? <span className="menu__item-count">{page.badge}</span> : null}
+                  </span>
+                  <span className="menu__item-detail">{page.detail}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

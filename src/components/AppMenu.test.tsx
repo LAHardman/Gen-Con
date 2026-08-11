@@ -118,3 +118,53 @@ describe('the sheet', () => {
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Map/ }));
   });
 });
+
+/**
+ * A panel that covers the map, the search box and the button that opened it is
+ * a mode rather than a hint, and owes three things a dropdown does not.
+ */
+describe('being a drawer rather than a dropdown', () => {
+  it('puts something over everything behind it, and closing it is that thing', () => {
+    const { onToggle } = show('map', true);
+    const scrim = document.querySelector('.menu__scrim')!;
+    expect(scrim).toBeTruthy();
+    // Hidden from a screen reader: it is the visual half of "out of reach",
+    // and the Escape key is the other half.
+    expect(scrim.getAttribute('aria-hidden')).toBe('true');
+    fireEvent.pointerDown(scrim);
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it('carries its own way out, because the hamburger is underneath it', () => {
+    const { onToggle } = show('map', true);
+    const close = screen.getByRole('button', { name: 'Close menu' });
+    fireEvent.click(close);
+    expect(onToggle).toHaveBeenCalledWith(false);
+  });
+
+  it('keeps the keyboard inside itself', () => {
+    // Tab off the end of a panel you cannot see past and the focus ring is
+    // somewhere with nothing to look at — the next Enter presses a button
+    // nobody can see.
+    show('map', true);
+    const items = screen.getAllByRole('menuitem');
+    const last = items[items.length - 1];
+    last.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close menu' }));
+
+    // And backwards off the front, round to the end.
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('leaves Tab alone in the middle, where the browser is already right', () => {
+    show('map', true);
+    const first = screen.getByRole('menuitem', { name: /Map/ });
+    first.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    // Nothing moved it: the browser will, and a trap that also does the
+    // ordinary case skips whatever it did not think of.
+    expect(document.activeElement).toBe(first);
+  });
+});
