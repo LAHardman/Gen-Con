@@ -204,7 +204,17 @@ describe('how far away the search results are', () => {
    * lands between the two and the position never arrives.
    */
   /** Where `distances.ts` says that room is entered. Somewhere real to stand. */
-  const WESTIN_GRAND_DOOR = { lat: 39.76603, lng: -86.16413 };
+  /*
+   * The Grand Ballroom's own doorway, as the floor plan puts it.
+   *
+   * It moved when the room stopped being a hand-placed rectangle and became
+   * the five airwalled sections the plan actually draws — the rectangle
+   * reached about fifteen metres further west than the ballroom does. This is
+   * the doorway `distances.ts` derives from the real outline; standing on a
+   * room's own doorway picks that room every time, which is what makes this a
+   * test of the walk rather than of the snap.
+   */
+  const WESTIN_GRAND_DOOR = { lat: 39.7661, lng: -86.16369 };
 
   const settle = async () => {
     for (let n = 0; n < 3; n += 1) await act(async () => new Promise((done) => setTimeout(done, 0)));

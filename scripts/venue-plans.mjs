@@ -658,8 +658,40 @@ function verticals(plan, perPixel, project, venue) {
  * worse against everything else the map draws. Where it does, the rectangle
  * stays: swapping one kind of wrongness for another is not progress.
  */
-const CLAIMED = 0.35;
-const AMBIGUOUS = 0.55;
+/**
+ * How much of a room's hand-placed rectangle a drawn outline must cover before
+ * the room will even propose to it.
+ *
+ * Lower than it was, and it can be: contention used to be fatal — two rooms
+ * naming one outline meant neither got it — so the bar had to be high enough
+ * that a weak match never crowded out a strong one. The matching below settles
+ * that instead, so this is back to what it should be: the point below which an
+ * overlap is coincidence rather than evidence.
+ */
+const CLAIMED = 0.2;
+/**
+ * How far a drawn outline's area may be from the room's own before the match is
+ * not worth making, whatever the overlap says.
+ *
+ * Overlap alone cannot tell "this is the room" from "this is one room inside
+ * it". Measured across every match this makes, the ratio of drawn area to
+ * authored area falls in three groups with clear gaps between them: eleven
+ * around 0.2–0.5, fourteen around 0.85–1.35, three at 2.1 and above. The middle
+ * group is the honest matches. The low group is every divisible ballroom on the
+ * campus — the Westin's Grand Ballroom is drawn as its five sections, I to V,
+ * so a room authored as the whole thing can only ever land on one of them, and
+ * the ballroom's own doorway ended up outside the shape named after it. The
+ * high group is a room being handed the whole hall it sits in.
+ *
+ * So this band sits in both gaps, and `SECTION` below puts the ballrooms back
+ * together properly rather than by loosening it.
+ */
+const SIZED = [0.7, 1.5];
+/**
+ * How much of a leftover outline must lie inside a room's rectangle before that
+ * room absorbs it as one of its own sections.
+ */
+const SECTION = 0.7;
 /** Slack in the two comparisons below: a wall's thickness, in square metres. */
 const TOUCHING = 2;
 
@@ -697,21 +729,68 @@ function snap(plan, frame, trace, rooms, venue, project, report) {
     return set;
   };
 
-  const wants = new Map();
-  for (const room of rooms) {
-    const mine = rect(room);
-    const scores = cells.map((set) => {
-      let both = 0;
-      for (const key of mine) if (set.has(key)) both += 1;
-      return both / mine.size;
-    });
+  /*
+   * WHICH DRAWN ROOM IS WHICH AUTHORED ONE, SOLVED FOR THE WHOLE FLOOR AT ONCE.
+   *
+   * This used to be one argmax per room, and it threw away most of the floor.
+   * A room took only its single best outline, gave up if second place was
+   * within 55% of first, and — the expensive one — two rooms naming the same
+   * outline meant *neither* of them got it. On a corridor of meeting rooms
+   * every room overlaps its neighbours' rectangles, because the rectangles are
+   * hand-placed and good to about five metres while the rooms are ten across.
+   * So contention was the normal case and the normal outcome was nothing:
+   * seventeen of a hundred and twenty-four rooms placed.
+   *
+   * It is a matching, so it is solved as one. Rooms propose down their list of
+   * plausible outlines; an outline holds the best proposal it has seen and
+   * rejects the rest, who move on to their next choice. Every room gets its own
+   * outline or none, contention resolves instead of killing both sides, and a
+   * room whose true outline was somebody else's first choice can still reach
+   * it. The safety checks below are unchanged and still have the last word.
+   */
+  const wishes = new Map(
+    rooms.map((room) => {
+      const mine = rect(room);
+      const ranked = cells
+        .map((set) => {
+          let both = 0;
+          for (const key of mine) if (set.has(key)) both += 1;
+          return { value: both / mine.size, ratio: set.size / mine.size };
+        })
+        .map((one, at) => ({ ...one, at }))
+        .filter((one) => one.value >= CLAIMED)
+        .sort((a, b) => b.value - a.value);
+      return [room.id, ranked];
+    }),
+  );
 
-      const order = scores.map((value, at) => ({ value, at })).sort((a, b) => b.value - a.value);
-    if (!order.length || order[0].value < CLAIMED) continue;
-    if (order[1] && order[1].value > order[0].value * AMBIGUOUS) continue;
-    if (!wants.has(order[0].at)) wants.set(order[0].at, []);
-    wants.get(order[0].at).push({ room, value: order[0].value });
+  /** Which room holds each drawn outline, and how strong its claim is. */
+  const held = new Map();
+  const nextTry = new Map(rooms.map((room) => [room.id, 0]));
+  const free = [...rooms];
+  while (free.length > 0) {
+    const room = free.shift();
+    const list = wishes.get(room.id);
+    const index = nextTry.get(room.id);
+    if (index >= list.length) continue; // Nothing plausible left to ask.
+    nextTry.set(room.id, index + 1);
+
+    const { at, value } = list[index];
+    const sitting = held.get(at);
+    if (!sitting) {
+      held.set(at, { room, value });
+      continue;
+    }
+    // Contested: the better overlap keeps it, the other tries its next choice.
+    if (value > sitting.value) {
+      held.set(at, { room, value });
+      free.push(sitting.room);
+    } else {
+      free.push(room);
+    }
   }
+
+  const wants = new Map([...held].map(([at, one]) => [at, [one]]));
 
   // The building, so a traced shape can be checked against it before it is
   // believed, and every room's cells as the map has them now.
@@ -752,11 +831,60 @@ function snap(plan, frame, trace, rooms, venue, project, report) {
     return worst;
   };
 
+  /*
+   * A DIVISIBLE BALLROOM IS DRAWN AS ITS SECTIONS, so it is taken as its
+   * sections.
+   *
+   * The Grand Ballroom is one room in `venues.ts` and five shapes on the plan,
+   * separated by the airwalls that make it divisible. Matching gives it one of
+   * the five and the size band then rightly throws that away — which fixes a
+   * wrong shape and leaves the biggest room in the building as a rectangle.
+   *
+   * Every outline nobody claimed is offered instead to whichever room's
+   * rectangle it sits inside. A room can hold several, and they are drawn as
+   * several rings, which is not an approximation of the union: the divisions
+   * are real, and the plan draws them because you can book the sections
+   * separately.
+   */
+  const spare = cells
+    .map((set, at) => ({ set, at }))
+    .filter((one) => !held.has(one.at) && one.set.size > 0);
+  const extra = new Map();
+  for (const { set, at } of spare) {
+    let best = null;
+    for (const [id, one] of held) {
+      const mine = rect(one.room);
+      let both = 0;
+      for (const key of set) if (mine.has(key)) both += 1;
+      const inside = both / set.size;
+      if (inside >= SECTION && (!best || inside > best.inside)) best = { room: one.room, inside, id };
+    }
+    if (!best) continue;
+    if (!extra.has(best.room.id)) extra.set(best.room.id, []);
+    extra.get(best.room.id).push(at);
+  }
+
   const out = [];
   const refused = [];
   for (const { at, room } of candidates) {
-    const shape = cells[at];
+    const mineToo = extra.get(room.id) ?? [];
+    const shape = new Set(cells[at]);
+    for (const also of mineToo) for (const key of cells[also]) shape.add(key);
     const was = current.get(room.id);
+
+    /*
+     * The size test, applied to what the room would actually become — its
+     * outline and every section it absorbed. Judging the primary alone would
+     * throw away a ballroom for being a fifth of itself, which is the thing
+     * the sections exist to fix.
+     */
+    const ratio = shape.size / rect(room).size;
+    if (ratio < SIZED[0] || ratio > SIZED[1]) {
+      refused.push(
+        `${room.id} — the drawing gives it ${ratio.toFixed(2)}× its own size, so it is not this room`,
+      );
+      continue;
+    }
 
     // No slack at all on leaving the building: the footprint is surveyed, the
     // check in `check-geometry.mjs` treats any spill as a finding, and a shape
@@ -773,7 +901,11 @@ function snap(plan, frame, trace, rooms, venue, project, report) {
     }
 
     current.set(room.id, shape);
-    out.push({ roomId: room.id, rings: drawn[at].rings.map((ring) => ring.map(project)) });
+    if (process.env.RATIOS) console.log(`        RATIO ${room.id} ${(shape.size / rect(room).size).toFixed(2)} (+${mineToo.length})`);
+    out.push({
+      roomId: room.id,
+      rings: [at, ...mineToo].flatMap((one) => drawn[one].rings.map((ring) => ring.map(project))),
+    });
   }
 
   if (report) {
