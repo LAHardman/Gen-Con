@@ -194,13 +194,46 @@ if (verify) {
     if (seen.length > 0) {
       console.error(`  matched ${matched.length} of the ${seen.length} it returned:\n`);
       for (const one of matched) {
-        console.error(`    ${String(one.nightly).padStart(6)}  ${one.matched}`);
+        console.error(`    ${String(one.nightly).padStart(6)}  ${one.matched}  [by ${one.how}]`);
         if (one.matched !== one.name) console.error(`            they call it: ${one.name}`);
       }
+
+      /*
+       * Sorting the misses into the two that mean different things.
+       *
+       * Most of what a downtown search returns is Gen Con's block, which was
+       * deliberately not offered to the matcher — reporting those as "we could
+       * not place it" reads as a fault and is the opposite of one. What is left
+       * is the real list worth acting on.
+       */
+      const blockNames = new Set(
+        readFileSync(join(ROOT, 'src/data/partners.ts'), 'utf8')
+          .match(/blockName: "(?:[^"]*)"/g)
+          ?.map((one) => one.slice(12, -1).toLowerCase()) ?? [],
+      );
+      const looksBlock = (name) => {
+        const key = name.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ');
+        return [...blockNames].some((one) => {
+          const theirs = new Set(one.replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((w) => w.length > 3));
+          const mine = new Set(key.split(/\s+/).filter((w) => w.length > 3));
+          const shared = [...theirs].filter((w) => mine.has(w)).length;
+          return shared >= Math.min(theirs.size, mine.size) && shared >= 2;
+        });
+      };
+
       const missed = seen.filter((one) => !one.matched);
-      if (missed.length > 0) {
-        console.error(`\n  ${missed.length} it returned that we could not place:\n`);
-        for (const one of missed.slice(0, 30)) {
+      const expected = missed.filter((one) => looksBlock(one.name));
+      const real = missed.filter((one) => !looksBlock(one.name));
+
+      if (expected.length > 0) {
+        console.error(
+          `\n  ${expected.length} it returned are Gen Con's own block hotels, which were`,
+        );
+        console.error("  never offered to the matcher. That is the design, not a miss.");
+      }
+      if (real.length > 0) {
+        console.error(`\n  ${real.length} it returned that we genuinely could not place:\n`);
+        for (const one of real.slice(0, 30)) {
           console.error(`    ${String(one.nightly ?? '-').padStart(6)}  ${one.name}`);
         }
         console.error(

@@ -853,11 +853,33 @@ hotels it matched, and every property the service returned that it could not
 place. That second list is the point — the interesting failure is not an error,
 it is twenty hotels coming back and two of them matching, which is a
 name-matching problem and looks exactly like a thin response unless both are
-shown. Its three outcomes are all
-useful: prices means the adapter works; *"it answered, and matched none of our
-hotels"* means the request was fine and the **name matching** is what needs work;
-and an error is the adapter refusing to guess at a response it did not recognise
-rather than reporting it as "no price".
+shown — and Gen Con's own block hotels, which a downtown search mostly returns
+and which were deliberately never offered to the matcher, are counted apart from
+the real gaps rather than listed as failures. An error, meanwhile, is the
+adapter refusing to guess at a response it did not recognise rather than
+reporting it as "no price".
+
+**One search per town, not one search.** SerpApi's area query used to be "hotels
+near Indiana Convention Center" and nothing else. That was right while the
+interesting hotels were downtown, and wrong the moment Gen Con's own page took
+over downtown pricing — what is left to buy is a hundred and seventy hotels in
+Plainfield, Carmel and Greenwood that a downtown search will never return. The
+adapter groups the hotels it is handed by town and searches each, biggest group
+first, one unit apiece until the allowance runs out.
+
+**Coordinates first, names second.** A name describes a hotel; a position
+identifies one. Four hotels in this city reduce to "la quinta" — one 1.4 km from
+the hall and three sixteen kilometres out — and no care with words can separate
+them, because the names genuinely are identical. So a rate service's own
+`gps_coordinates` are matched first, within 80 m, refusing any point near two
+hotels or near none. Names are the fallback for services that return no
+position.
+
+**Chain names are noise, and that line was bought with a wrong price.** A live
+run put "Tru by Hilton Indianapolis *Downtown*" at $166 onto "Tru by Hilton
+Indianapolis-*Lawrence*", seventeen kilometres away, because `hilton` counted as
+a distinguishing word and the two therefore shared *two* — enough to clear the
+bar. A franchise brand says who runs a hotel, not which one it is.
 
 Keys go in `.env`, which is gitignored — a rate-service key in a public
 repository is somebody else's quota being spent, and it is the first thing

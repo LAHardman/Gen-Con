@@ -136,9 +136,28 @@ export const serpapi = {
     for (const row of rows) {
       const nightly = money(row.rate_per_night?.extracted_lowest, row.rate_per_night?.lowest);
       if (!row.name) continue;
-      const place = nightly ? matchByName(places, row.name) : null;
+      /*
+       * Coordinates first, name second.
+       *
+       * Google gives every property a position, and a position identifies a
+       * building where a name only describes one. Four hotels in this city are
+       * called some arrangement of "La Quinta Inn & Suites" and the matcher
+       * rightly refuses all of them; their coordinates are sixteen kilometres
+       * apart and refuse nothing.
+       */
+      const point = row.gps_coordinates
+        ? { lat: Number(row.gps_coordinates.latitude), lng: Number(row.gps_coordinates.longitude) }
+        : null;
+      const byPoint = nightly ? matchByPoint(places, point) : null;
+      const place = byPoint ?? (nightly ? matchByName(places, row.name) : null);
       if (place) found.push({ placeId: place.id, nightly, currency: 'USD', via: row.name });
-      report?.({ name: row.name, nightly, matched: place?.name ?? null });
+      report?.({
+        name: row.name,
+        nightly,
+        matched: place?.name ?? null,
+        // Which mechanism found it, so a run says whether coordinates arrived.
+        how: place ? (byPoint ? 'position' : 'name') : null,
+      });
     }
     return found;
   },
@@ -280,16 +299,87 @@ export const apify = {
 const NOISE = new Set([
   'hotel', 'inn', 'suites', 'suite', 'the', 'a', 'an', 'and', 'by', 'at', 'of', 'on',
   'indianapolis', 'indy', 'downtown', 'in', 'near', 'hotels',
+  /*
+   * Chain names, and this line was bought with a wrong price.
+   *
+   * "Tru by Hilton Indianapolis Downtown" and "Tru by Hilton
+   * Indianapolis-Lawrence" are two hotels seventeen kilometres apart. With
+   * `hilton` counted as a distinguishing word they share two — tru and hilton —
+   * which cleared the two-word bar, and a downtown rate landed on a hotel in a
+   * suburb. A franchise brand says who runs a hotel, not which one it is.
+   */
+  'hilton', 'marriott', 'hyatt', 'wyndham', 'ihg', 'choice', 'radisson', 'best', 'western',
 ]);
 
+/** Every token, for names made entirely of the words above. */
+const allWords = (name) =>
+  new Set(
+    String(name)
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+
 export function words(name) {
-  return new Set(
+  const kept = new Set(
     String(name)
       .toLowerCase()
       .replace(/[^a-z0-9 ]+/g, ' ')
       .split(/\s+/)
       .filter((word) => word && !NOISE.has(word)),
   );
+  /*
+   * Some hotels are named entirely out of what this strips.
+   *
+   * "Marriott Indianapolis Downtown" is three noise words and nothing else, and
+   * an empty set matches nothing at all — so a name that disappears falls back
+   * to its full token list, where it can still be compared with another.
+   */
+  return kept.size > 0 ? kept : allWords(name);
+}
+
+/**
+ * How far apart two points are, in metres.
+ *
+ * Duplicated from `blocks.ts` rather than imported: this file runs under bare
+ * node in a workflow and that one is TypeScript the app compiles.
+ */
+function metresApart(a, b) {
+  const R = 6_371_000;
+  const p1 = (a.lat * Math.PI) / 180;
+  const p2 = (b.lat * Math.PI) / 180;
+  const dp = ((b.lat - a.lat) * Math.PI) / 180;
+  const dl = ((b.lng - a.lng) * Math.PI) / 180;
+  const x = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+/**
+ * Two hotels are the same building if they are in the same place.
+ *
+ * Names are a bad key and this is a better one. Indianapolis has four hotels
+ * that all reduce to "la quinta" — one 1.4 km from the hall and three sixteen
+ * kilometres out — and no amount of care with words can tell them apart,
+ * because their names genuinely are identical. Their coordinates are not.
+ *
+ * Eighty metres is generous enough for the difference between a front door and
+ * a building centroid, and tight enough that no two hotels in this city share
+ * it. A tie inside that radius still refuses rather than guessing.
+ */
+const SAME_BUILDING_M = 80;
+
+export function matchByPoint(places, point) {
+  if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return null;
+  const near = places
+    .filter((one) => Number.isFinite(one.lat) && Number.isFinite(one.lng))
+    .map((one) => ({ place: one, away: metresApart(one, point) }))
+    .filter((one) => one.away <= SAME_BUILDING_M)
+    .sort((a, b) => a.away - b.away);
+  if (near.length === 0) return null;
+  // Two hotels within eighty metres of one point is a car park, not a match.
+  if (near.length > 1 && near[1].away - near[0].away < 25) return null;
+  return near[0].place;
 }
 
 export function matchByName(places, name) {

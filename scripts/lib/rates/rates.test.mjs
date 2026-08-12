@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cheapFirst, isFresh, keeps, planRun, walkFloor } from './plan.mjs';
 import { budget, ledgerFor, noteTried, quotaFor, remaining, spend } from './quota.mjs';
 import { merge, runOnce, usable } from './run.mjs';
-import { matchByName, serpapi, words } from './sources.mjs';
+import { matchByName, matchByPoint, serpapi, words } from './sources.mjs';
 
 const AUGUST = Date.parse('2026-08-11T12:00:00Z');
 const JULY = Date.parse('2026-07-11T12:00:00Z');
@@ -401,7 +401,16 @@ describe('tying their name for a hotel to ours', () => {
       place('b', 'walk', 210, { name: 'Courtyard Indianapolis Downtown' }),
       place('c', 'walk', 740, { name: 'Courtyard Indianapolis at the Capitol' }),
     ];
-    expect(matchByName(places, 'Courtyard by Marriott Downtown')).toBeNull();
+    /*
+     * It used to refuse this outright, because `marriott` counted as a
+     * distinguishing word and the name was therefore ambiguous between the
+     * Courtyard and the Marriott. Treating chain names as noise removed the
+     * ambiguity rather than papering over it: what is left of "Courtyard by
+     * Marriott Downtown" is `courtyard`, which is exactly one of these.
+     */
+    expect(matchByName(places, 'Courtyard by Marriott Downtown')?.id).toBe('b');
+    // The thing that must never happen, and still does not.
+    expect(matchByName(places, 'Courtyard by Marriott Downtown')?.id).not.toBe('a');
     // And the Marriott still matches itself.
     expect(matchByName(places, 'Marriott Indianapolis Downtown')?.id).toBe('a');
   });
@@ -549,5 +558,113 @@ describe('one search per town, rather than one search', () => {
     });
     expect(asked).toEqual(['q1', 'q2']);
     expect(ledger.spent.serpapi).toBe(2);
+  });
+});
+
+describe('telling one hotel from another', () => {
+  it('will not put a downtown price on a suburb of the same chain', () => {
+    /*
+     * Bought with a wrong price on a live run. SerpApi returned "Tru by Hilton
+     * Indianapolis Downtown" at $166 and the matcher gave it to "Tru by Hilton
+     * Indianapolis-Lawrence", seventeen kilometres away — because `hilton`
+     * counted as a distinguishing word, so the two shared `tru` and `hilton`
+     * and cleared the two-word bar. A franchise brand says who runs a hotel,
+     * not which one it is.
+     */
+    const lawrence = [place('a', 'drive', 17023, { name: 'Tru by Hilton Indianapolis-Lawrence' })];
+    expect(matchByName(lawrence, 'Tru by Hilton Indianapolis Downtown')).toBeNull();
+    expect([...words('Tru by Hilton Indianapolis Downtown')]).toEqual(['tru']);
+  });
+
+  it('still matches a hotel whose whole name is chain words', () => {
+    // "Marriott Indianapolis Downtown" is nothing but stripped words, and an
+    // empty set matches nothing at all.
+    const places = [place('a', 'walk', 192, { name: 'Marriott Indianapolis Downtown' })];
+    expect(matchByName(places, 'Indianapolis Marriott Downtown')?.id).toBe('a');
+  });
+
+  it('separates hotels by position where their names cannot', () => {
+    /*
+     * Four hotels in this city reduce to "la quinta" — one 1.4 km from the hall
+     * and three sixteen kilometres out. No care with words can tell them apart,
+     * because the names genuinely are identical. The coordinates are not.
+     */
+    const quintas = [
+      { id: 'downtown', name: 'La Quinta Inn & Suites', lat: 39.7538, lng: -86.1621 },
+      { id: 'south', name: 'La Quinta Inn & Suites', lat: 39.68, lng: -86.12 },
+      { id: 'east', name: 'La Quinta Inn', lat: 39.78, lng: -86.01 },
+    ];
+    expect(matchByName(quintas, 'La Quinta Inn & Suites by Wyndham Indianapolis Downtown')).toBeNull();
+    expect(matchByPoint(quintas, { lat: 39.75383, lng: -86.16215 })?.id).toBe('downtown');
+    expect(matchByPoint(quintas, { lat: 39.68005, lng: -86.12002 })?.id).toBe('south');
+  });
+
+  it('refuses a position that is near nothing, or near two things', () => {
+    const twins = [
+      { id: 'a', name: 'One', lat: 39.7538, lng: -86.1621 },
+      { id: 'b', name: 'Two', lat: 39.75381, lng: -86.16211 },
+    ];
+    // Two hotels within eighty metres of one point is a car park, not a match.
+    expect(matchByPoint(twins, { lat: 39.7538, lng: -86.1621 })).toBeNull();
+    expect(matchByPoint(twins, { lat: 39.9, lng: -86.9 })).toBeNull();
+    /*
+     * And the *nearest* hotel to a point is not the same building as it — even
+     * when it is the only candidate there is. Two kilometres away is the next
+     * district in this city, and a radius that accepted it would turn "which
+     * building" back into "which is closest", which is the question that got
+     * the Tru wrong.
+     */
+    const lonely = [{ id: 'only', name: 'Only One', lat: 39.7538, lng: -86.1621 }];
+    expect(matchByPoint(lonely, { lat: 39.7538, lng: -86.1621 })?.id).toBe('only');
+    expect(matchByPoint(lonely, { lat: 39.7718, lng: -86.1621 })).toBeNull();
+    expect(matchByPoint(twins, null)).toBeNull();
+    expect(matchByPoint(twins, { lat: NaN, lng: 0 })).toBeNull();
+  });
+
+  it('prefers a position to a name, and says which it used', async () => {
+    const reply = {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          properties: [
+            {
+              name: 'La Quinta Inn & Suites by Wyndham Indianapolis Downtown',
+              rate_per_night: { extracted_lowest: 108 },
+              gps_coordinates: { latitude: 39.7538, longitude: -86.1621 },
+            },
+          ],
+        }),
+    };
+    const seen = [];
+    const found = await serpapi.quoteArea(
+      [
+        { id: 'downtown', name: 'La Quinta Inn & Suites', lat: 39.7538, lng: -86.1621 },
+        { id: 'south', name: 'La Quinta Inn & Suites', lat: 39.68, lng: -86.12 },
+      ],
+      { env: { SERPAPI_KEY: 'k' }, whenMs: AUGUST, fetch: async () => reply, report: (one) => seen.push(one) },
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].placeId).toBe('downtown');
+    expect(seen[0].how).toBe('position');
+  });
+
+  it('falls back to the name when no coordinates come back', async () => {
+    // Nothing here has been run against the live service, so the field may not
+    // arrive at all. Losing every match to that would be worse than the naming.
+    const reply = {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ properties: [{ name: 'Atlas Hotel', rate_per_night: { extracted_lowest: 149 } }] }),
+    };
+    const seen = [];
+    const found = await serpapi.quoteArea([place('atlas', 'walk', 1458, { name: 'Atlas Hotel' })], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => reply,
+      report: (one) => seen.push(one),
+    });
+    expect(found[0].placeId).toBe('atlas');
+    expect(seen[0].how).toBe('name');
   });
 });

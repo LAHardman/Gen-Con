@@ -66,7 +66,7 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Courtyard by Marriott Indianapolis at the Capitol", placeId: 'way340008421', low: 236, high: 281, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "Courtyard by Marriott Indianapolis Downtown", placeId: 'node5504151849', low: 257, high: 277, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Crowne Plaza Indianapolis Downtown - Union Station", placeId: 'node4079685108', low: 259, high: 279, region: 'downtown', skywalk: true, distance: "Skywalk" },
-  { blockName: "Embassy Suites by Hilton Indianapolis Downtown", placeId: null, low: 287, high: 337, region: 'downtown', skywalk: true, distance: "Skywalk" },
+  { blockName: "Embassy Suites by Hilton Indianapolis Downtown", placeId: 'way340403993', low: 287, high: 337, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Fairfield Inn & Suites by Marriott Indianapolis Downtown", placeId: 'node5504151850', low: 238, high: 258, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Hampton Inn Indianapolis Canal IUPUI", placeId: 'node12209262126', low: 249, high: 279, region: 'downtown', skywalk: false, distance: "6 Blocks" },
   { blockName: "Hampton Inn Indianapolis Downtown", placeId: null, low: 254, high: 349, region: 'downtown', skywalk: false, distance: "2 Blocks" },
@@ -75,7 +75,7 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Holiday Inn Express & Suites Indianapolis City Centre", placeId: 'way199297625', low: 243, high: 263, region: 'downtown', skywalk: false, distance: "2 Blocks" },
   { blockName: "Holiday Inn Indianapolis Downtown", placeId: 'way199297667', low: 246, high: 266, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Home2 Suites by Hilton Indianapolis Downtown", placeId: 'node11975073661', low: 270, high: 290, region: 'downtown', skywalk: false, distance: "6 Blocks" },
-  { blockName: "Homewood Suites by Hilton Indianapolis Canal IUPUI", placeId: null, low: 269, high: 289, region: 'downtown', skywalk: false, distance: "6 Blocks" },
+  { blockName: "Homewood Suites by Hilton Indianapolis Canal IUPUI", placeId: 'node12209262125', low: 269, high: 289, region: 'downtown', skywalk: false, distance: "6 Blocks" },
   { blockName: "Hotel Indy", placeId: null, low: 279, high: 329, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "Hyatt House Indianapolis Downtown", placeId: 'way199956293', low: 291, high: 299, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Hyatt Place Indianapolis Downtown", placeId: 'node9680958617', low: 262, high: null, region: 'downtown', skywalk: false, distance: "3 Blocks" },
@@ -121,7 +121,7 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Delta Hotels Indianapolis East", placeId: null, low: 161, high: null, region: 'east', skywalk: false, distance: "8.8 Miles" },
   { blockName: "Fairfield Inn & Suites by Marriott Indianapolis East", placeId: 'way512647000', low: 179, high: null, region: 'east', skywalk: false, distance: "10.1 Miles" },
   { blockName: "Indianapolis Marriott East", placeId: 'relation12810528', low: 177, high: 188, region: 'east', skywalk: false, distance: "8.6 Miles" },
-  { blockName: "Best Western Plus Indianapolis NW", placeId: 'way511357813', low: 189, high: null, region: 'north', skywalk: false, distance: "16.3 Miles" },
+  { blockName: "Best Western Plus Indianapolis NW", placeId: null, low: 189, high: null, region: 'north', skywalk: false, distance: "16.3 Miles" },
   { blockName: "Clarion Inn & Suites Northwest", placeId: 'way224005110', low: 140, high: 150, region: 'north', skywalk: false, distance: "13 Miles" },
   { blockName: "Embassy Suites by Hilton Indianapolis North", placeId: 'node13991345801', low: 179, high: null, region: 'north', skywalk: false, distance: "18.5 Miles" },
   { blockName: "Hilton Garden Inn Indianapolis Northwest", placeId: 'way224670812', low: 199, high: 209, region: 'north', skywalk: false, distance: "12.1 Miles" },
@@ -151,7 +151,7 @@ export const partnerFor = (placeId: string): Partner | null => BY_PLACE.get(plac
  * probably in it. Being cautious here costs one row of a comparison table;
  * being wrong compares the block with itself.
  */
-export const SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set(["way340403993","way199297626","relation4821152","way341313470","way341313486","way339985751","node12209262125","way341041832","way341317948"]);
+export const SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set(["way199297626","relation4821152","way341313470","way341313486","way339985751","way341041832","way341317948"]);
 
 /** The block's own cheapest, wherever it is — usually out by the airport. */
 export const CHEAPEST = PARTNERS.reduce((low, one) => (one.low < low.low ? one : low));
