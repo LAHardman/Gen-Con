@@ -15,6 +15,7 @@ import {
   isHappeningAt,
   type ConEvent,
 } from '../data/events';
+import { STANDS_IN } from '../data/booth-place';
 import { planEntry } from '../data/plan';
 import type { Plan } from '../hooks/usePlan';
 import type { FeedStatus } from '../hooks/useEventFeed';
@@ -145,6 +146,23 @@ export function RoomDialog({
         </p>
 
         <p className="dialog__description">{room.description}</p>
+
+        {/*
+          What is on the floor, said out loud for an exhibit hall.
+
+          An exhibit hall drawn with nothing in it reads as a page that failed
+          to load rather than as a hall that has demo tables in it instead of
+          booths — and five of the eleven are exactly that. Gen Con's own
+          exhibit-hall map covers Halls F to K; A to E hold publisher demo
+          areas, which the schedule names but the map does not draw.
+        */}
+        {room.category === 'exhibit' && (
+          <p className="dialog__stands">
+            {STANDS_IN[room.id]
+              ? `${STANDS_IN[room.id]} exhibitor stands, drawn on the map from Gen Con’s own exhibit-hall plan.`
+              : 'No exhibitor stands in this hall — Gen Con’s exhibit-hall map puts them all in Halls F to K. What is scheduled here is below.'}
+          </p>
+        )}
 
         <ul className="dialog__highlights">
           {room.highlights.map((highlight) => (

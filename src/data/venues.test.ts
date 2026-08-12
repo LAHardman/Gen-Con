@@ -25,6 +25,7 @@ import {
   roomShapes,
   venueOutline,
 } from './venues';
+import { STANDS_IN } from './booth-place';
 import type { LatLng } from '../utils/geo';
 
 /** Even-odd, on [lat, lng] rings — the form both footprints and shapes take. */
@@ -224,5 +225,54 @@ describe('what the three have in common', () => {
     }
     expect(ROOMS_BY_ID['community-row'].level).toBe('Level 2');
     expect(ROOMS_BY_ID['makers-market'].venueId).toBe('pedestrian-connector');
+  });
+});
+
+describe('the exhibit halls, which are two different rooms doing two jobs', () => {
+  /*
+   * Gen Con's exhibit-hall map covers a floor 282 m across, which is Halls F to
+   * K exactly. Halls A to E are not the trade floor at this convention — the
+   * schedule puts a hundred and twelve named publisher demo areas in them and
+   * three events in all of F to K.
+   *
+   * This is the thing that read as a bug: opening Hall A showed an exhibit hall
+   * with nothing in it, under a description promising "the first wall of booths
+   * you hit when the hall opens". The map was right and the words were wrong.
+   */
+  /*
+   * The eleven lettered halls only. Swing Space, the Makers Market and Lucas
+   * Oil's two are also "exhibit" rooms and are not part of this floor — the
+   * Makers Market really does have booths, they are simply not on Gen Con's
+   * exhibit-hall sheet.
+   */
+  const halls = ROOMS.filter((room) => /^hall-[a-k]$/.test(room.id));
+  const withStands = ['hall-f', 'hall-g', 'hall-h', 'hall-i', 'hall-j', 'hall-k'];
+
+  it('has stands in six of them and none in the rest', () => {
+    for (const id of withStands) expect(STANDS_IN[id] ?? 0).toBeGreaterThan(0);
+    for (const hall of halls) {
+      if (withStands.includes(hall.id)) continue;
+      expect(STANDS_IN[hall.id] ?? 0, hall.name).toBe(0);
+    }
+  });
+
+  it('never promises booths in a hall that has none', () => {
+    // The exact failure: a description written from an assumption rather than
+    // from the plan, in a room the plan says is empty.
+    for (const hall of halls) {
+      if (STANDS_IN[hall.id]) continue;
+      expect(`${hall.description} ${hall.highlights.join(' ')}`, hall.name).not.toMatch(
+        /booth/i,
+      );
+    }
+  });
+
+  it('says where the stands actually are, in every hall that has none', () => {
+    // "No booths here" on its own leaves the reader looking for them. Every one
+    // of these rooms points at the halls that do have them.
+    for (const hall of halls) {
+      if (STANDS_IN[hall.id]) continue;
+      expect(hall.description, hall.name).toMatch(/Halls F to K/);
+    }
   });
 });

@@ -621,8 +621,8 @@ export const ROOMS: Room[] = [
     plan: ['HALL A'],
     aliases: ['Hall A', 'Exhibit Hall A'],
     description:
-      'West end of the exhibit hall. Traditionally the entrance-adjacent aisles — the first wall of booths you hit when the hall opens.',
-    highlights: ['Main hall entrance', 'Large publisher booths', 'Very busy 10am–2pm'],
+      'Publisher demo space, not the trade floor: the schedule names six areas in here, each signed with the company running it. The stands are all in Halls F to K.',
+    highlights: ['Publisher demo areas', 'Six named this year', 'No exhibitor stands'],
   },
   {
     id: 'hall-b',
@@ -635,8 +635,8 @@ export const ROOMS: Room[] = [
     plan: ['HALL B'],
     aliases: ['Hall B', 'Exhibit Hall B', 'Event Hall B'],
     description:
-      'The busiest demo space in the building: publisher tables run back-to-back sessions here all four days, each signed with the company running it.',
-    highlights: ['Publisher demo tables', 'Colour-coded sections', 'Release-day queues'],
+      'The busiest demo space in the building: forty-three named publisher areas run back-to-back sessions here all four days, each signed with the company running it. The stands are all in Halls F to K.',
+    highlights: ['Publisher demo tables', 'Forty-three named areas', 'No exhibitor stands'],
   },
   {
     id: 'hall-c',
@@ -648,8 +648,9 @@ export const ROOMS: Room[] = [
     rect: { x: 139, y: 53, width: 47, height: 74 },
     plan: ['HALL C'],
     aliases: ['Hall C', 'Exhibit Hall C'],
-    description: 'Mid-hall aisles: mid-size publishers, accessory makers and dice vendors.',
-    highlights: ['Dice & accessories', 'Mid-size publishers', 'Art prints'],
+    description:
+      'More publisher demo space — thirty-nine named areas, Wizards of the Coast and Hasbro and Ares among them, running tables rather than selling from a stand. The stands are all in Halls F to K.',
+    highlights: ['Publisher demo tables', 'Thirty-nine named areas', 'No exhibitor stands'],
   },
   {
     id: 'hall-d',
@@ -662,8 +663,8 @@ export const ROOMS: Room[] = [
     plan: ['HALL D'],
     aliases: ['Hall D', 'Exhibit Hall D'],
     description:
-      'Continues the mid-hall aisles toward the east. Common home for miniatures, terrain and painting supplies.',
-    highlights: ['Miniatures & terrain', 'Paint & hobby supplies', 'Painting demos'],
+      'Nineteen named publisher areas, the smaller studios among them — Chip Theory, Darrington Press, Arcane Wonders. Demo tables rather than stands; the stands are all in Halls F to K.',
+    highlights: ['Publisher demo tables', 'Nineteen named areas', 'No exhibitor stands'],
   },
   {
     id: 'hall-e',
@@ -676,8 +677,8 @@ export const ROOMS: Room[] = [
     plan: ['HALL E'],
     aliases: ['Hall E', 'Exhibit Hall E'],
     description:
-      'East exhibit aisles, and where the biggest brands put their organised play: long banks of tables running scheduled sessions.',
-    highlights: ['Organised play banks', 'Major publishers', 'Painting & hobby events'],
+      'Where the biggest brands put their organised play, and there are exactly five of them: Asmodee, Avalon Hill, Magic, Ravensburger and Warhammer Painting. Long banks of tables running scheduled sessions; the stands are all in Halls F to K.',
+    highlights: ['Organised play banks', 'Five named areas', 'No exhibitor stands'],
   },
   {
     id: 'hall-f',

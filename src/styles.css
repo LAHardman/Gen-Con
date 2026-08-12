@@ -758,6 +758,18 @@ body {
   line-height: 1.55;
 }
 
+/* What is drawn on the floor of an exhibit hall, including "nothing". */
+.dialog__stands {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .dialog__highlights {
   margin: 14px 0 0;
   padding: 0;

@@ -606,3 +606,23 @@ export const PLACED_BOOTHS: ReadonlyArray<PlacedBooth> = [
   { booth: '3060', hall: 'hall-g', lat: 39.7635824, lng: -86.1652093, wide: 3, deep: 3 },
   { booth: '3062', hall: 'hall-g', lat: 39.7635556, lng: -86.1652095, wide: 3, deep: 3 },
 ];
+
+/**
+ * How many stands each hall holds, and the answer is zero for five of them.
+ *
+ * Gen Con's exhibit-hall map covers a floor 282 m across, which is Halls F to
+ * K exactly. Halls A to E are not the trade floor at this convention: the
+ * schedule puts a hundred and twelve named publisher demo areas in them — "Hall
+ * C : Wizards of the Coast", "Hall B : Bandai" — and three events in all of F
+ * to K. Two different rooms doing two different jobs.
+ *
+ * A hall with no stands has to say so. An exhibit hall drawn empty reads as a
+ * page that failed to load rather than as a hall that has tables in it instead
+ * of booths, and that is the one thing a map must never do.
+ */
+export const STANDS_IN: Readonly<Record<string, number>> = PLACED_BOOTHS.reduce<
+  Record<string, number>
+>((tally, stand) => {
+  tally[stand.hall] = (tally[stand.hall] ?? 0) + 1;
+  return tally;
+}, {});
