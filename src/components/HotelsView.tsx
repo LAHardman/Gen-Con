@@ -33,12 +33,13 @@ import {
   BLOCK_YEAR,
   CAVEAT,
   SOURCE,
+  beside,
   blockRate,
   hasSkywalk,
   journeyTo,
-  pairings,
   perPerson,
   tier,
+  type Beside,
 } from '../data/blocks';
 import { planningYear } from '../data/key-dates';
 import { DRIVE_METRES, LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
@@ -295,9 +296,15 @@ export function HotelsView({ nowMs }: Props) {
       };
     });
 
-    const shown = all
+    /*
+     * Every filter but the source one. Held apart because the comparison draws
+     * on it: with "Gen Con block" chosen, nothing outside the block is in view,
+     * and a comparison drawn from what is in view would then be no comparison
+     * at all. Everything else the reader asked for still applies to it — a
+     * hotel they have filtered away is not an answer.
+     */
+    const kept = all
       .filter((one) => ring === null || one.place.ring === ring)
-      .filter((one) => source === null || one.source === source)
       .filter((one) => !skywalkOnly || one.skywalk)
       .filter((one) => one.place.metres <= withinKm * 1000)
       /*
@@ -311,6 +318,8 @@ export function HotelsView({ nowMs }: Props) {
         (one) =>
           upto >= DEAREST || (one.nightly !== null && perPerson(one.nightly, people) <= upto),
       );
+
+    const shown = kept.filter((one) => source === null || one.source === source);
 
     /*
      * Three orders, and each puts its unknowns last. A hotel with no price at
@@ -326,7 +335,20 @@ export function HotelsView({ nowMs }: Props) {
       }
       return a.place.metres - b.place.metres;
     });
-    return shown;
+
+    /*
+     * The comparison, worked out in list order so "already used" means "used
+     * further up the page" — which is the only order in which discouraging a
+     * repeat means anything to a reader.
+     */
+    const candidates = kept.filter((one) => !one.block);
+    const used = new Set<string>();
+    return shown.map((row) => {
+      if (!row.block) return { ...row, beside: null as Beside | null };
+      const found = beside(row.place, row.block.low, candidates, used);
+      if (found) used.add(found.place.id);
+      return { ...row, beside: found };
+    });
   }, [ring, source, skywalkOnly, withinKm, upto, sort, people, year]);
 
   const priced = rows.filter((row) => row.nightly !== null).length;
@@ -353,14 +375,13 @@ export function HotelsView({ nowMs }: Props) {
 
   return (
     <section className="hotels" aria-label="Hotels">
-      <header className="hotels__head">
-        <h2>Somewhere to sleep</h2>
-        <p>
-          {walkable} places within a {(WALK_METRES / 1000).toFixed(1)} km walk of the hall, and{' '}
-          {LODGING.length - walkable} more within about a half-hour drive. Distances are this app’s
-          own and exact; the prices are not, unless Gen Con published them.
-        </p>
-      </header>
+      {/*
+        No heading and no standfirst.
+        The page is reached from a menu that already says "Hotels", so a title
+        repeating it is a line of the screen spent saying where you are to
+        somebody who just chose to come here. The counts it carried are still on
+        the page, under the list, where a number about the list belongs.
+      */}
 
       {/*
         Sticky, and foldable, because there are seven rows of it.
@@ -488,12 +509,15 @@ export function HotelsView({ nowMs }: Props) {
         <p className="hotels__empty">No hotel is {words}.</p>
       ) : (
         <ol className="hotels__list">
-          {rows.map(({ place, rate, block, nightly }) => (
+          {rows.map(({ place, rate, block, nightly, beside: alt }) => (
             <li key={place.id} className="hotels__row">
               <div className="hotels__what">
                 <h3>
                   {place.name}
-                  {block && <span className="hotels__inblock">in the block</span>}
+                  {/* "In the block" wrapped onto its own line behind a long
+                      hotel name and read as a second heading. One word, and
+                      the name breaks around it rather than it breaking. */}
+                  {block && <span className="hotels__inblock">Block</span>}
                 </h3>
                 <Journey place={place} band={sort === 'rating' ? CLASSES[tier(place)] : null} />
               </div>
@@ -529,6 +553,34 @@ export function HotelsView({ nowMs }: Props) {
                   </>
                 )}
               </div>
+
+              {/*
+                The comparison, on the row it is about.
+                It used to be a section of its own under the whole list, which
+                put the answer a screen and a half from the question. Not every
+                block hotel gets one: with nothing near it and nothing at its
+                money, there is no comparison to draw and saying so is better
+                than reaching for a hotel a mile away at twice the price.
+              */}
+              {alt && (
+                <p className="hotels__beside">
+                  <span className="hotels__beside-label">
+                    {alt.because === 'near' ? 'Nearby, outside the block' : 'Similar money, outside the block'}
+                  </span>
+                  <span className="hotels__beside-name">{alt.place.name}</span>
+                  <span className="hotels__beside-meta">
+                    {alt.apart} m away
+                    {alt.nightly === null
+                      ? ' · no price gathered'
+                      : ` · ${dollars(perPerson(alt.nightly, people))} each`}
+                    {alt.saving !== null && alt.saving !== 0
+                      ? ` · ${dollars(Math.abs(perPerson(alt.saving, people)))} a night each ${
+                          alt.saving > 0 ? 'cheaper' : 'dearer'
+                        }`
+                      : ''}
+                  </span>
+                </p>
+              )}
             </li>
           ))}
         </ol>
@@ -549,18 +601,26 @@ export function HotelsView({ nowMs }: Props) {
         {rows.some((one) => one.place.ring === 'drive')
           ? 'Times marked * are distance divided by a typical speed rather than a routed drive. '
           : ''}
+        {rows.some((one) => one.block?.projected)
+          ? `Block prices are Gen Con’s real ${BLOCK_YEAR} rates carried forward at the rate this block’s own prices have actually moved since 2019. `
+          : ''}
         Hotels pulled {PULLED} from OpenStreetMap, which caps its answers, so this is a sample rather
-        than a complete list. Bought prices last written {REFRESHED}; they are refreshed about once a
-        month per hotel, within the free monthly allowances of the services asked, and never spent on
-        a hotel Gen Con publishes.
-        {RATES.length === 0 ? '' : ' © OpenStreetMap contributors.'}
+        than a complete list — {LODGING.length} in all, {walkable} of them within a{' '}
+        {(WALK_METRES / 1000).toFixed(1)} km walk of the hall. Bought prices last written {REFRESHED};
+        they are refreshed about once a month per hotel, within the free monthly allowances of the
+        services asked, and never spent on a hotel Gen Con publishes. Distances are this app’s own
+        and exact; the prices are not, unless Gen Con published them.{' '}
+        <a href={SOURCE} target="_blank" rel="noreferrer noopener">
+          Gen Con’s hotel list ↗
+        </a>
+        {RATES.length === 0 ? '' : ' · © OpenStreetMap contributors.'}
       </p>
 
-      {/* The comparison belongs wherever block hotels are in view, and it
-          answers the distance filters rather than living behind a tab. */}
-      {source !== 'third' && (
-        <BlockTable nowMs={nowMs} people={people} ring={ring} withinKm={withinKm} />
-      )}
+      <p className="hotels__note">
+        The block’s cheapest room anywhere is <strong>{dollars(CHEAPEST.low)}</strong> at{' '}
+        {CHEAPEST.blockName}, {CHEAPEST.distance} away — published by Gen Con, and so costing this
+        app no API quota at all.
+      </p>
     </section>
   );
 }
@@ -682,172 +742,5 @@ function Slider({
         />
       )}
     </div>
-  );
-}
-
-/**
- * The block, beside what you would pay instead.
- *
- * The left column is Gen Con's own published rate — a fact for the year it
- * published, arithmetic for any year after. The right is a market quote. They
- * are not the same kind of number and the labels say so, because a table that
- * lines them up in matching type invites a comparison neither supports alone.
- */
-function BlockTable({
-  nowMs,
-  people,
-  ring,
-  withinKm,
-}: {
-  nowMs: number;
-  people: number;
-  ring: Ring | null;
-  withinKm: number;
-}) {
-  const year = planningYear(nowMs);
-  /*
-   * The distance filters apply; the price cap does not.
-   *
-   * A cap is a question about what to book. This is a question about what a
-   * block hotel is worth, and hiding the dear half of it would leave the reader
-   * with only the half that agrees with them.
-   */
-  const rows = useMemo(
-    () =>
-      pairings(year)
-        .filter((one) => ring === null || one.partner.ring === ring)
-        .filter((one) => one.partner.metres <= withinKm * 1000),
-    [year, ring, withinKm],
-  );
-  const projected = rows[0]?.rate.projected ?? false;
-  const yearsOn = rows[0]?.rate.yearsOn ?? 0;
-  const shared = rows.filter((one) => one.shared).length;
-  /*
-   * Mark the shared rows only when that tells the rows apart.
-   *
-   * Downtown is so nearly all block that every row usually leans on a shared
-   * alternative, and a label on every row is not a label — it is a word the eye
-   * learns to skip. When it is true of everything, the note below says it once.
-   */
-  const marksShared = shared > 0 && shared < rows.length;
-  const walkable = LODGING.filter((one) => one.ring === 'walk').length;
-
-  if (rows.length === 0) return null;
-
-  return (
-    <>
-      <h3 className="hotels__pairhead">Beside the nearest alternative</h3>
-
-      <p className="hotels__caution">
-        {projected ? (
-          <>
-            <strong>
-              These are Gen Con’s real {BLOCK_YEAR} block rates, carried forward {yearsOn}{' '}
-              {yearsOn === 1 ? 'year' : 'years'}.
-            </strong>{' '}
-            Gen Con has not published {year} yet, so each figure is its {BLOCK_YEAR} rate grown at
-            the rate this block’s own prices have actually moved — about 2.8% a year, measured
-            against 2019.
-          </>
-        ) : (
-          <>
-            <strong>These are Gen Con’s published {BLOCK_YEAR} block rates.</strong> Not estimates,
-            not market prices — what Gen Con charges.
-          </>
-        )}{' '}
-        {CAVEAT}{' '}
-        <a href={SOURCE} target="_blank" rel="noreferrer noopener">
-          Gen Con’s hotel list ↗
-        </a>
-      </p>
-
-      <ol className="hotels__list">
-        {rows.map(({ partner, rate, alternative, alternativeRate, apart, saving, shared: isShared }) => (
-          <li key={partner.id} className="hotels__pair">
-            <div className="hotels__side">
-              <span className="hotels__label">
-                In the block{rate.projected ? ' · projected' : ` · ${BLOCK_YEAR}`}
-              </span>
-              <h3>{partner.name}</h3>
-              <span className={`hotels__money${rate.projected ? ' hotels__money--guess' : ''}`}>
-                {dollars(perPerson(rate.low, people))}
-                {/* Both ends. Only the low one would make the block look cheaper
-                    than anybody pays for it. */}
-                {rate.high !== null && rate.high !== rate.low
-                  ? `–${dollars(perPerson(rate.high, people))}`
-                  : ''}
-              </span>
-              <span className="hotels__meta">
-                per person{people > 1 ? ` · ${dollars(rate.low)} the room` : ''}
-              </span>
-              <Journey place={partner} />
-            </div>
-
-            <div className="hotels__side">
-              <span className="hotels__label">Nearest outside it</span>
-              {/* `alternative` is null only when no non-block hotel is within
-                  reach at all. The type says it can be, so the guard stays. */}
-              {alternative && (
-                <>
-                  <h3>{alternative.name}</h3>
-                  {alternativeRate ? (
-                    <span className="hotels__money">
-                      {dollars(perPerson(alternativeRate.nightly, people), alternativeRate.currency)}
-                    </span>
-                  ) : (
-                    <span className="hotels__none">no price yet</span>
-                  )}
-                  <span className="hotels__meta">
-                    {apart} m from it{alternativeRate ? ` · ${age(alternativeRate.at, nowMs)}` : ''}
-                    {/* Two rows naming the same hotel are one finding, not two. */}
-                    {marksShared && isShared ? ' · also stands in for others' : ''}
-                  </span>
-                  <Journey place={alternative} />
-                </>
-              )}
-            </div>
-
-            {saving !== null && (
-              <p className={`hotels__saving${saving > 0 ? '' : ' hotels__saving--worse'}`}>
-                {saving > 0
-                  ? `About ${dollars(perPerson(saving, people))} a night each cheaper outside the block`
-                  : `About ${dollars(perPerson(-saving, people))} a night each dearer outside the block`}
-                <span>
-                  {' '}
-                  — and the block rate is before tax while the other is a market quote, so treat it
-                  as a direction, not a sum.
-                </span>
-              </p>
-            )}
-          </li>
-        ))}
-      </ol>
-
-      <p className="hotels__note">
-        {rows.length} of Gen Con’s block are hotels this app can place on its map; the rest are left
-        out rather than guessed at, because putting one hotel’s block rate on another is the one
-        mistake here that would cost money. Where two block hotels want the same neighbour, the
-        nearer keeps it and the other takes its next choice.
-      </p>
-
-      {shared > 0 && (
-        <p className="hotels__note">
-          <strong>
-            {shared} of these lean on an alternative another block hotel is compared against too
-          </strong>
-          , and that is the finding rather than a gap: {rows.length} of the {walkable} hotels within
-          a walk of the hall are in Gen Con’s block, so there is very little downtown left to compare
-          against. Each alternative carries an even share of the block rather than the first few
-          taking the nearest one. If you want to pay less, the block’s own outlying hotels are the
-          realistic answer, not a walkable one outside it.
-        </p>
-      )}
-
-      <p className="hotels__note">
-        The block reaches well past downtown: its cheapest room anywhere is{' '}
-        <strong>{dollars(CHEAPEST.low)}</strong> at {CHEAPEST.blockName}, {CHEAPEST.distance} away —
-        published by Gen Con, and so costing this app no API quota at all.
-      </p>
-    </>
   );
 }

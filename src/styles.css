@@ -3083,20 +3083,38 @@ body {
   pointer-events: none;
 }
 
+/*
+ * A button that looks like one.
+ *
+ * This was a bare line of text with a small chevron, and it read as a heading:
+ * the one control on the page whose job is to be found was the one hardest to
+ * see. It is a filled bar now, the full width of the column, with its own
+ * border and a chevron in the accent — the same weight as the chips it hides.
+ */
 .hotels__fold {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: 6px 2px;
-  border: 0;
-  background: none;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-raised);
   color: var(--text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
+}
+
+.hotels__fold:hover {
+  border-color: var(--accent);
+}
+
+.hotels__fold:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .hotels__fold-what {
@@ -3113,10 +3131,10 @@ body {
 /* A chevron drawn rather than typed, so it can turn as the panel opens. */
 .hotels__fold-mark {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--text-muted);
-  border-bottom: 2px solid var(--text-muted);
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
   transform: rotate(-45deg) translate(-1px, -1px);
   transition: transform 140ms ease;
 }
@@ -3278,10 +3296,18 @@ body {
   list-style: none;
 }
 
+/*
+ * A grid rather than a flex row, so the comparison can span both columns.
+ *
+ * Wrapping a flex row does it too, and then the price drops under the name on
+ * a phone the moment the name is long — which is most of them. A grid keeps
+ * the two columns beside each other at any width and still lets a third thing
+ * run the whole way across underneath.
+ */
 .hotels__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
   gap: 14px;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -3429,16 +3455,72 @@ body {
 }
 
 /* Published beats bought, and the row says which it is showing. */
+/*
+ * One word, and it never breaks across lines.
+ *
+ * "In the block" was three words in a pill, and behind a name like "SpringHill
+ * Suites Indianapolis Downtown" it wrapped — the pill's own words split over
+ * two lines and the remains read as a second heading under the hotel. A
+ * one-word tag that refuses to wrap cannot do that, and `display: inline-block`
+ * keeps the whole pill on whichever line it lands on.
+ */
 .hotels__inblock {
+  display: inline-block;
   margin-left: 7px;
   padding: 1px 7px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 999px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* ------------------------------------------- the comparison, on its own row */
+
+/*
+ * Beside the block hotel rather than in a table of its own.
+ *
+ * It used to be a section under the whole list, which put the answer a screen
+ * and a half from the question — the row said "$152" and the thing that gives
+ * $152 a meaning was somewhere else entirely. Indented and ruled, so it reads
+ * as a note on the row above rather than as another hotel in the list.
+ */
+.hotels__beside {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+  padding: 7px 0 0 11px;
+  border-top: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hotels__beside-label {
+  flex: 0 0 auto;
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.hotels__beside-name {
+  flex: 0 1 auto;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hotels__beside-meta {
+  flex: 1 1 auto;
+  color: var(--text-muted);
 }
 
 .hotels__party {

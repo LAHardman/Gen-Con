@@ -30,20 +30,35 @@ vi.mock('../data/partners', () => ({
   partnerFor: (id: string) => BLOCK[id] ?? null,
 }));
 
+/*
+ * Every hotel due east of the hall, at exactly the distance it claims.
+ *
+ * They all sat at 0,0 before, which made every pair of them nought metres
+ * apart — so the comparison, whose whole job is to weigh distance, was being
+ * tested against a world with no distance in it. Placing them on a line is
+ * enough: the gap between any two is the difference of their distances, which
+ * is arithmetic a reader of these tests can do in their head.
+ */
+const eastOf = (metres: number) => ({
+  lat: 39.7657,
+  lng: -86.1668 + metres / (111_320 * Math.cos((39.7657 * Math.PI) / 180)),
+});
+
 vi.mock('../data/lodging', () => ({
   WALK_METRES: 1600,
   DRIVE_METRES: 25000,
   PULLED: '2026-08-11',
   SAMPLED: true,
   LODGING: [
-    { id: 'w1', name: 'JW Marriott Indianapolis', kind: 'hotel', metres: 124, ring: 'walk', lat: 0, lng: 0 },
-    { id: 'far', name: 'Airport Motel', kind: 'motel', metres: 12000, ring: 'drive', lat: 0, lng: 0, city: 'Plainfield' },
-    { id: 'w2', name: 'The Westin Indianapolis', kind: 'hotel', metres: 280, ring: 'walk', lat: 0, lng: 0 },
-    { id: 'w3', name: 'Nestle Inn', kind: 'guest_house', metres: 900, ring: 'walk', lat: 0, lng: 0 },
-    { id: 'w5', name: 'Unasked Lodge', kind: 'hotel', metres: 1400, ring: 'walk', lat: 0, lng: 0 },
-    { id: 'w4', name: 'Holiday Inn Express', kind: 'hotel', metres: 1200, ring: 'walk', lat: 0, lng: 0 },
-    { id: 'd1', name: 'Motel 6 Southport', kind: 'motel', metres: 14000, ring: 'drive', lat: 0, lng: 0, city: 'Southport' },
-    { id: 'd2', name: 'Super 8 Airport', kind: 'motel', metres: 9000, ring: 'drive', lat: 0, lng: 0 },
+    { id: 'w1', name: 'JW Marriott Indianapolis', kind: 'hotel', metres: 124, ring: 'walk', ...eastOf(124) },
+    { id: 'far', name: 'Airport Motel', kind: 'motel', metres: 12000, ring: 'drive', ...eastOf(12000), city: 'Plainfield' },
+    { id: 'w2', name: 'The Westin Indianapolis', kind: 'hotel', metres: 280, ring: 'walk', ...eastOf(280) },
+    { id: 'w6', name: 'Corner Inn', kind: 'hotel', metres: 600, ring: 'walk', ...eastOf(600) },
+    { id: 'w3', name: 'Nestle Inn', kind: 'guest_house', metres: 1300, ring: 'walk', ...eastOf(1300) },
+    { id: 'w5', name: 'Unasked Lodge', kind: 'hotel', metres: 1400, ring: 'walk', ...eastOf(1400) },
+    { id: 'w4', name: 'Holiday Inn Express', kind: 'hotel', metres: 1200, ring: 'walk', ...eastOf(1200) },
+    { id: 'd1', name: 'Motel 6 Southport', kind: 'motel', metres: 14000, ring: 'drive', ...eastOf(14000), city: 'Southport' },
+    { id: 'd2', name: 'Super 8 Airport', kind: 'motel', metres: 9000, ring: 'drive', ...eastOf(9000) },
   ],
   WALKABLE: [],
 }));
@@ -54,7 +69,8 @@ vi.mock('../data/rates', () => {
     { placeId: 'w1', nightly: 289, currency: 'USD', sources: ['serpapi', 'xotelo'], at: '2026-06-02', spread: 40 },
     { placeId: 'w2', nightly: 240, currency: 'USD', sources: ['serpapi'], at: '2026-08-10', spread: 0 },
     { placeId: 'w4', nightly: 165, currency: 'USD', sources: ['serpapi', 'xotelo'], at: '2026-08-10', spread: 40 },
-    { placeId: 'w3', nightly: 200, currency: 'USD', sources: ['serpapi'], at: '2026-06-02', spread: 0 },
+    { placeId: 'w6', nightly: 400, currency: 'USD', sources: ['serpapi'], at: '2026-08-10', spread: 0 },
+    { placeId: 'w3', nightly: 290, currency: 'USD', sources: ['serpapi'], at: '2026-06-02', spread: 0 },
     { placeId: 'far', nightly: 120, currency: 'USD', sources: ['xotelo'], at: '2026-08-08', spread: 0 },
   ];
   return {
@@ -72,7 +88,15 @@ afterEach(cleanup);
 const NOW = Date.parse('2026-08-11T12:00:00Z');
 const page = () => screen.getByRole('region', { name: 'Hotels' });
 const rows = () => screen.getAllByRole('listitem');
-const row = (name: string) => rows().find((one) => one.textContent?.includes(name))!;
+/*
+ * Matched on the row's own heading, not on its whole text.
+ *
+ * A row now carries the name of the hotel it is compared against, so matching
+ * on text would hand back the block hotel above whenever the comparison was
+ * what was asked for.
+ */
+const row = (name: string) =>
+  rows().find((one) => one.querySelector('h3')?.textContent?.includes(name))!;
 
 describe('what it refuses to be mistaken for', () => {
   /*
@@ -128,7 +152,7 @@ describe('what it refuses to be mistaken for', () => {
     fireEvent.click(told('JW Marriott'));
     expect(page().querySelector('.hotels__bubble')).toBeTruthy();
 
-    fireEvent.pointerDown(page().querySelector('.hotels__head')!);
+    fireEvent.pointerDown(page().querySelector('.hotels__note')!);
     expect(page().querySelector('.hotels__bubble')).toBeNull();
   });
 
@@ -179,9 +203,10 @@ describe('putting the list in an order', () => {
       'Motel 6 Southport',
       'Airport Motel',
       'Holiday Inn Express',
-      'Nestle Inn',
+      'Nestle Inn', // $290, a shade under the Westin's projected block rate
       'The Westin Indianapolis',
       'JW Marriott Indianapolis',
+      'Corner Inn',
       'Unasked Lodge',
       'Super 8 Airport',
     ]);
@@ -199,7 +224,8 @@ describe('putting the list in an order', () => {
     expect(listed()).toEqual([
       'JW Marriott Indianapolis', // luxury
       'The Westin Indianapolis', // upper upscale
-      'Nestle Inn', // nothing in the name, so the middle
+      'Corner Inn', // nothing in the name, so the middle — nearest of those
+      'Nestle Inn',
       'Unasked Lodge',
       'Holiday Inn Express', // midscale
       'Super 8 Airport', // economy, nearest first among equals
@@ -287,7 +313,7 @@ describe('filters that can all be off at once', () => {
     expect(fold().getAttribute('aria-expanded')).toBe('false');
     expect(panel().hasAttribute('hidden')).toBe(true);
     // The list is untouched by folding — this hides controls, not hotels.
-    expect(listed()).toHaveLength(8);
+    expect(listed()).toHaveLength(9);
 
     fireEvent.click(fold());
     expect(panel().hasAttribute('hidden')).toBe(false);
@@ -316,8 +342,9 @@ describe('filters that can all be off at once', () => {
     expect(listed()).toEqual([
       'JW Marriott Indianapolis',
       'The Westin Indianapolis',
-      'Nestle Inn',
+      'Corner Inn',
       'Holiday Inn Express',
+      'Nestle Inn',
       'Unasked Lodge',
       'Super 8 Airport',
       'Airport Motel',
@@ -339,11 +366,11 @@ describe('filters that can all be off at once', () => {
     ]) {
       fireEvent.click(chip(name));
       expect(chip(name).getAttribute('aria-pressed')).toBe('true');
-      expect(listed().length).toBeLessThan(8);
+      expect(listed().length).toBeLessThan(9);
 
       fireEvent.click(chip(name));
       expect(chip(name).getAttribute('aria-pressed')).toBe('false');
-      expect(listed()).toHaveLength(8);
+      expect(listed()).toHaveLength(9);
     }
   });
 
@@ -383,7 +410,7 @@ describe('filters that can all be off at once', () => {
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('any');
     slide('Distance', 1);
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1 km');
-    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Nestle Inn']);
+    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Corner Inn']);
   });
 
   it('takes a number typed straight in, exactly, past the slider’s own step', () => {
@@ -395,7 +422,13 @@ describe('filters that can all be off at once', () => {
     render(<HotelsView nowMs={NOW} />);
     type('Distance', '1.3');
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1.3 km');
-    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Nestle Inn', 'Holiday Inn Express']);
+    expect(listed()).toEqual([
+      'JW Marriott Indianapolis',
+      'The Westin Indianapolis',
+      'Corner Inn',
+      'Holiday Inn Express',
+      'Nestle Inn',
+    ]);
   });
 
   it('reads an emptied field as "no limit" rather than as zero', () => {
@@ -403,10 +436,10 @@ describe('filters that can all be off at once', () => {
     // empty the page in answer to a gesture that meant the opposite.
     render(<HotelsView nowMs={NOW} />);
     type('Price', '150');
-    expect(listed().length).toBeLessThan(8);
+    expect(listed().length).toBeLessThan(9);
     type('Price', '');
     expect(page().querySelector('#hotels-upto-out')!.textContent).toBe('any');
-    expect(listed()).toHaveLength(8);
+    expect(listed()).toHaveLength(9);
   });
 
   it('takes the clear-all button off the page until there is a mess to clear', () => {
@@ -418,7 +451,7 @@ describe('filters that can all be off at once', () => {
 
     slide('Distance', 10);
     fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
-    expect(listed()).toHaveLength(8);
+    expect(listed()).toHaveLength(9);
     expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
   });
 
@@ -440,109 +473,100 @@ describe('filters that can all be off at once', () => {
 });
 
 
-describe('the Gen Con block, estimated', () => {
-  // No longer behind a tab: the comparison sits under the list wherever block
-  // hotels are in view, which is everywhere except "Third party".
-  const openBlock = () => render(<HotelsView nowMs={NOW} />);
-  // The only one left on the page: the list's prices each explain themselves,
-  // so the comparison is the one thing that still needs reading first.
-  const blockCaution = () => page().querySelector('.hotels__caution')!;
+describe('the comparison, on the row it is about', () => {
+  const beside = (name: string) => row(name).querySelector('.hotels__beside');
 
-  it('says these are Gen Con’s own rates, and links to the page they are on', () => {
-    // They are published prices, not estimates, and underselling them as
-    // guesses would be as wrong as overselling a guess as a price.
-    openBlock();
-    expect(blockCaution().textContent).toMatch(
-      /Gen Con’s real 2025 block rates|published 2025 block rates/,
-    );
-    expect(within(blockCaution() as HTMLElement).getByRole('link')).toBeTruthy();
-  });
-
-  it('goes away when the reader has asked for third-party prices only', () => {
-    // It is a statement about the block; with the block filtered out it is an
-    // answer to a question nobody asked.
+  it('puts a hotel outside the block on the row of one inside it', () => {
+    /*
+     * It used to be a section under the whole list, which put the answer a
+     * screen and a half from the question: the row said "$152" and the thing
+     * that gives $152 a meaning was somewhere else entirely.
+     */
     render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Third party' }));
+    const said = beside('JW Marriott')!.textContent!;
+    expect(said).toMatch(/Nearby, outside the block/);
+    expect(said).toMatch(/Corner Inn/);
+    expect(said).toMatch(/\d+ m away/);
+  });
+
+  it('puts none on a hotel outside the block', () => {
+    // The comparison is a thing said about the block, so a hotel that is not
+    // in it has nothing to be compared against.
+    render(<HotelsView nowMs={NOW} />);
+    expect(beside('Holiday Inn Express')).toBeNull();
+  });
+
+  it('leaves a block hotel alone when nothing is near it or at its price', () => {
+    /*
+     * The finding rather than a gap. With everything but the airport filtered
+     * away, the nearest hotel outside the block is twelve kilometres off and
+     * nothing is within a quarter of the block rate — so there is no
+     * comparison, and reaching for one would be inventing it.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Walking distance' }));
+    fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '0.3' } });
+    expect(row('JW Marriott')).toBeTruthy();
+    expect(beside('JW Marriott')).toBeNull();
+  });
+
+  it('draws only on hotels the reader has not filtered away', () => {
+    // A hotel they have excluded is not an answer to what they asked.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '1' } });
+    const said = beside('JW Marriott')?.textContent ?? '';
+    expect(said).not.toMatch(/Unasked Lodge/); // 1.4 km out, filtered away
+  });
+
+  it('still finds one when the source filter has hidden every third party', () => {
+    /*
+     * The one filter it must ignore. With "Gen Con block" chosen there is
+     * nothing outside the block in view, and a comparison drawn from what is in
+     * view would then be no comparison at all.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
+    expect(beside('JW Marriott')).toBeTruthy();
+  });
+
+  it('says which kind of comparison it is', () => {
+    /*
+     * "Round the corner" and "about the same money" are different answers to
+     * different questions, and a row that does not say which is guesswork. The
+     * JW has the Corner Inn 476 m away; the Westin has nothing within 800 m
+     * outside the block once the Corner Inn is spoken for — the Nestle Inn is
+     * a kilometre off — and takes it on money instead, $290 against its own
+     * projected $292.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    expect(beside('JW Marriott')!.textContent).toMatch(/^Nearby, outside the block/);
+    expect(beside('The Westin')!.textContent).toMatch(/^Similar money, outside the block/);
+  });
+
+  it('spreads itself down the page rather than naming one hotel every time', () => {
+    // Two rows naming the same hotel are one finding printed twice.
+    render(<HotelsView nowMs={NOW} />);
+    const named = [...page().querySelectorAll('.hotels__beside-name')].map((one) => one.textContent);
+    expect(named.length).toBeGreaterThan(1);
+    expect(new Set(named).size).toBe(named.length);
+  });
+
+  it('says the saving where both have a price, and which way it runs', () => {
+    /*
+     * Both directions, because "cheaper" is the answer people expect and
+     * "dearer" is the one worth printing: the Corner Inn is round the corner
+     * from the JW and $97 a room more, and a comparison that only ever reads
+     * as a saving is a comparison selling something.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    expect(beside('The Westin')!.textContent).toMatch(/\$1 a night each cheaper/);
+    expect(beside('JW Marriott')!.textContent).toMatch(/\$48 a night each dearer/);
+  });
+
+  it('has no section of its own left under the list', () => {
+    render(<HotelsView nowMs={NOW} />);
     expect(page().querySelector('.hotels__pair')).toBeNull();
-  });
-
-  it('repeats Gen Con’s own caveat about tax and room type', () => {
-    // A rate that excludes tax and varies by room is not the number somebody
-    // will be charged, and the page has to say so where the number is.
-    openBlock();
-    expect(blockCaution().textContent).toMatch(/before local taxes/i);
-  });
-
-  it('shows both ends of a published range', () => {
-    // Only the low end would make the block look cheaper than anybody pays.
-    openBlock();
-    fireEvent.click(screen.getByRole('button', { name: '1' }));
-    const pair = [...page().querySelectorAll('.hotels__pair')].find((one) =>
-      one.textContent?.includes('JW Marriott'),
-    )!;
-    const shown = pair.querySelector('.hotels__money')!.textContent!;
-    // 2027 planning year, so both ends are carried forward two years.
-    expect(shown).toMatch(/^\$\d+–\$\d+$/);
-    const [low, high] = shown.split('–').map((one) => Number(one.replace(/\D/g, '')));
-    expect(low).toBeGreaterThanOrEqual(287);
-    expect(high).toBeGreaterThanOrEqual(620);
-  });
-
-  it('says when a figure is carried forward, and from which year', () => {
-    openBlock();
-    const text = page().textContent ?? '';
-    expect(text).toMatch(/carried forward/i);
-    expect(text).toMatch(/real 2025 block rates/);
-    expect(page().querySelector('.hotels__label')!.textContent).toMatch(/projected/i);
-  });
-
-  it('surfaces the block’s own cheapest room, wherever it is', () => {
-    // It is a real published price that cost no API quota, and it is usually
-    // nowhere near the hall.
-    openBlock();
-    expect(page().textContent).toMatch(/cheapest room anywhere is/i);
-    expect(page().textContent).toMatch(/\$109/);
-  });
-
-  it('draws a projected figure differently from a published one', () => {
-    // Same rule as the key dates page: a projection never sits in a column of
-    // facts looking like one.
-    openBlock();
-    expect(page().querySelector('.hotels__money--guess')).toBeTruthy();
-  });
-
-  it('pairs each block hotel with a different alternative', () => {
-    // The reason this is a matching and not a lookup.
-    openBlock();
-    const alternatives = [...page().querySelectorAll('.hotels__pair')].map(
-      (pair) => pair.querySelectorAll('.hotels__side h3')[1]?.textContent,
-    );
-    expect(new Set(alternatives.filter(Boolean)).size).toBe(alternatives.filter(Boolean).length);
-  });
-
-  it('says how far apart a pair is', () => {
-    openBlock();
-    expect(page().textContent).toMatch(/\d+ m from it/);
-  });
-
-  it('says nothing about sharing when nothing is shared', () => {
-    // The mock has two block hotels and two alternatives, so each gets its own,
-    // and a label that is true of nothing is a label the eye learns to skip.
-    openBlock();
-    expect(page().textContent).not.toMatch(/stands in for others/);
-    expect(page().textContent).not.toMatch(/lean on an alternative/);
-  });
-
-  it('calls the saving a direction rather than a sum', () => {
-    // It subtracts an estimate from a quote. Printing that as a firm figure
-    // would be the most confident wrong number on the page.
-    openBlock();
-    expect(page().textContent).toMatch(/treat it as a direction, not a sum/i);
-  });
-
-  it('says the block list is partial rather than implying it is whole', () => {
-    openBlock();
-    expect(page().textContent).toMatch(/left\s+out rather than guessed at/i);
+    expect(page().textContent).not.toMatch(/Beside the nearest alternative/);
   });
 });
 
@@ -566,7 +590,7 @@ describe('the four facts on every row', () => {
   it('puts the distance from the ICC on every row', () => {
     render(<HotelsView nowMs={NOW} />);
     expect(within(row('JW Marriott')).getByText(/124 m from the ICC/)).toBeTruthy();
-    expect(within(row('Nestle Inn')).getByText(/900 m from the ICC/)).toBeTruthy();
+    expect(within(row('Nestle Inn')).getByText(/1.3 km from the ICC/)).toBeTruthy();
   });
 });
 
@@ -605,7 +629,7 @@ describe('published beats bought', () => {
     // presented with more confidence.
     render(<HotelsView nowMs={NOW} />);
     const jw = row('JW Marriott');
-    expect(within(jw).getByText('in the block')).toBeTruthy();
+    expect(within(jw).getByText('Block')).toBeTruthy();
     expect(within(jw).getByText(/Gen Con’s own/)).toBeTruthy();
   });
 

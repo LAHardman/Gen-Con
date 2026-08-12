@@ -1,5 +1,5 @@
 /**
- * The block estimate, and the pairing that gives it something to be compared to.
+ * The block estimate, and the comparison that gives it a meaning.
  *
  * Two things are being defended here.
  *
@@ -8,11 +8,12 @@
  * mistaken for a measured one, and that the base year travels with the number
  * wherever it goes.
  *
- * The pairing is where the interesting bug lives. Nearest-neighbour looks right
- * and is not: four block hotels sit within two hundred metres of each other on
- * this campus, and greedy assignment hands all four the same alternative, which
- * tells you one thing four times. Every test below that mentions uniqueness is
- * really testing that.
+ * The comparison is where the interesting judgement is. Two hotels are worth
+ * putting side by side when one could stand in for the other, and the two ways
+ * that can be true — round the corner, or at about the same money — are
+ * different questions. What has to be defended is that neither one is stretched
+ * to fill a column: a hotel a mile away at twice the price is not a comparison,
+ * and printing nothing is the right answer.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -51,7 +52,7 @@ vi.mock('./rates', () => ({
 
 vi.mock('./lodging', () => ({ LODGING: [], WALKABLE: [], WALK_METRES: 1600, DRIVE_METRES: 25000, PULLED: '2026-08-11', SAMPLED: true }));
 
-const { between, blockRate, pairings, preference, tier } = await import('./blocks');
+const { beside, between, blockRate, preference, tier } = await import('./blocks');
 
 /** Degrees are awkward; this puts places a known number of metres apart. */
 const at = (id: string, metresEast: number, extra: Record<string, unknown> = {}) => ({
@@ -119,149 +120,6 @@ describe('the block rate for a year', () => {
   });
 });
 
-describe('pairing each block hotel with something to compare against', () => {
-  /*
-   * Three block hotels bunched together and three alternatives at increasing
-   * distances. Nearest-neighbour would give all three the same answer.
-   */
-  const CLUSTER = [
-    at('jw', 0),
-    at('westin', 40),
-    at('hilton', 80),
-    at('near', 20, { name: 'Nearest Alternative' }),
-    at('mid', 300, { name: 'Middle Alternative' }),
-    at('far', 900, { name: 'Far Alternative' }),
-  ];
-
-  it('never uses one alternative twice', () => {
-    // The reason this is a matching rather than a lookup.
-    const paired = pairings(2026, CLUSTER);
-    const used = paired.map((one) => one.alternative?.id).filter(Boolean);
-    expect(used).toHaveLength(3);
-    expect(new Set(used).size).toBe(3);
-  });
-
-  it('gives the contested alternative to whichever block hotel is nearer it', () => {
-    // All three want 'near'; only the closest keeps it.
-    const paired = pairings(2026, CLUSTER);
-    const nearest = paired.find((one) => one.alternative?.id === 'near')!;
-    const distances = CLUSTER.filter((one) => ['jw', 'westin', 'hilton'].includes(one.id)).map(
-      (one) => ({ id: one.id, m: between(one, CLUSTER.find((two) => two.id === 'near')!) }),
-    );
-    distances.sort((a, b) => a.m - b.m);
-    expect(nearest.partner.id).toBe(distances[0].id);
-  });
-
-  it('gives the rest their next choice rather than nothing', () => {
-    const paired = pairings(2026, CLUSTER);
-    for (const one of paired) expect(one.alternative).not.toBeNull();
-  });
-
-  it('repeats an alternative rather than leaving a block hotel with nothing', () => {
-    /*
-     * Three block hotels and one alternative. This used to answer two of them
-     * with "no comparison", which reads as a fault in the page rather than as a
-     * fact about downtown — and downtown is where it happens: thirty-one of the
-     * thirty-five hotels within a walk of the hall are in the block.
-     */
-    const scarce = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20)];
-    const paired = pairings(2026, scarce);
-    expect(paired.filter((one) => one.alternative).length).toBe(3);
-    expect(paired.map((one) => one.alternative?.id)).toEqual(['near', 'near', 'near']);
-  });
-
-  it('marks a comparison that another block hotel leans on too', () => {
-    // The honesty that repeating buys: a reader can see the same hotel twice
-    // and know it, rather than reading two rows as two findings.
-    const scarce = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20)];
-    for (const one of pairings(2026, scarce)) expect(one.shared).toBe(true);
-
-    // Where there are enough to go round, nothing is shared.
-    for (const one of pairings(2026, CLUSTER)) expect(one.shared).toBe(false);
-  });
-
-  it('spreads the block evenly over the alternatives rather than piling on the first', () => {
-    /*
-     * Three block hotels, two alternatives, and 'near' is everybody's first
-     * choice — it is closer and it is cheaper than the block. An even share is
-     * two, so the third hotel takes 'mid'; without a share, 'near' answers all
-     * three and 'mid' answers none.
-     */
-    const twoWays = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20), at('mid', 300)];
-    const counts = new Map<string, number>();
-    for (const one of pairings(2026, twoWays)) {
-      counts.set(one.alternative!.id, (counts.get(one.alternative!.id) ?? 0) + 1);
-    }
-    expect(counts.get('near')).toBe(2);
-    expect(counts.get('mid')).toBe(1);
-  });
-
-  it('gives a shared alternative to the block hotels nearest it', () => {
-    // A share is not a queue: the two that keep 'near' are the two closest to
-    // it, and the one that gives way is the one furthest off.
-    const twoWays = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20), at('mid', 300)];
-    const paired = pairings(2026, twoWays);
-    expect(paired.find((one) => one.partner.id === 'hilton')!.alternative!.id).toBe('mid');
-    expect(paired.find((one) => one.partner.id === 'jw')!.alternative!.id).toBe('near');
-    expect(paired.find((one) => one.partner.id === 'westin')!.alternative!.id).toBe('near');
-  });
-
-  it('reaches past the walk ring for an alternative, since downtown has so few', () => {
-    /*
-     * Every walkable hotel is in the block, so the only candidate is 1.9 km
-     * out. Stopping at the ring would answer the whole table with nothing.
-     */
-    const boxedIn = [
-      at('jw', 0),
-      at('westin', 40),
-      { ...at('outside', 1900), ring: 'drive' as const },
-    ];
-    const paired = pairings(2026, boxedIn);
-    expect(paired.map((one) => one.alternative?.id)).toEqual(['outside', 'outside']);
-  });
-
-  it('will not reach so far that the comparison stops being downtown', () => {
-    const tooFar = [at('jw', 0), { ...at('airport', 12_000), ring: 'drive' as const }];
-    expect(pairings(2026, tooFar)[0].alternative).toBeNull();
-  });
-
-  it('never offers a hotel that only looks like it is outside the block', () => {
-    /*
-     * The bug this caught in the wild. Gen Con writes "SpringHill Suites by
-     * Marriott Indianapolis Downtown" and OpenStreetMap writes "SpringHill
-     * Suites Indianapolis Downtown", so the strict matcher tied them to nothing
-     * — and an untied block hotel fell straight into the alternatives list. The
-     * page then compared two block hotels with each other.
-     */
-    const withLookalike = [...CLUSTER, at('lookalike', 10, { name: 'Also In The Block' })];
-    const paired = pairings(2026, withLookalike);
-    expect(paired.map((one) => one.alternative?.id)).not.toContain('lookalike');
-  });
-
-  it('reports how far apart the pair is, so the comparison can be judged', () => {
-    const paired = pairings(2026, CLUSTER);
-    for (const one of paired) {
-      if (!one.alternative) continue;
-      expect(one.apart).toBe(between(one.partner, one.alternative));
-    }
-  });
-
-  it('works out the saving only where the alternative has a price', () => {
-    const paired = pairings(2026, CLUSTER);
-    const withRate = paired.find((one) => one.alternative?.id === 'near')!;
-    expect(withRate.saving).toBe(withRate.rate.low - 150);
-
-    const noRate = pairings(2026, [at('jw', 0), at('blank', 30)]);
-    expect(noRate[0].alternative?.id).toBe('blank');
-    expect(noRate[0].saving).toBeNull();
-  });
-
-  it('is ordered by how near the block hotel is to the hall', () => {
-    const paired = pairings(2026, CLUSTER);
-    const order = paired.map((one) => one.partner.metres);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-});
 
 describe('what tips a close-run choice', () => {
   it('prefers a hotel of the same sort when two are equally near', () => {
@@ -294,5 +152,96 @@ describe('what tips a close-run choice', () => {
     expect(preference(partner, nextDoor, 278, null)).toBeLessThan(
       preference(partner, acrossTown, 278, null),
     );
+  });
+});
+
+describe('the one hotel worth putting beside a block hotel', () => {
+  /** A candidate as the comparison sees it: a place and what it costs. */
+  const candidate = (id: string, metresEast: number, nightly: number | null, name?: string) => ({
+    place: at(id, metresEast, name ? { name } : {}),
+    nightly,
+  });
+
+  const jw = at('jw', 0, { name: 'JW Marriott' });
+
+  it('takes a hotel round the corner, whatever it costs', () => {
+    // Distance is one of the two reasons to look at a second hotel, and it does
+    // not need a price to be a real answer — most of this app's hotels have none.
+    const found = beside(jw, 300, [candidate('near', 200, null)])!;
+    expect(found.place.id).toBe('near');
+    expect(found.because).toBe('near');
+    expect(found.apart).toBeGreaterThan(150);
+    expect(found.saving).toBeNull();
+  });
+
+  it('takes a hotel at about the same money, wherever it is', () => {
+    // The other reason, and it does not care about distance: somebody comparing
+    // on price is asking what else that money buys.
+    const found = beside(jw, 300, [candidate('far', 1400, 290)])!;
+    expect(found.place.id).toBe('far');
+    expect(found.because).toBe('priced');
+    expect(found.saving).toBe(10);
+  });
+
+  it('refuses when a hotel is neither near nor at the price', () => {
+    // The finding, not a gap. A hotel a mile off at twice the money is not a
+    // comparison, and reaching for it would be inventing one to fill a column.
+    expect(beside(jw, 300, [candidate('far', 1400, 700)])).toBeNull();
+  });
+
+  it('refuses when there is nothing to compare against at all', () => {
+    expect(beside(jw, 300, [])).toBeNull();
+  });
+
+  it('calls a hotel that is both near and priced "near"', () => {
+    // The stronger claim: "round the corner" is more use than "about the same
+    // money", so where both hold the row says the one worth acting on.
+    expect(beside(jw, 300, [candidate('near', 200, 310)])!.because).toBe('near');
+  });
+
+  it('takes the nearer of two that both qualify', () => {
+    const found = beside(jw, 300, [candidate('far', 500, 300), candidate('near', 100, 300)])!;
+    expect(found.place.id).toBe('near');
+  });
+
+  it('prefers the same sort of place when two are equally near', () => {
+    // A Motel 6 beside the Conrad is a true comparison and a useless one.
+    const found = beside(jw, 300, [
+      candidate('motel', 200, null, 'Motel 6'),
+      candidate('grand', 200, null, 'Conrad Indianapolis'),
+    ])!;
+    expect(found.place.id).toBe('grand');
+  });
+
+  it('does not compare a hotel with itself', () => {
+    expect(beside(jw, 300, [{ place: jw, nightly: 300 }])).toBeNull();
+  });
+
+  it('spreads itself across the list rather than naming one hotel every time', () => {
+    // Downtown has four hotels outside the block and thirty-one in it, so this
+    // can only ever be a preference — but a page that says "Atlas Hotel" on
+    // thirty-one rows has told the reader one thing thirty-one times.
+    const options = [candidate('a', 200, null), candidate('b', 260, null)];
+    const first = beside(jw, 300, options)!;
+    const second = beside(jw, 300, options, new Set([first.place.id]))!;
+    expect(second.place.id).not.toBe(first.place.id);
+  });
+
+  it('still repeats one rather than answering with nothing', () => {
+    // A preference, not a rule: with a single candidate, used or not, it is
+    // still the best answer there is.
+    const only = [candidate('a', 200, null)];
+    expect(beside(jw, 300, only, new Set(['a']))!.place.id).toBe('a');
+  });
+
+  it('works out the saving per room, and only where both have a price', () => {
+    expect(beside(jw, 300, [candidate('near', 200, 240)])!.saving).toBe(60);
+    expect(beside(jw, null, [candidate('near', 200, 240)])!.saving).toBeNull();
+    expect(beside(jw, 300, [candidate('near', 200, null)])!.saving).toBeNull();
+  });
+
+  it('says how far apart the two are, so the comparison can be judged', () => {
+    const other = candidate('near', 400, null);
+    expect(beside(jw, 300, [other])!.apart).toBe(between(jw, other.place));
   });
 });

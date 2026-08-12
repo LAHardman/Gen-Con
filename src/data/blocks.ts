@@ -9,39 +9,28 @@
  * negotiated rate is being presented at all, so every estimate carries its base
  * year and its multiplier and the page prints both.
  *
- * THE PAIRING answers "what would I pay instead, a similar walk away". Each
- * block hotel is matched to the nearest hotel that is *not* in the block, and
- * they are spread as evenly as the candidates allow — because a comparison table
- * where the same Hampton Inn is the alternative to six different hotels tells
- * you one thing six times. When two block hotels want the same neighbour the
- * nearer one keeps it and the other takes its next choice, which is a stable
- * marriage in miniature and is implemented as one.
+ * THE COMPARISON answers "what would I pay instead" for one block hotel at a
+ * time, against whatever the reader is currently looking at. It used to be a
+ * whole-table matching that ran once over every walkable hotel and printed its
+ * own section underneath the list. Two things were wrong with that. It answered
+ * a question about hotels the reader had filtered away, and it put the answer
+ * a screen and a half from the row it was about — so the row said "$152" and
+ * the thing that gives $152 a meaning was somewhere else entirely.
  *
- * WHY NOT JUST TAKE THE NEAREST FOR EACH. Because that is the version that
- * looks right and is not: on this campus four block hotels sit within two
- * hundred metres of one another, and greedy nearest-neighbour hands all four the
- * same alternative. Gale–Shapley costs twenty lines and cannot do that.
- *
- * WHY NOT ONE EACH, THEN. Because downtown does not have enough hotels outside
- * the block to go round — thirty-one of the thirty-five within a walk of the
- * hall are in it. Insisting on distinctness leaves most of the table empty, and
- * "no comparison" is a worse answer than a repeated one. So each alternative
- * carries an even share of the block, and a row that leans on a shared one says
- * so.
+ * So it is a lookup now, run per row over the candidates the filters left
+ * standing, and drawn on the row. `beside` is the whole rule.
  */
 
-import { LODGING, type Lodging } from './lodging';
+import type { Lodging } from './lodging';
 import {
   BLOCK_GROWTH,
   BLOCK_YEAR,
   CAVEAT,
-  PARTNERS,
   SOURCE,
-  SUSPECTED_IN_BLOCK,
   partnerFor,
   type Partner,
 } from './partners';
-import { rateFor, type Rate } from './rates';
+import type { Rate } from './rates';
 
 export { BLOCK_YEAR, BLOCK_GROWTH, CAVEAT, SOURCE };
 
@@ -239,150 +228,100 @@ export function preference(
   return cost;
 }
 
-export interface Pairing {
-  partner: Lodging;
-  rate: BlockRate;
-  /** The nearest hotel outside the block. Null only if there are none at all. */
-  alternative: Lodging | null;
-  alternativeRate: Rate | null;
-  /** Metres between the two, so the comparison can be judged. */
-  apart: number | null;
-  /** Block rate minus the alternative's, where both are known. */
+
+/** A hotel and what it costs a night, as the comparison needs to see it. */
+export interface Candidate {
+  place: Lodging;
+  /** Per room, per night, or null where nobody has a price for it. */
+  nightly: number | null;
+}
+
+export interface Beside extends Candidate {
+  /** Metres between the two hotels, so the comparison can be judged. */
+  apart: number;
+  /** Block rate minus this one's, where both are known. */
   saving: number | null;
-  /** True where another block hotel is compared against this one too. */
-  shared: boolean;
+  /** Which test it passed. A near hotel and a similarly-priced one are
+   *  different kinds of answer, and the row says which it is looking at. */
+  because: 'near' | 'priced';
 }
 
 /**
- * How far out an alternative may be, which is further than the walk ring.
+ * Within this of the block hotel, a hotel is somewhere you would also walk.
  *
- * Thirty-one of the thirty-five hotels within a walk of the hall are in Gen
- * Con's block. A candidate pool that stops at the ring is four hotels answering
- * thirty-one questions; three kilometres doubles it without leaving downtown,
- * and every row prints its own distance, so nothing is hidden by the reach.
+ * Eight hundred metres, which is about ten minutes. Six hundred was the first
+ * guess and it was too tight for this campus: downtown's four hotels outside
+ * the block sit 729 to 1,458 m from the hall, and from the JW — 124 m from the
+ * door — the nearest of them is 610 m away. A threshold that answers the most
+ * central hotel on the list with nothing is measuring the wrong thing.
  */
-export const ALTERNATIVE_METRES = 3000;
+export const NEAR_METRES = 800;
+
+/** Within this fraction of the block rate, a hotel is in the same bracket. */
+export const NEAR_PRICE = 0.25;
 
 /**
- * Pair every block hotel with the nearest one outside the block.
+ * The one hotel outside the block worth printing beside this one in it.
  *
- * Gale–Shapley, with shares: block hotels propose down their preference list and
- * each candidate holds the nearest `cap` proposals, rejecting the rest, who move
- * on to their next choice. It terminates because every hotel proposes to each
- * candidate at most once.
+ * TWO WAYS TO QUALIFY, because there are two reasons to look at a second hotel.
+ * One is "somewhere else I could stay and still walk this far", which is about
+ * distance. The other is "somewhere else at about this money", which is about
+ * price and does not care where it is. A candidate passes on either.
  *
- * WHY SHARES RATHER THAN ONE EACH. Distinctness was a rule and could not stay
- * one. With thirty-one block hotels and four alternatives, a strict one-each
- * matching answers twenty-seven of them with silence — and silence is a worse
- * answer than a repeat, because the reader planning around the Marriott is told
- * there is nothing to compare it with while the Atlas stands four hundred metres
- * away. A free-for-all is no better: everybody takes their first choice and one
- * hotel is named twenty-three times. A capacity of `ceil(hotels / candidates)`
- * spreads the list evenly, keeps the nearest suitor on each candidate, and
- * leaves every block hotel with something beside it. Repeats are marked, so a
- * reader can see when two rows lean on the same alternative.
+ * NOT EVERY HOTEL GETS ONE, and that is the honest outcome rather than a gap:
+ * with nothing near it and nothing at its price, the nearest hotel outside the
+ * block is a mile away and twice the money, and printing it would be inventing
+ * a comparison to fill a column.
+ *
+ * `used` lets the caller discourage the same hotel from answering for the whole
+ * list. It is a preference, not a rule — downtown does not have enough hotels
+ * outside the block for a rule — so a much better repeat still beats a poor
+ * fresh one.
  */
-export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING): Pairing[] {
-  const partnerIds = new Set(PARTNERS.map((one) => one.placeId).filter(Boolean));
-  // Only the walk ring: a block hotel you would have to drive to is not the
-  // question this comparison answers.
-  const walk = places.filter((one) => one.ring === 'walk');
-  const blockHotels = walk.filter((one) => partnerIds.has(one.id));
-  /*
-   * Everything else within reach — minus the ones that only *look* like block
-   * entries.
-   *
-   * Matching is strict, so some block hotels never get tied to an id. Each of
-   * those would otherwise land in this list and be offered as an "alternative
-   * outside the block", and the page would compare the block with itself. That
-   * happened: SpringHill and Fairfield were both offered as alternatives to
-   * hotels they share a block with, because Gen Con writes them "by Marriott"
-   * and OpenStreetMap does not.
-   */
-  const others = places.filter(
-    (one) =>
-      one.metres <= ALTERNATIVE_METRES &&
-      one.kind === 'hotel' &&
-      !partnerIds.has(one.id) &&
-      !SUSPECTED_IN_BLOCK.has(one.id),
-  );
+export function beside(
+  partner: Lodging,
+  blockNightly: number | null,
+  candidates: readonly Candidate[],
+  used: ReadonlySet<string> = new Set(),
+): Beside | null {
+  let best: (Beside & { cost: number }) | null = null;
 
-  /** Each block hotel's candidates, keenest first. */
-  const wishes = new Map<string, Lodging[]>();
-  for (const partner of blockHotels) {
-    const block = blockRate(partner.id, year);
-    const ranked = [...others].sort(
-      (a, b) =>
-        preference(partner, a, block?.low ?? null, rateFor(a.id)) -
-        preference(partner, b, block?.low ?? null, rateFor(b.id)),
-    );
-    wishes.set(partner.id, ranked);
-  }
+  for (const candidate of candidates) {
+    if (candidate.place.id === partner.id) continue;
+    const apart = between(partner, candidate.place);
+    const near = apart <= NEAR_METRES;
+    const priced =
+      blockNightly !== null &&
+      candidate.nightly !== null &&
+      Math.abs(candidate.nightly - blockNightly) <= blockNightly * NEAR_PRICE;
+    if (!near && !priced) continue;
 
-  /**
-   * How many block hotels one alternative may stand for.
-   *
-   * An even share, rounded up so the shares always cover the list. With four
-   * candidates and thirty-one hotels that is eight each: enough to seat
-   * everybody, few enough that no candidate takes the whole page.
-   */
-  const cap = others.length > 0 ? Math.ceil(blockHotels.length / others.length) : 0;
-
-  /** Who currently holds each alternative, and the next index each will try. */
-  const heldBy = new Map<string, Lodging[]>(others.map((one) => [one.id, []]));
-  const nextTry = new Map<string, number>(blockHotels.map((one) => [one.id, 0]));
-  const free = [...blockHotels];
-
-  while (free.length > 0) {
-    const suitor = free.shift()!;
-    const list = wishes.get(suitor.id) ?? [];
-    const index = nextTry.get(suitor.id)!;
-    if (index >= list.length) continue; // Only reachable with no candidates at all.
-    nextTry.set(suitor.id, index + 1);
-
-    const wanted = list[index];
-    const held = heldBy.get(wanted.id)!;
-    held.push(suitor);
-    if (held.length <= cap) continue;
-    // Over its share: the furthest away gives up its place and tries the next.
-    held.sort((a, b) => between(a, wanted) - between(b, wanted));
-    free.push(held.pop()!);
-  }
-
-  /*
-   * Everybody gets a seat, and the shares are why.
-   *
-   * A suitor only gives up when every candidate has rejected it, which means
-   * every candidate is full — `others.length * cap` hotels seated. But
-   * `cap = ceil(blockHotels.length / others.length)`, so that product is at
-   * least the number of suitors, and there is nobody left over to be the one
-   * turned away. `alternative` is therefore null in exactly one case: no
-   * candidate exists at all.
-   */
-  const pairedWith = new Map<string, Lodging>();
-  for (const other of others) {
-    for (const suitor of heldBy.get(other.id)!) pairedWith.set(suitor.id, other);
-  }
-
-  const timesUsed = new Map<string, number>();
-  for (const alternative of pairedWith.values()) {
-    timesUsed.set(alternative.id, (timesUsed.get(alternative.id) ?? 0) + 1);
-  }
-
-  return blockHotels
-    .map((partner) => {
-      const rate = blockRate(partner.id, year)!;
-      const alternative = pairedWith.get(partner.id) ?? null;
-      const alternativeRate = alternative ? rateFor(alternative.id) : null;
-      return {
-        partner,
-        rate,
-        alternative,
-        alternativeRate,
-        apart: alternative ? between(partner, alternative) : null,
-        saving: alternative && alternativeRate ? rate.low - alternativeRate.nightly : null,
-        shared: alternative ? (timesUsed.get(alternative.id) ?? 0) > 1 : false,
+    /*
+     * Distance decides between two that both qualify, with a tier difference
+     * worth about a hundred metres — a Motel 6 beside the Conrad is a true
+     * comparison and a useless one. A hotel already answering for another row
+     * carries the width of the whole test, so it loses to any real rival and
+     * still wins when there is none.
+     */
+    let cost = apart + Math.abs(tier(partner) - tier(candidate.place)) * 100;
+    if (used.has(candidate.place.id)) cost += NEAR_METRES;
+    if (best === null || cost < best.cost) {
+      best = {
+        ...candidate,
+        apart,
+        saving:
+          blockNightly !== null && candidate.nightly !== null
+            ? blockNightly - candidate.nightly
+            : null,
+        // Said as the stronger claim where both hold: "round the corner" is a
+        // more useful thing to know than "about the same money".
+        because: near ? 'near' : 'priced',
+        cost,
       };
-    })
-    .sort((a, b) => a.partner.metres - b.partner.metres);
+    }
+  }
+
+  if (!best) return null;
+  const { cost: _cost, ...beside } = best;
+  return beside;
 }
