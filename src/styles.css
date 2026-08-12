@@ -2973,7 +2973,13 @@ body {
   line-height: 1.5;
 }
 
-/* The one thing on this page that must be read before any number on it. */
+/*
+ * Kept for the block comparison, which does need one thing read first.
+ *
+ * The list above it does not: every price there explains itself when you look
+ * at it, which a box at the top of the page cannot, because a box at the top of
+ * the page is read once and then passed.
+ */
 .hotels__caution {
   margin: 0;
   padding: 11px 13px;
@@ -2982,6 +2988,64 @@ body {
   background: var(--panel-raised);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* --------------------------------------------- a price that explains itself */
+
+.hotels__told {
+  position: relative;
+  display: inline-block;
+  border-radius: 4px;
+  cursor: help;
+}
+
+.hotels__told:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.hotels__bubble {
+  position: fixed;
+  z-index: 1200;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 24px));
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.45);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  /* It is a label on the number, not a target — pointer events on it would
+     make moving towards it count as leaving the number. */
+  pointer-events: none;
+}
+
+/* Anchored to the number's underside, or flipped above it near the foot. */
+.hotels__bubble--above {
+  transform: translateY(-100%);
+}
+
+.hotels__bubble::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  background: var(--panel-raised);
+  transform: rotate(45deg);
+}
+
+.hotels__bubble--above::after {
+  top: auto;
+  bottom: -6px;
+  transform: rotate(225deg);
 }
 
 .hotels__rings {
@@ -3018,7 +3082,7 @@ body {
   gap: 9px;
 }
 
-.hotels__slider input {
+.hotels__slider input[type='range'] {
   flex: 0 1 260px;
   min-width: 90px;
   height: 20px;
@@ -3026,22 +3090,54 @@ body {
   cursor: pointer;
 }
 
-/* Reserves the width of the longest reading, so the row does not twitch. */
-.hotels__slider output {
+/*
+ * The reading is a control, not a caption.
+ *
+ * A number you can only reach through a slider is a number you cannot set
+ * exactly, and "1.2 km" is a thing people know before they touch anything — so
+ * it is a button, and it opens a field. Both are the same width so the row does
+ * not twitch as the reading changes or the field opens.
+ */
+.hotels__reading,
+.hotels__typed {
   flex: 0 0 auto;
-  min-width: 7ch;
+  width: 8ch;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
   color: var(--text);
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: text;
 }
 
-.hotels__slider output.hotels__any {
+.hotels__reading:hover {
+  border-color: var(--border);
+}
+
+.hotels__reading.hotels__any {
   color: var(--text-muted);
   font-weight: 400;
 }
 
-/* Says what is on, and takes it off again — the only way back to everything. */
+.hotels__typed {
+  border-color: var(--accent);
+  background: var(--panel-raised);
+  appearance: textfield;
+}
+
+/* The spinners are noise at this size, and the field is four characters. */
+.hotels__typed::-webkit-outer-spin-button,
+.hotels__typed::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* Comes out only for a mess of filters — one is cleared by pressing it again. */
 .hotels__clear {
   padding: 4px 11px 4px 9px;
   border: 1px solid var(--border);

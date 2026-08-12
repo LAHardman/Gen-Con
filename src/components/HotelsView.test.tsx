@@ -75,20 +75,146 @@ const rows = () => screen.getAllByRole('listitem');
 const row = (name: string) => rows().find((one) => one.textContent?.includes(name))!;
 
 describe('what it refuses to be mistaken for', () => {
-  it('separates published rates from bought ones, above the list', () => {
-    // Two kinds of number in one column. Which is which decides how much to
-    // trust a row, so it is said before the rows rather than under them.
+  /*
+   * Each price says what kind of number it is, on the number itself.
+   *
+   * This used to be a box above the list explaining all three kinds at once,
+   * which is a thing a reader passes on the way to the prices and never looks
+   * at again. The distinction is what decides how far to trust a row, so it
+   * lives on the row.
+   */
+  const told = (name: string) => within(row(name)).getByRole('button');
+
+  it('calls a published block rate what it is', () => {
     render(<HotelsView nowMs={NOW} />);
-    const caution = page().querySelector('.hotels__caution')!;
-    expect(caution.textContent).toMatch(/block’s published prices/i);
-    expect(caution.textContent).toMatch(/indicative market rate/i);
-    const list = page().querySelector('.hotels__list')!;
-    expect(caution.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 2027 planning year, so the JW's is carried forward and says so.
+    expect(told('JW Marriott').getAttribute('aria-label')).toMatch(
+      /An estimate\. Gen Con’s real 2025 block rate of \$287 the room, carried forward 2 years/,
+    );
+  });
+
+  it('calls a bought price an indication rather than a quote', () => {
+    render(<HotelsView nowMs={NOW} />);
+    const say = told('Holiday Inn Express').getAttribute('aria-label')!;
+    expect(say).toMatch(/A market rate, not a quote/);
+    expect(say).toMatch(/serpapi and xotelo/);
+    expect(say).toMatch(/gathered yesterday/);
+    expect(say).toMatch(/they differ by \$40/);
+  });
+
+  it('says a missing price is a gap in the asking, not a verdict on the hotel', () => {
+    render(<HotelsView nowMs={NOW} />);
+    expect(told('Unasked Lodge').getAttribute('aria-label')).toMatch(
+      /Nobody has gathered a market rate for this one yet/,
+    );
+  });
+
+  it('opens the blurb on hover and shuts it when the pointer leaves', () => {
+    render(<HotelsView nowMs={NOW} />);
+    const price = told('JW Marriott');
+    expect(page().querySelector('.hotels__bubble')).toBeNull();
+
+    fireEvent.mouseEnter(price);
+    expect(page().querySelector('.hotels__bubble')!.textContent).toMatch(/An estimate/);
+
+    fireEvent.mouseLeave(price);
+    expect(page().querySelector('.hotels__bubble')).toBeNull();
+  });
+
+  it('opens it on a tap too, and shuts it on a tap elsewhere', () => {
+    // A phone has no hover, so a tooltip that only hovers is a tooltip half the
+    // readers never see.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(told('JW Marriott'));
+    expect(page().querySelector('.hotels__bubble')).toBeTruthy();
+
+    fireEvent.pointerDown(page().querySelector('.hotels__head')!);
+    expect(page().querySelector('.hotels__bubble')).toBeNull();
+  });
+
+  it('does not close on a click that follows its own hover', () => {
+    // With a mouse the hover has already opened it; a click that toggled would
+    // read as the page snatching the answer back.
+    render(<HotelsView nowMs={NOW} />);
+    const price = told('JW Marriott');
+    fireEvent.mouseEnter(price);
+    fireEvent.click(price);
+    expect(page().querySelector('.hotels__bubble')).toBeTruthy();
+  });
+
+  it('shuts it on Escape', () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(told('JW Marriott'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(page().querySelector('.hotels__bubble')).toBeNull();
   });
 
   it('says the hotel list is a sample rather than every hotel there is', () => {
     render(<HotelsView nowMs={NOW} />);
     expect(page().textContent).toMatch(/sample rather than a complete list/i);
+  });
+});
+
+describe('putting the list in an order', () => {
+  const listed = () =>
+    [...page().querySelectorAll('.hotels__list .hotels__row h3')].map(
+      (one) => one.firstChild!.textContent,
+    );
+  const by = (which: string) => fireEvent.click(screen.getByRole('button', { name: which }));
+
+  it('starts on distance, the one number this app is sure of', () => {
+    render(<HotelsView nowMs={NOW} />);
+    expect(screen.getByRole('button', { name: 'Distance' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(listed()[0]).toBe('JW Marriott Indianapolis');
+  });
+
+  it('sorts by price with the unpriced last, not first', () => {
+    // "Cheapest first" with a blank at the top would answer a question about
+    // money with the one row there is no money for.
+    render(<HotelsView nowMs={NOW} />);
+    by('Price');
+    expect(listed()).toEqual([
+      'Motel 6 Southport',
+      'Airport Motel',
+      'Holiday Inn Express',
+      'Nestle Inn',
+      'The Westin Indianapolis',
+      'JW Marriott Indianapolis',
+      'Unasked Lodge',
+      'Super 8 Airport',
+    ]);
+  });
+
+  it('sorts by rating on the chain each name belongs to, and says so', () => {
+    /*
+     * There is no rating. OpenStreetMap has a `stars` tag and nothing near the
+     * hall fills it in, and no reviews have been gathered — so this orders on
+     * the brand, and the page has to admit that rather than let a reader take
+     * it for a score.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    by('Rating');
+    expect(listed()).toEqual([
+      'JW Marriott Indianapolis', // luxury
+      'The Westin Indianapolis', // upper upscale
+      'Nestle Inn', // nothing in the name, so the middle
+      'Unasked Lodge',
+      'Holiday Inn Express', // midscale
+      'Super 8 Airport', // economy, nearest first among equals
+      'Airport Motel',
+      'Motel 6 Southport',
+    ]);
+    expect(page().textContent).toMatch(/orders by the chain each name belongs to/i);
+    // And the band it landed in shows on the row, so the order is legible.
+    expect(within(row('JW Marriott')).getByText(/luxury/)).toBeTruthy();
+  });
+
+  it('says nothing about chains when it is not sorting by them', () => {
+    render(<HotelsView nowMs={NOW} />);
+    expect(page().textContent).not.toMatch(/orders by the chain/i);
+    expect(row('JW Marriott').textContent).not.toMatch(/luxury/);
   });
 });
 
@@ -135,6 +261,13 @@ describe('filters that can all be off at once', () => {
   const chip = (name: string) => screen.getByRole('button', { name });
   const slide = (label: string, value: number) =>
     fireEvent.change(screen.getByLabelText(label), { target: { value: String(value) } });
+  /** Click the reading, type a number, press Enter — the other way in. */
+  const type = (label: string, text: string) => {
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${label} limit`) }));
+    const field = screen.getByLabelText(new RegExp(`^${label} limit in`));
+    fireEvent.change(field, { target: { value: text } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+  };
 
   it('opens showing everything, nearest first', () => {
     /*
@@ -160,7 +293,13 @@ describe('filters that can all be off at once', () => {
     // The whole point of dropping the "All" chip: the way back is the way in,
     // and it has to be true of every group rather than the first one.
     render(<HotelsView nowMs={NOW} />);
-    for (const name of ['Walking distance', 'Gen Con block', 'Driving distance', 'Third party']) {
+    for (const name of [
+      'Walking distance',
+      'Gen Con block',
+      'Driving distance',
+      'Third party',
+      'Skywalk to the ICC',
+    ]) {
       fireEvent.click(chip(name));
       expect(chip(name).getAttribute('aria-pressed')).toBe('true');
       expect(listed().length).toBeLessThan(8);
@@ -169,6 +308,17 @@ describe('filters that can all be off at once', () => {
       expect(chip(name).getAttribute('aria-pressed')).toBe('false');
       expect(listed()).toHaveLength(8);
     }
+  });
+
+  it('filters to the hotels Gen Con says are on a skywalk', () => {
+    /*
+     * Only Gen Con records this, and only for its own block — so a hotel
+     * outside the block is absent from this list rather than claimed to have
+     * no skywalk, which would be this app inventing a fact.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(chip('Skywalk to the ICC'));
+    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis']);
   });
 
   it('lets a distance filter and a source filter both apply', () => {
@@ -187,37 +337,50 @@ describe('filters that can all be off at once', () => {
     // irrelevant, because a hotel with no price cannot be shown to fit one.
     render(<HotelsView nowMs={NOW} />);
     expect(row('Unasked Lodge')).toBeTruthy();
-    slide('Up to', 200);
+    slide('Price', 200);
     expect(listed()).not.toContain('Unasked Lodge');
-  });
-
-  it('sorts by price once a budget is set, not by distance', () => {
-    render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: '1' }));
-    slide('Up to', 200);
-    expect(listed()).toEqual([
-      'Motel 6 Southport',
-      'Airport Motel',
-      'Holiday Inn Express',
-      'Nestle Inn',
-    ]);
   });
 
   it('reads the distance slider in kilometres, and says "any" until it is moved', () => {
     render(<HotelsView nowMs={NOW} />);
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('any');
-    slide('Within', 1);
+    slide('Distance', 1);
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1 km');
     expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Nestle Inn']);
   });
 
-  it('says what is filtered, and takes it all off in one press', () => {
+  it('takes a number typed straight in, exactly, past the slider’s own step', () => {
+    /*
+     * The range's step is half a kilometre, so handing it 1.2 gets 1 back. A
+     * number somebody typed on purpose must survive being shown on a coarse
+     * control — the thumb rounds, the answer does not.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    type('Distance', '1.3');
+    expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1.3 km');
+    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Nestle Inn', 'Holiday Inn Express']);
+  });
+
+  it('reads an emptied field as "no limit" rather than as zero', () => {
+    // Clearing the box is undoing the filter. Reading it as "under $0" would
+    // empty the page in answer to a gesture that meant the opposite.
+    render(<HotelsView nowMs={NOW} />);
+    type('Price', '150');
+    expect(listed().length).toBeLessThan(8);
+    type('Price', '');
+    expect(page().querySelector('#hotels-upto-out')!.textContent).toBe('any');
+    expect(listed()).toHaveLength(8);
+  });
+
+  it('takes the clear-all button off the page until there is a mess to clear', () => {
+    // One filter comes off by pressing it again, so a button for it would only
+    // repeat a chip that is already on screen and already says what it does.
     render(<HotelsView nowMs={NOW} />);
     fireEvent.click(chip('Driving distance'));
-    slide('Within', 10);
-    const clear = screen.getByRole('button', { name: /Clear/ });
-    expect(clear.textContent).toMatch(/a drive away, within 10 km of the hall/);
-    fireEvent.click(clear);
+    expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
+
+    slide('Distance', 10);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
     expect(listed()).toHaveLength(8);
     expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
   });
@@ -225,7 +388,7 @@ describe('filters that can all be off at once', () => {
   it('says which hotels are missing rather than showing an empty page', () => {
     render(<HotelsView nowMs={NOW} />);
     fireEvent.click(chip('Driving distance'));
-    slide('Within', 1);
+    slide('Distance', 1);
     expect(page().querySelector('.hotels__empty')!.textContent).toBe(
       'No hotel is a drive away, within 1 km of the hall.',
     );
@@ -244,7 +407,9 @@ describe('the Gen Con block, estimated', () => {
   // No longer behind a tab: the comparison sits under the list wherever block
   // hotels are in view, which is everywhere except "Third party".
   const openBlock = () => render(<HotelsView nowMs={NOW} />);
-  const blockCaution = () => page().querySelectorAll('.hotels__caution')[1]!;
+  // The only one left on the page: the list's prices each explain themselves,
+  // so the comparison is the one thing that still needs reading first.
+  const blockCaution = () => page().querySelector('.hotels__caution')!;
 
   it('says these are Gen Con’s own rates, and links to the page they are on', () => {
     // They are published prices, not estimates, and underselling them as

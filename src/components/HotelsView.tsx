@@ -27,7 +27,7 @@
  * a distance-ordered list with Gen Con's own rates on two thirds of it.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   BLOCK_YEAR,
@@ -38,18 +38,33 @@ import {
   journeyTo,
   pairings,
   perPerson,
+  tier,
 } from '../data/blocks';
 import { planningYear } from '../data/key-dates';
 import { DRIVE_METRES, LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
 import { CHEAPEST } from '../data/partners';
-import { RATES, REFRESHED, rateFor } from '../data/rates';
+import { RATES, REFRESHED, rateFor, type Rate } from '../data/rates';
 
 /** How far, and where the price comes from. Null in either means "don't mind". */
 type Ring = 'walk' | 'drive';
 type Source = 'block' | 'third';
+type Sort = 'distance' | 'price' | 'rating';
 
 /** How many people share the room, and therefore the bill. */
 const PARTIES = [1, 2, 3, 4] as const;
+
+/**
+ * WHAT "RATING" MEANS HERE, AND WHAT IT DOES NOT.
+ *
+ * There is no rating. OpenStreetMap carries a `stars` tag and not one of the
+ * two hundred and fifty places within twenty-five kilometres of the hall has it
+ * filled in, and no guest reviews have been gathered by anything this app runs.
+ * So sorting by rating orders on the one quality signal the data has — the
+ * chain each name belongs to, read against the usual industry scale — and every
+ * row says which band it landed in while that sort is on, so the ordering is
+ * legible rather than mysterious and nobody reads it as a score out of five.
+ */
+const CLASSES = ['economy', 'midscale', 'upscale', 'upper upscale', 'luxury'];
 
 /**
  * The top of each slider, which means "no limit" rather than its own number.
@@ -90,7 +105,7 @@ function age(at: string, nowMs: number): string {
  * which in an Indianapolis August is the whole difference between two hotels
  * the same distance apart.
  */
-function Journey({ place }: { place: Lodging }) {
+function Journey({ place, band }: { place: Lodging; band?: string | null }) {
   const skywalk = hasSkywalk(place.id);
   const journey = journeyTo(place, skywalk === true);
   const km = (place.metres / 1000).toFixed(1);
@@ -105,30 +120,119 @@ function Journey({ place }: { place: Lodging }) {
       {place.metres < 1000 ? `${place.metres} m` : `${km} km`} from the ICC
       {place.city && place.city !== 'Indianapolis' ? ` · ${place.city}` : ''}
       {place.kind !== 'hotel' ? ` · ${place.kind.replace('_', ' ')}` : ''}
+      {/* Shown only while it is doing the ordering, so it never sits on the
+          page looking like a fact somebody recorded about the hotel. */}
+      {band ? ` · ${band}` : ''}
     </p>
   );
 }
 
-/** A price, per head and per room, because those are different claims. */
-function Price({
-  nightly,
-  currency,
-  people,
-}: {
-  nightly: number;
-  currency: string;
-  people: number;
-}) {
+/**
+ * What a price is, in one breath, for the number itself to say.
+ *
+ * Three kinds of number sit in this column — a published rate, a projection of
+ * one, a market quote of unknown age — and this used to be a box at the top of
+ * the page explaining all three at once. A box like that is read once and then
+ * passed; attached to the number, the explanation is there the moment it is the
+ * number somebody is looking at.
+ */
+function priceStory(
+  row: { block: ReturnType<typeof blockRate>; rate: Rate | null; nightly: number | null },
+  nowMs: number,
+): string {
+  const { block, rate, nightly } = row;
+  if (nightly === null) {
+    return 'No price. Nobody has gathered a market rate for this one yet, and Gen Con publishes none. It is not a sign it is dear or cheap.';
+  }
+  if (block?.projected) {
+    return (
+      `An estimate. Gen Con’s real ${BLOCK_YEAR} block rate of ${dollars(block.from.low)} the room, ` +
+      `carried forward ${block.yearsOn} ${block.yearsOn === 1 ? 'year' : 'years'} at the rate this ` +
+      `block’s own prices have actually moved since 2019. ${CAVEAT}`
+    );
+  }
+  if (block) {
+    return `Gen Con’s published ${BLOCK_YEAR} block rate. Not an estimate and not a market price — what Gen Con charges. ${CAVEAT}`;
+  }
   return (
-    <>
-      <span className="hotels__money">{dollars(perPerson(nightly, people), currency)}</span>
-      <span className="hotels__meta">
-        per person, per night
-        {/* The room total, always, because the per-head figure is a division
-            this app performed rather than a rate anybody is quoted. */}
-        {people > 1 ? ` · ${dollars(nightly, currency)} the room` : ''}
-      </span>
-    </>
+    `A market rate, not a quote. An indicative price for a sample night from ` +
+    `${rate!.sources.join(' and ')}, gathered ${age(rate!.at, nowMs)}` +
+    `${rate!.spread > 0 ? `, and they differ by ${dollars(rate!.spread)}` : ''}. ` +
+    `It is not a price for your dates, and Gen Con has no block here.`
+  );
+}
+
+/**
+ * Something that explains itself when you look at it.
+ *
+ * Hover and focus and tap all open it, because those are the three ways people
+ * reach a thing; moving away, tapping elsewhere, scrolling or pressing Escape
+ * all close it. Positioned against the viewport and closed on scroll rather
+ * than followed, which is cheaper and reads as intentional.
+ */
+function Told({ say, children }: { say: string; children: React.ReactNode }) {
+  const [at, setAt] = useState<{ top: number; right: number; below: boolean } | null>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
+
+  const open = useCallback(() => {
+    const box = anchor.current?.getBoundingClientRect();
+    if (!box) return;
+    // Above the number when there is no room under it, which on a phone is
+    // most of the time for anything in the bottom third of the list.
+    const below = box.bottom + 150 < window.innerHeight;
+    setAt({
+      top: below ? box.bottom + 8 : box.top - 8,
+      right: Math.max(10, window.innerWidth - box.right),
+      below,
+    });
+  }, []);
+
+  const shut = useCallback(() => setAt(null), []);
+
+  useEffect(() => {
+    if (!at) return;
+    const away = (event: Event) => {
+      if (!anchor.current?.contains(event.target as Node)) shut();
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') shut();
+    };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', key);
+    window.addEventListener('scroll', shut, true);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', key);
+      window.removeEventListener('scroll', shut, true);
+    };
+  }, [at, shut]);
+
+  return (
+    <span
+      ref={anchor}
+      className="hotels__told"
+      tabIndex={0}
+      role="button"
+      aria-label={say}
+      onMouseEnter={open}
+      onMouseLeave={shut}
+      onFocus={open}
+      onBlur={shut}
+      // Opens, never toggles. With a mouse the hover has already opened it, and
+      // a click that closed it again would read as the page refusing to answer.
+      onClick={open}
+    >
+      {children}
+      {at && (
+        <span
+          className={`hotels__bubble${at.below ? '' : ' hotels__bubble--above'}`}
+          role="status"
+          style={{ top: at.top, right: at.right }}
+        >
+          {say}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -147,8 +251,10 @@ export function HotelsView({ nowMs }: Props) {
    */
   const [ring, setRing] = useState<Ring | null>(null);
   const [source, setSource] = useState<Source | null>(null);
+  const [skywalkOnly, setSkywalkOnly] = useState(false);
   const [withinKm, setWithinKm] = useState(FURTHEST_KM);
   const [upto, setUpto] = useState(DEAREST);
+  const [sort, setSort] = useState<Sort>('distance');
   /*
    * Two, because a room is priced for two and most people travel in pairs — but
    * it is the reader's to change, since no default is right for both a couple
@@ -156,7 +262,15 @@ export function HotelsView({ nowMs }: Props) {
    */
   const [people, setPeople] = useState(2);
   const year = planningYear(nowMs);
-  const filtered = ring !== null || source !== null || withinKm < FURTHEST_KM || upto < DEAREST;
+
+  /** How many filters are on. Sorting and sharing are not filters. */
+  const onNow = [
+    ring !== null,
+    source !== null,
+    skywalkOnly,
+    withinKm < FURTHEST_KM,
+    upto < DEAREST,
+  ].filter(Boolean).length;
 
   const rows = useMemo(() => {
     const all = LODGING.map((place) => {
@@ -170,12 +284,16 @@ export function HotelsView({ nowMs }: Props) {
         // What the page shows and sorts on: Gen Con's published figure where
         // there is one, because it beats anything bought.
         nightly: block?.low ?? rate?.nightly ?? null,
+        // Gen Con is the only source for this, so a hotel outside the block
+        // says nothing rather than claiming it has none.
+        skywalk: hasSkywalk(place.id) === true,
       };
     });
 
     const shown = all
       .filter((one) => ring === null || one.place.ring === ring)
       .filter((one) => source === null || one.source === source)
+      .filter((one) => !skywalkOnly || one.skywalk)
       .filter((one) => one.place.metres <= withinKm * 1000)
       /*
        * A price cap hides the hotels with no price at all.
@@ -190,18 +308,21 @@ export function HotelsView({ nowMs }: Props) {
       );
 
     /*
-     * Nearest first, unless the question has become a money one. Somebody who
-     * has set a budget or gone looking past walking distance is shopping on
-     * price, and the nearest of the ones they can afford is not the answer.
+     * Three orders, and each puts its unknowns last. A hotel with no price at
+     * the top of "cheapest first" would be the page answering a question about
+     * money with the one row it has no money for.
      */
-    const onPrice = ring === 'drive' || upto < DEAREST;
-    shown.sort((a, b) =>
-      onPrice
-        ? (a.nightly ?? Infinity) - (b.nightly ?? Infinity)
-        : a.place.metres - b.place.metres,
-    );
+    const each = (nightly: number | null) =>
+      nightly === null ? Infinity : perPerson(nightly, people);
+    shown.sort((a, b) => {
+      if (sort === 'price') return each(a.nightly) - each(b.nightly);
+      if (sort === 'rating') {
+        return tier(b.place) - tier(a.place) || a.place.metres - b.place.metres;
+      }
+      return a.place.metres - b.place.metres;
+    });
     return shown;
-  }, [ring, source, withinKm, upto, people, year]);
+  }, [ring, source, skywalkOnly, withinKm, upto, sort, people, year]);
 
   const priced = rows.filter((row) => row.nightly !== null).length;
   const walkable = LODGING.filter((place) => place.ring === 'walk').length;
@@ -210,6 +331,7 @@ export function HotelsView({ nowMs }: Props) {
   const words = [
     ring === null ? null : ring === 'walk' ? 'within walking distance' : 'a drive away',
     source === null ? null : source === 'block' ? 'in Gen Con’s block' : 'outside the block',
+    skywalkOnly ? 'on a skywalk to the hall' : null,
     withinKm < FURTHEST_KM ? `within ${trim(withinKm)} km of the hall` : null,
     upto < DEAREST ? `up to ${dollars(upto)} each a night` : null,
   ]
@@ -219,6 +341,7 @@ export function HotelsView({ nowMs }: Props) {
   const clear = () => {
     setRing(null);
     setSource(null);
+    setSkywalkOnly(false);
     setWithinKm(FURTHEST_KM);
     setUpto(DEAREST);
   };
@@ -234,8 +357,8 @@ export function HotelsView({ nowMs }: Props) {
         </p>
       </header>
 
-      <div className="hotels__rings" role="group" aria-label="How far">
-        <span className="hotels__party-label">How far</span>
+      <div className="hotels__rings" role="group" aria-label="Travel distance">
+        <span className="hotels__party-label">Travel distance</span>
         {(['walk', 'drive'] as const).map((which) => (
           <Chip
             key={which}
@@ -248,8 +371,8 @@ export function HotelsView({ nowMs }: Props) {
         ))}
       </div>
 
-      <div className="hotels__rings" role="group" aria-label="Where the price comes from">
-        <span className="hotels__party-label">Price from</span>
+      <div className="hotels__rings" role="group" aria-label="Source">
+        <span className="hotels__party-label">Source</span>
         {(['block', 'third'] as const).map((which) => (
           <Chip
             key={which}
@@ -261,12 +384,20 @@ export function HotelsView({ nowMs }: Props) {
         ))}
       </div>
 
+      <div className="hotels__rings" role="group" aria-label="Access">
+        <span className="hotels__party-label">Access</span>
+        <Chip on={skywalkOnly} onClick={() => setSkywalkOnly(!skywalkOnly)}>
+          Skywalk to the ICC
+        </Chip>
+      </div>
+
       <Slider
         id="hotels-within"
-        label="Within"
+        label="Distance"
         min={0}
         max={FURTHEST_KM}
         step={0.5}
+        unit="km"
         value={withinKm}
         onChange={setWithinKm}
         say={(km) => `${trim(km)} km`}
@@ -274,14 +405,26 @@ export function HotelsView({ nowMs }: Props) {
 
       <Slider
         id="hotels-upto"
-        label="Up to"
+        label="Price"
         min={20}
         max={DEAREST}
         step={5}
+        unit="$ each"
         value={upto}
         onChange={setUpto}
-        say={(amount) => `${dollars(amount)} each`}
+        say={(amount) => `${dollars(amount)} ea`}
       />
+
+      <div className="hotels__rings" role="group" aria-label="Sort by">
+        <span className="hotels__party-label">Sort by</span>
+        {(['distance', 'price', 'rating'] as const).map((which) => (
+          // Not a filter — a list is always in some order, so this one does not
+          // toggle off and does not count towards the clear-all button.
+          <Chip key={which} on={which === sort} onClick={() => setSort(which)}>
+            {which[0].toUpperCase() + which.slice(1)}
+          </Chip>
+        ))}
+      </div>
 
       {/* Sharing changes the answer more than anything else on this page: a
           $296 room is $296 or $74 depending on who is in it. */}
@@ -300,19 +443,15 @@ export function HotelsView({ nowMs }: Props) {
         ))}
       </div>
 
-      {filtered && (
+      {/* One filter comes off by pressing it again; the button is for the mess.
+          Below two it repeats what a chip already says. */}
+      {onNow >= 2 && (
         <div>
           <button type="button" className="hotels__clear" onClick={clear}>
-            ✕ Clear {words}
+            Clear all filters
           </button>
         </div>
       )}
-
-      <p className="hotels__caution">
-        <strong>Rates marked “Gen Con’s own” are the block’s published prices.</strong> Everything
-        else is an indicative market rate for a sample night, gathered from free tiers — a rough
-        guide rather than a quote for your dates. {CAVEAT}
-      </p>
 
       {rows.length === 0 ? (
         <p className="hotels__empty">No hotel is {words}.</p>
@@ -325,14 +464,29 @@ export function HotelsView({ nowMs }: Props) {
                   {place.name}
                   {block && <span className="hotels__inblock">in the block</span>}
                 </h3>
-                <Journey place={place} />
+                <Journey place={place} band={sort === 'rating' ? CLASSES[tier(place)] : null} />
               </div>
               <div className="hotels__price">
-                {nightly === null ? (
-                  <span className="hotels__none">no price</span>
-                ) : (
+                <Told say={priceStory({ block, rate, nightly }, nowMs)}>
+                  {nightly === null ? (
+                    <span className="hotels__none">no price</span>
+                  ) : (
+                    <span
+                      className={`hotels__money${block?.projected ? ' hotels__money--guess' : ''}`}
+                    >
+                      {dollars(perPerson(nightly, people), rate?.currency ?? 'USD')}
+                    </span>
+                  )}
+                </Told>
+                {nightly !== null && (
                   <>
-                    <Price nightly={nightly} currency={rate?.currency ?? 'USD'} people={people} />
+                    <span className="hotels__meta">
+                      per person, per night
+                      {/* The room total, always, because the per-head figure is
+                          a division this app performed rather than a rate
+                          anybody is quoted. */}
+                      {people > 1 ? ` · ${dollars(nightly, rate?.currency ?? 'USD')} the room` : ''}
+                    </span>
                     <span className="hotels__meta">
                       {block
                         ? `Gen Con’s own${block.projected ? ', projected' : ` ${BLOCK_YEAR} rate`}`
@@ -350,9 +504,15 @@ export function HotelsView({ nowMs }: Props) {
       )}
 
       <p className="hotels__note">
-        {filtered
+        {onNow > 0
           ? `${rows.length} of ${LODGING.length} hotels are ${words}, ${priced} of them priced. `
           : `${priced} of ${rows.length} priced. `}
+        Tap a price to see where it came from.{' '}
+        {/* Said only while that sort is on, because otherwise it explains a
+            control nobody has touched. */}
+        {sort === 'rating'
+          ? 'No guest ratings have been gathered and OpenStreetMap records no star grades here, so “rating” orders by the chain each name belongs to. '
+          : ''}
         {/* The asterisk is explained wherever a drive time is on screen to
             carry one, and nowhere else, since it would be explaining nothing. */}
         {rows.some((one) => one.place.ring === 'drive')
@@ -408,6 +568,7 @@ function Slider({
   min,
   max,
   step,
+  unit,
   value,
   onChange,
   say,
@@ -417,11 +578,31 @@ function Slider({
   min: number;
   max: number;
   step: number;
+  unit: string;
   value: number;
   onChange: (value: number) => void;
   say: (value: number) => string;
 }) {
+  const [typing, setTyping] = useState<string | null>(null);
   const off = value >= max;
+
+  /*
+   * The reading is the other way in. A slider is fine for "about a kilometre"
+   * and useless for "exactly 1.2", and somebody who knows their budget should
+   * be able to say it rather than hunt for it with a thumb.
+   */
+  const commit = (text: string) => {
+    setTyping(null);
+    const asked = Number(text);
+    /*
+     * An empty box means "no limit" rather than zero. Somebody clearing the
+     * field is undoing the filter, and reading that as "under $0" would empty
+     * the page in answer to a gesture that meant the opposite.
+     */
+    if (text.trim() === '' || !Number.isFinite(asked)) return onChange(max);
+    onChange(Math.min(max, Math.max(min, asked)));
+  };
+
   return (
     <div className="hotels__slider">
       <label className="hotels__party-label" htmlFor={id}>
@@ -433,13 +614,42 @@ function Slider({
         min={min}
         max={max}
         step={step}
-        value={value}
+        // The range snaps whatever it is given to its own step, so a typed 1.2
+        // would come back as 1. The thumb is the coarse control and rounds; the
+        // value the page filters on is the one held above.
+        value={Math.min(max, Math.max(min, value))}
         aria-describedby={`${id}-out`}
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      <output id={`${id}-out`} htmlFor={id} className={off ? 'hotels__any' : undefined}>
-        {off ? 'any' : say(value)}
-      </output>
+      {typing === null ? (
+        <button
+          type="button"
+          id={`${id}-out`}
+          className={`hotels__reading${off ? ' hotels__any' : ''}`}
+          aria-label={`${label} limit, ${off ? 'any' : say(value)}. Click to type a number`}
+          onClick={() => setTyping(off ? '' : String(value))}
+        >
+          {off ? 'any' : say(value)}
+        </button>
+      ) : (
+        <input
+          type="number"
+          className="hotels__typed"
+          aria-label={`${label} limit in ${unit}`}
+          min={min}
+          max={max}
+          step={step}
+          placeholder={unit}
+          value={typing}
+          autoFocus
+          onChange={(event) => setTyping(event.target.value)}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commit((event.target as HTMLInputElement).value);
+            if (event.key === 'Escape') setTyping(null);
+          }}
+        />
+      )}
     </div>
   );
 }
