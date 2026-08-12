@@ -44,6 +44,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { auditAliases, NOT_IN_BLOCK, TIES } from './lib/block-aliases.mjs';
 import { matchByName } from './lib/rates/sources.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -269,10 +270,47 @@ const forMatching = (name) =>
 
 const places = readLodging();
 const walk = places.filter((one) => one.ring === 'walk');
+
+/*
+ * The hand-written table first, and it has to still describe reality.
+ *
+ * A stale alias fails silently — the key stops matching a renamed hotel and the
+ * tie simply stops being applied — so a table that no longer fits the page is
+ * treated as a broken build rather than a warning nobody reads.
+ */
+const wrong = auditAliases(
+  block.map((one) => one.blockName),
+  places.map((one) => one.id),
+);
+if (wrong.length) {
+  throw new Error(`scripts/lib/block-aliases.mjs is out of date:\n  ${wrong.join('\n  ')}`);
+}
+
 const taken = new Set();
 let matched = 0;
+let byHand = 0;
+
+/*
+ * Every checked answer is claimed before the matcher gets a turn.
+ *
+ * In one pass, an earlier hotel the matcher guesses at can take a building a
+ * later hotel has a *checked* claim on, and the checked one then loses to the
+ * guess. A hand-written answer outranks a guess whatever order the page is in.
+ */
+for (const hotel of block) {
+  const tie = TIES[hotel.blockName];
+  if (!tie) continue;
+  // `null` is a real answer here — "looked, and this app has not got it".
+  hotel.placeId = tie.placeId;
+  if (tie.placeId) {
+    taken.add(tie.placeId);
+    matched += 1;
+    byHand += 1;
+  }
+}
 
 for (const hotel of block) {
+  if (TIES[hotel.blockName]) continue;
   /*
    * Downtown entries are matched against the walk ring only.
    *
@@ -295,19 +333,27 @@ for (const hotel of block) {
   matched += 1;
 }
 
-console.error(`\n${matched} of ${block.length} tied to a hotel this app knows about`);
+console.error(
+  `\n${matched} of ${block.length} tied to a hotel this app knows about ` +
+    `(${byHand} by hand, ${matched - byHand} by name)`,
+);
 
 /*
- * The safety net.
+ * The safety net, for hotels nobody has looked at yet.
  *
  * Matching is strict and will always leave some block hotels untied. Every one
  * of those is a hotel that must never be offered as an alternative *outside*
  * the block, so a looser name comparison records the suspicion separately. The
  * strict list decides what gets a price; this list only decides what is
- * excluded from the comparison, where being cautious costs nothing.
+ * excluded from the comparison, where being cautious costs little.
+ *
+ * "Little" was doing too much work: downtown has two hotels outside the block,
+ * so every false positive here is a third of the comparison. A checked entry in
+ * NOT_IN_BLOCK overrules the net, which is the point of having checked it.
  */
 const suspected = walk
   .filter((place) => !taken.has(place.id))
+  .filter((place) => !NOT_IN_BLOCK[place.id])
   /*
    * One distinctive word is enough *here*, unlike everywhere else.
    *
@@ -323,10 +369,21 @@ const suspected = walk
   .filter((place) => block.some((one) => sameHotel(one.blockName, place.name, 1)))
   .map((place) => place.id);
 if (suspected.length) {
-  console.error(`\n${suspected.length} walkable hotels look like block entries but could not be tied:`);
+  console.error(
+    `\n${suspected.length} walkable hotels look like block entries but could not be tied.` +
+      `\nEach one is a line missing from scripts/lib/block-aliases.mjs — either a TIES` +
+      `\nentry naming the building, or a NOT_IN_BLOCK entry saying it is not one:`,
+  );
   for (const id of suspected) {
-    console.error(`  ${places.find((one) => one.id === id).name}`);
+    console.error(`  ${id.padEnd(17)} ${places.find((one) => one.id === id).name}`);
   }
+}
+
+/** Block hotels still without a building, which is the other half of the same job. */
+const untied = block.filter((one) => !one.placeId && !TIES[one.blockName]);
+if (untied.length) {
+  console.error(`\n${untied.length} block hotels could not be tied to a building:`);
+  for (const one of untied) console.error(`  ${one.region.padEnd(9)} ${one.blockName}`);
 }
 
 const literal = (one) =>
@@ -409,12 +466,16 @@ export const isPartner = (placeId: string): boolean => BY_PLACE.has(placeId);
 export const partnerFor = (placeId: string): Partner | null => BY_PLACE.get(placeId) ?? null;
 
 /**
- * Walkable hotels that look like block entries but could not be tied to one.
+ * Walkable hotels that look like block entries and nobody has checked yet.
  *
  * They get no block rate — the match was not good enough — but they must never
  * be offered as an alternative *outside* the block either, because they are
- * probably in it. Being cautious here costs one row of a comparison table;
- * being wrong compares the block with itself.
+ * probably in it. Being cautious here costs a row of a comparison table; being
+ * wrong compares the block with itself.
+ *
+ * An entry here is a to-do, not an answer: it means the generator saw a
+ * resemblance and \`scripts/lib/block-aliases.mjs\` has nothing to say about the
+ * hotel. Add a line there and it leaves this set, in one direction or the other.
  */
 export const SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set(${JSON.stringify(suspected)});
 

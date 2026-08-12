@@ -59,8 +59,8 @@ export const CAVEAT =
 
 export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Aloft Indianapolis Downtown", placeId: 'way339000065', low: 289, high: null, region: 'downtown', skywalk: false, distance: "6 Blocks" },
-  { blockName: "Bottleworks Hotel", placeId: null, low: 319, high: null, region: 'downtown', skywalk: false, distance: "1.7 Miles" },
-  { blockName: "Candlewood Suites Indianapolis Downtown", placeId: null, low: 225, high: null, region: 'downtown', skywalk: false, distance: "2.8 Miles" },
+  { blockName: "Bottleworks Hotel", placeId: 'node14077761226', low: 319, high: null, region: 'downtown', skywalk: false, distance: "1.7 Miles" },
+  { blockName: "Candlewood Suites Indianapolis Downtown", placeId: 'way212705933', low: 225, high: null, region: 'downtown', skywalk: false, distance: "2.8 Miles" },
   { blockName: "Columbia Club", placeId: null, low: 242, high: 262, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "Conrad Indianapolis", placeId: 'way340403988', low: 289, high: 489, region: 'downtown', skywalk: false, distance: "2 Blocks" },
   { blockName: "Courtyard by Marriott Indianapolis at the Capitol", placeId: 'way340008421', low: 236, high: 281, region: 'downtown', skywalk: false, distance: "5 Blocks" },
@@ -69,14 +69,14 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Embassy Suites by Hilton Indianapolis Downtown", placeId: 'way340403993', low: 287, high: 337, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Fairfield Inn & Suites by Marriott Indianapolis Downtown", placeId: 'node5504151850', low: 238, high: 258, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Hampton Inn Indianapolis Canal IUPUI", placeId: 'node12209262126', low: 249, high: 279, region: 'downtown', skywalk: false, distance: "6 Blocks" },
-  { blockName: "Hampton Inn Indianapolis Downtown", placeId: null, low: 254, high: 349, region: 'downtown', skywalk: false, distance: "2 Blocks" },
+  { blockName: "Hampton Inn Indianapolis Downtown", placeId: 'way341313470', low: 254, high: 349, region: 'downtown', skywalk: false, distance: "2 Blocks" },
   { blockName: "Hilton Garden Inn Indianapolis Downtown", placeId: 'way338986228', low: 254, high: null, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "Hilton Indianapolis Hotel & Suites", placeId: 'way339985727', low: 231, high: 391, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Holiday Inn Express & Suites Indianapolis City Centre", placeId: 'way199297625', low: 243, high: 263, region: 'downtown', skywalk: false, distance: "2 Blocks" },
   { blockName: "Holiday Inn Indianapolis Downtown", placeId: 'way199297667', low: 246, high: 266, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Home2 Suites by Hilton Indianapolis Downtown", placeId: 'node11975073661', low: 270, high: 290, region: 'downtown', skywalk: false, distance: "6 Blocks" },
   { blockName: "Homewood Suites by Hilton Indianapolis Canal IUPUI", placeId: 'node12209262125', low: 269, high: 289, region: 'downtown', skywalk: false, distance: "6 Blocks" },
-  { blockName: "Hotel Indy", placeId: null, low: 279, high: 329, region: 'downtown', skywalk: false, distance: "5 Blocks" },
+  { blockName: "Hotel Indy", placeId: 'way341041832', low: 279, high: 329, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "Hyatt House Indianapolis Downtown", placeId: 'way199956293', low: 291, high: 299, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Hyatt Place Indianapolis Downtown", placeId: 'node9680958617', low: 262, high: null, region: 'downtown', skywalk: false, distance: "3 Blocks" },
   { blockName: "Hyatt Regency Indianapolis", placeId: 'way340404001', low: 262, high: null, region: 'downtown', skywalk: true, distance: "Skywalk" },
@@ -85,29 +85,29 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Le Meridien Indianapolis", placeId: 'node4079685110', low: 290, high: 320, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Omni Severin Hotel", placeId: 'way340480877', low: 264, high: 314, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Residence Inn by Marriott Indianapolis Downtown on the Canal", placeId: 'way340008416', low: 238, high: 248, region: 'downtown', skywalk: false, distance: "5 Blocks" },
-  { blockName: "Sheraton Indianapolis City Center Hotel", placeId: null, low: 259, high: 335, region: 'downtown', skywalk: false, distance: "4 Blocks" },
+  { blockName: "Sheraton Indianapolis City Center Hotel", placeId: 'way339985751', low: 259, high: 335, region: 'downtown', skywalk: false, distance: "4 Blocks" },
   { blockName: "Sleep Inn & Suites Downtown", placeId: null, low: 219, high: 239, region: 'downtown', skywalk: false, distance: "2.3 Miles" },
   { blockName: "SpringHill Suites by Marriott Indianapolis Downtown", placeId: 'node5504151851', low: 248, high: 268, region: 'downtown', skywalk: true, distance: "Skywalk" },
-  { blockName: "Staybridge Suites Indianapolis City Centre", placeId: null, low: 243, high: 263, region: 'downtown', skywalk: false, distance: "3 Blocks" },
-  { blockName: "The Alexander Hotel", placeId: null, low: 292, high: 322, region: 'downtown', skywalk: false, distance: "5 Blocks" },
+  { blockName: "Staybridge Suites Indianapolis City Centre", placeId: 'way199297626', low: 243, high: 263, region: 'downtown', skywalk: false, distance: "3 Blocks" },
+  { blockName: "The Alexander Hotel", placeId: 'way341317948', low: 292, high: 322, region: 'downtown', skywalk: false, distance: "5 Blocks" },
   { blockName: "TownePlace Suites by Marriott Indianapolis Downtown", placeId: 'way848665190', low: 274, high: null, region: 'downtown', skywalk: false, distance: "6 Blocks" },
   { blockName: "The Westin Indianapolis", placeId: 'way340480896', low: 276, high: 346, region: 'downtown', skywalk: true, distance: "Skywalk" },
   { blockName: "Tru by Hilton Indianapolis Downtown", placeId: 'way989226557', low: 220, high: 240, region: 'downtown', skywalk: false, distance: "6 Blocks" },
   { blockName: "Baymont Inn & Suites Indianapolis Airport", placeId: 'way240436540', low: 125, high: 145, region: 'airport', skywalk: false, distance: "15.4 Miles" },
-  { blockName: "Candlewood Suites Indianapolis Airport", placeId: null, low: 135, high: 155, region: 'airport', skywalk: false, distance: "6.7 Miles" },
-  { blockName: "Comfort Inn Indianapolis Airport - Plainfield", placeId: null, low: 129, high: null, region: 'airport', skywalk: false, distance: "14.7 Miles" },
+  { blockName: "Candlewood Suites Indianapolis Airport", placeId: 'way955435501', low: 135, high: 155, region: 'airport', skywalk: false, distance: "6.7 Miles" },
+  { blockName: "Comfort Inn Indianapolis Airport - Plainfield", placeId: 'way240444551', low: 129, high: null, region: 'airport', skywalk: false, distance: "14.7 Miles" },
   { blockName: "Country Inn & Suites - Indianapolis Airport South", placeId: 'way803790000', low: 149, high: 159, region: 'airport', skywalk: false, distance: "8.1 Miles" },
   { blockName: "Courtyard by Marriott Indianapolis Airport", placeId: null, low: 192, high: 202, region: 'airport', skywalk: false, distance: "6.8 Miles" },
   { blockName: "Courtyard by Marriott Indianapolis Plainfield", placeId: 'way1228877411', low: 239, high: null, region: 'airport', skywalk: false, distance: "14.9 Miles" },
   { blockName: "Courtyard by Marriott Indianapolis West Speedway", placeId: 'way1023072800', low: 234, high: null, region: 'airport', skywalk: false, distance: "12.4 Miles" },
   { blockName: "Crowne Plaza Indianapolis Airport", placeId: 'way187307947', low: 197, high: 217, region: 'airport', skywalk: false, distance: "7.4 Miles" },
   { blockName: "Delta Hotels Indianapolis Airport", placeId: 'way239624858', low: 214, high: 224, region: 'airport', skywalk: false, distance: "7.8 Miles" },
-  { blockName: "Embassy Suites by Hilton Airport-Plainfield", placeId: null, low: 215, high: 235, region: 'airport', skywalk: false, distance: "15.6 Miles" },
+  { blockName: "Embassy Suites by Hilton Airport-Plainfield", placeId: 'way1043308091', low: 215, high: 235, region: 'airport', skywalk: false, distance: "15.6 Miles" },
   { blockName: "Hampton Inn & Suites Indianapolis Airport", placeId: 'way685283877', low: 159, high: 164, region: 'airport', skywalk: false, distance: "13.3 Miles" },
   { blockName: "Hampton Inn & Suites Indianapolis West Speedway", placeId: 'way1197248937', low: 239, high: null, region: 'airport', skywalk: false, distance: "12.6 Miles" },
   { blockName: "Hilton Garden Inn Indianapolis Airport", placeId: 'way1050615312', low: 165, high: null, region: 'airport', skywalk: false, distance: "13.2 Miles" },
   { blockName: "Holiday Inn Indianapolis Airport", placeId: 'way1050619476', low: 169, high: null, region: 'airport', skywalk: false, distance: "12.8 Miles" },
-  { blockName: "Home2 Suites by Hilton Indianapolis Airport", placeId: null, low: 163, high: 168, region: 'airport', skywalk: false, distance: "13.2 Miles" },
+  { blockName: "Home2 Suites by Hilton Indianapolis Airport", placeId: 'way1050619821', low: 163, high: 168, region: 'airport', skywalk: false, distance: "13.2 Miles" },
   { blockName: "Home2 Suites by Hilton Indianapolis Brownsburg", placeId: null, low: 194, high: null, region: 'airport', skywalk: false, distance: "21.2 Miles" },
   { blockName: "Homewood Suites by Hilton Airport Plainfield", placeId: 'way240983867', low: 169, high: 179, region: 'airport', skywalk: false, distance: "15.6 Miles" },
   { blockName: "Hyatt Place Indianapolis Airport", placeId: 'way575079518', low: 171, high: 181, region: 'airport', skywalk: false, distance: "6.6 Miles" },
@@ -115,13 +115,13 @@ export const PARTNERS: ReadonlyArray<Partner> = [
   { blockName: "Residence Inn by Marriott Indianapolis Plainfield", placeId: null, low: 229, high: 249, region: 'airport', skywalk: false, distance: "14.8 Miles" },
   { blockName: "Wingate by Wyndham Airport Indianapolis Plainfield", placeId: 'way240396034', low: 189, high: null, region: 'airport', skywalk: false, distance: "15.2 Miles" },
   { blockName: "Wyndham Indianapolis West", placeId: 'way239624862', low: 191, high: 201, region: 'airport', skywalk: false, distance: "6.9 Miles" },
-  { blockName: "Baymont by Wyndham Indianapolis - Brookville Crossing", placeId: null, low: 159, high: 179, region: 'east', skywalk: false, distance: "12.6 Miles" },
+  { blockName: "Baymont by Wyndham Indianapolis - Brookville Crossing", placeId: 'way644548597', low: 159, high: 179, region: 'east', skywalk: false, distance: "12.6 Miles" },
   { blockName: "Candlewood Suites Indianapolis East", placeId: 'way512647563', low: 163, high: 173, region: 'east', skywalk: false, distance: "8.6 Miles" },
   { blockName: "Comfort Inn East Indy", placeId: 'way393054147', low: 146, high: 156, region: 'east', skywalk: false, distance: "8.8 Miles" },
   { blockName: "Delta Hotels Indianapolis East", placeId: null, low: 161, high: null, region: 'east', skywalk: false, distance: "8.8 Miles" },
   { blockName: "Fairfield Inn & Suites by Marriott Indianapolis East", placeId: 'way512647000', low: 179, high: null, region: 'east', skywalk: false, distance: "10.1 Miles" },
   { blockName: "Indianapolis Marriott East", placeId: 'relation12810528', low: 177, high: 188, region: 'east', skywalk: false, distance: "8.6 Miles" },
-  { blockName: "Best Western Plus Indianapolis NW", placeId: null, low: 189, high: null, region: 'north', skywalk: false, distance: "16.3 Miles" },
+  { blockName: "Best Western Plus Indianapolis NW", placeId: 'way511357813', low: 189, high: null, region: 'north', skywalk: false, distance: "16.3 Miles" },
   { blockName: "Clarion Inn & Suites Northwest", placeId: 'way224005110', low: 140, high: 150, region: 'north', skywalk: false, distance: "13 Miles" },
   { blockName: "Embassy Suites by Hilton Indianapolis North", placeId: 'node13991345801', low: 179, high: null, region: 'north', skywalk: false, distance: "18.5 Miles" },
   { blockName: "Hilton Garden Inn Indianapolis Northwest", placeId: 'way224670812', low: 199, high: 209, region: 'north', skywalk: false, distance: "12.1 Miles" },
@@ -144,14 +144,18 @@ export const isPartner = (placeId: string): boolean => BY_PLACE.has(placeId);
 export const partnerFor = (placeId: string): Partner | null => BY_PLACE.get(placeId) ?? null;
 
 /**
- * Walkable hotels that look like block entries but could not be tied to one.
+ * Walkable hotels that look like block entries and nobody has checked yet.
  *
  * They get no block rate — the match was not good enough — but they must never
  * be offered as an alternative *outside* the block either, because they are
- * probably in it. Being cautious here costs one row of a comparison table;
- * being wrong compares the block with itself.
+ * probably in it. Being cautious here costs a row of a comparison table; being
+ * wrong compares the block with itself.
+ *
+ * An entry here is a to-do, not an answer: it means the generator saw a
+ * resemblance and `scripts/lib/block-aliases.mjs` has nothing to say about the
+ * hotel. Add a line there and it leaves this set, in one direction or the other.
  */
-export const SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set(["way199297626","relation4821152","way341313470","way341313486","way339985751","way341041832","way341317948"]);
+export const SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set([]);
 
 /** The block's own cheapest, wherever it is — usually out by the airport. */
 export const CHEAPEST = PARTNERS.reduce((low, one) => (one.low < low.low ? one : low));
