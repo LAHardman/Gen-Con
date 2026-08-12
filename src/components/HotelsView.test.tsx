@@ -269,6 +269,43 @@ describe('filters that can all be off at once', () => {
     fireEvent.keyDown(field, { key: 'Enter' });
   };
 
+  const fold = () => screen.getByRole('button', { name: /Filters and sorting/ });
+
+  it('folds the controls away and brings them back', () => {
+    /*
+     * Seven rows of controls is most of a phone screen. A reader who has set
+     * them is done with them and wants the hotels — but must be able to get
+     * them back without scrolling to the top of two hundred rows, which is why
+     * the bar stays put rather than scrolling away with them.
+     */
+    const panel = () => page().querySelector('.hotels__panel')!;
+    render(<HotelsView nowMs={NOW} />);
+    expect(fold().getAttribute('aria-expanded')).toBe('true');
+    expect(panel().hasAttribute('hidden')).toBe(false);
+
+    fireEvent.click(fold());
+    expect(fold().getAttribute('aria-expanded')).toBe('false');
+    expect(panel().hasAttribute('hidden')).toBe(true);
+    // The list is untouched by folding — this hides controls, not hotels.
+    expect(listed()).toHaveLength(8);
+
+    fireEvent.click(fold());
+    expect(panel().hasAttribute('hidden')).toBe(false);
+  });
+
+  it('keeps saying what is on while it is folded', () => {
+    // A list quietly filtered by controls that are out of sight is a list that
+    // looks wrong, and the reader has no way to find out why.
+    render(<HotelsView nowMs={NOW} />);
+    expect(fold().textContent).toMatch(/none on · by distance/);
+
+    fireEvent.click(chip('Walking distance'));
+    fireEvent.click(chip('Gen Con block'));
+    fireEvent.click(screen.getByRole('button', { name: 'Price' }));
+    fireEvent.click(fold());
+    expect(fold().textContent).toMatch(/2 on · by price/);
+  });
+
   it('opens showing everything, nearest first', () => {
     /*
      * There used to be three tabs and one of them was always chosen, so there

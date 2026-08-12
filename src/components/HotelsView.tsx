@@ -261,6 +261,11 @@ export function HotelsView({ nowMs }: Props) {
    * and a group of six.
    */
   const [people, setPeople] = useState(2);
+  /*
+   * Open to begin with, because a reader who has never seen these controls
+   * cannot ask for them. Once they have been used, the fold is theirs.
+   */
+  const [open, setOpen] = useState(true);
   const year = planningYear(nowMs);
 
   /** How many filters are on. Sorting and sharing are not filters. */
@@ -357,6 +362,30 @@ export function HotelsView({ nowMs }: Props) {
         </p>
       </header>
 
+      {/*
+        Sticky, and foldable, because there are seven rows of it.
+        Seven rows of controls is most of a phone screen, and a reader who has
+        set them is done with them and wants the hotels — but wants them back
+        without scrolling to the top of two hundred rows. Folded, the bar keeps
+        saying what is on, so the list is never quietly filtered by controls
+        that have scrolled out of sight.
+      */}
+      <div className={`hotels__controls${open ? ' hotels__controls--open' : ''}`}>
+        <button
+          type="button"
+          className="hotels__fold"
+          aria-expanded={open}
+          aria-controls="hotels-filters"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="hotels__fold-mark" aria-hidden="true" />
+          <span className="hotels__fold-what">Filters and sorting</span>
+          <span className="hotels__fold-state">
+            {onNow === 0 ? 'none on' : `${onNow} on`} · by {sort}
+          </span>
+        </button>
+
+        <div className="hotels__panel" id="hotels-filters" hidden={!open}>
       <div className="hotels__rings" role="group" aria-label="Travel distance">
         <span className="hotels__party-label">Travel distance</span>
         {(['walk', 'drive'] as const).map((which) => (
@@ -452,6 +481,8 @@ export function HotelsView({ nowMs }: Props) {
           </button>
         </div>
       )}
+        </div>
+      </div>
 
       {rows.length === 0 ? (
         <p className="hotels__empty">No hotel is {words}.</p>

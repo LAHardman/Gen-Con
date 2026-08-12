@@ -3048,6 +3048,98 @@ body {
   transform: rotate(225deg);
 }
 
+/* ------------------------------------------------- the controls, folded away */
+
+/*
+ * Sticky and foldable, because there are seven rows of them.
+ *
+ * Seven rows is most of a phone screen, and a reader who has set them is done
+ * with them and wants the hotels — but wants them back without scrolling to the
+ * top of two hundred rows. So the bar stays put while the list moves under it,
+ * and folds to one line that still says what is on: a list quietly filtered by
+ * controls that have scrolled out of sight is a list that looks wrong.
+ */
+.hotels__controls {
+  position: sticky;
+  top: -16px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 10px 0;
+  background: var(--bg);
+}
+
+/*
+ * The shadow says the list is passing underneath, and only appears when it is.
+ * It is drawn wider than the column so the edge does not show a seam.
+ */
+.hotels__controls::after {
+  content: '';
+  position: absolute;
+  inset: auto -50vw -9px;
+  height: 9px;
+  background: linear-gradient(rgb(0 0 0 / 0.28), transparent);
+  pointer-events: none;
+}
+
+.hotels__fold {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotels__fold-what {
+  flex: 0 0 auto;
+}
+
+.hotels__fold-state {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* A chevron drawn rather than typed, so it can turn as the panel opens. */
+.hotels__fold-mark {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg) translate(-1px, -1px);
+  transition: transform 140ms ease;
+}
+
+.hotels__controls--open .hotels__fold-mark {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotels__fold-mark {
+    transition: none;
+  }
+}
+
+.hotels__panel {
+  display: grid;
+  gap: 10px;
+}
+
+.hotels__panel[hidden] {
+  display: none;
+}
+
 .hotels__rings {
   display: flex;
   align-items: center;
