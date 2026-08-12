@@ -72,11 +72,55 @@ export const serpapi = {
   ready: (env) => Boolean(env.SERPAPI_KEY),
   cost: 1,
 
-  /** One search, one area, many prices back. */
-  async quoteArea(places, { env, whenMs, fetch: get = fetch }) {
+  /**
+   * The searches worth making, given the hotels that need pricing.
+   *
+   * One search per town rather than one search full stop. The first version
+   * asked "hotels near Indiana Convention Center" and nothing else, which was
+   * fine while the interesting hotels were downtown — and useless the moment
+   * Gen Con's own page took over downtown pricing, because what is left to buy
+   * is a hundred and seventy hotels in Plainfield, Carmel and Greenwood that a
+   * downtown search will never return.
+   *
+   * A hundred searches a month against a dozen towns is not a constraint worth
+   * optimising: this spends one unit per town per run and reaches everything.
+   */
+  areas(places) {
+    const byTown = new Map();
+    for (const place of places) {
+      const town = place.city || 'Indianapolis';
+      if (!byTown.has(town)) byTown.set(town, []);
+      byTown.get(town).push(place);
+    }
+    return (
+      [...byTown.entries()]
+        // Biggest groups first: if the allowance runs out, it runs out having
+        // priced the most hotels it could.
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([town, group]) => ({
+          query:
+            town === 'Indianapolis'
+              ? 'hotels near Indiana Convention Center Indianapolis'
+              : `hotels in ${town}, Indiana`,
+          label: town,
+          places: group,
+        }))
+    );
+  },
+
+  /**
+   * One search, one town, many prices back.
+   *
+   * `report` is for the `--verify` path: it is handed every property the
+   * service returned, matched or not, because the interesting failure here is
+   * not an error — it is twenty hotels coming back and two of them matching,
+   * which is a name-matching problem and looks identical to a thin response
+   * unless somebody prints both.
+   */
+  async quoteArea(places, { env, whenMs, query, fetch: get = fetch, report }) {
     const url = new URL('https://serpapi.com/search.json');
     url.searchParams.set('engine', 'google_hotels');
-    url.searchParams.set('q', 'hotels near Indiana Convention Center Indianapolis');
+    url.searchParams.set('q', query ?? 'hotels near Indiana Convention Center Indianapolis');
     url.searchParams.set('check_in_date', nightOf(whenMs, 30));
     url.searchParams.set('check_out_date', nightOf(whenMs, 31));
     url.searchParams.set('adults', '1');
@@ -91,9 +135,10 @@ export const serpapi = {
     const found = [];
     for (const row of rows) {
       const nightly = money(row.rate_per_night?.extracted_lowest, row.rate_per_night?.lowest);
-      if (!nightly || !row.name) continue;
-      const place = matchByName(places, row.name);
+      if (!row.name) continue;
+      const place = nightly ? matchByName(places, row.name) : null;
       if (place) found.push({ placeId: place.id, nightly, currency: 'USD', via: row.name });
+      report?.({ name: row.name, nightly, matched: place?.name ?? null });
     }
     return found;
   },

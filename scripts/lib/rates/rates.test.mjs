@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cheapFirst, isFresh, keeps, planRun, walkFloor } from './plan.mjs';
 import { budget, ledgerFor, noteTried, quotaFor, remaining, spend } from './quota.mjs';
 import { merge, runOnce, usable } from './run.mjs';
-import { matchByName, words } from './sources.mjs';
+import { matchByName, serpapi, words } from './sources.mjs';
 
 const AUGUST = Date.parse('2026-08-11T12:00:00Z');
 const JULY = Date.parse('2026-07-11T12:00:00Z');
@@ -457,5 +457,97 @@ describe('the promise the whole thing rests on', () => {
     const august = ledgerFor(july, AUGUST);
     await runOnce({ places: PLACES, quotes: [], ledger: august, env, whenMs: AUGUST, sources: [source] });
     expect(asked).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('one search per town, rather than one search', () => {
+  it('groups the hotels by town, biggest group first', () => {
+    /*
+     * The first version asked "hotels near Indiana Convention Center" and
+     * nothing else. That was fine while the interesting hotels were downtown,
+     * and useless the moment Gen Con's own page took over downtown pricing —
+     * because what is left to buy is a hundred and seventy hotels in Plainfield
+     * and Carmel that a downtown search will never return.
+     */
+    const groups = serpapi.areas([
+      place('a', 'walk', 1390, { city: 'Indianapolis' }),
+      place('b', 'walk', 1458, { city: 'Indianapolis' }),
+      place('c', 'drive', 20000, { city: 'Plainfield' }),
+    ]);
+    expect(groups).toHaveLength(2);
+    // Biggest first: if the allowance runs out, it runs out having priced the
+    // most hotels it could.
+    expect(groups[0].places).toHaveLength(2);
+    expect(groups[0].query).toMatch(/Indiana Convention Center/);
+    expect(groups[1].query).toMatch(/Plainfield/);
+  });
+
+  it('treats a hotel with no town as downtown rather than dropping it', () => {
+    const groups = serpapi.areas([place('a', 'walk', 100)]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].places).toHaveLength(1);
+  });
+
+  it('reports every property it saw, matched or not', async () => {
+    // The interesting failure is twenty hotels coming back and two matching,
+    // which looks exactly like a thin response unless both halves are printed.
+    const reply = {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          properties: [
+            { name: 'Motel 6 Southport Indianapolis', rate_per_night: { extracted_lowest: 71 } },
+            { name: 'A Hotel Nobody Here Has', rate_per_night: { extracted_lowest: 95 } },
+            { name: 'No Price On This One' },
+          ],
+        }),
+    };
+    const seen = [];
+    const found = await serpapi.quoteArea([PLACES[3]], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => reply,
+      report: (one) => seen.push(one),
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0].nightly).toBe(71);
+    expect(seen).toHaveLength(3);
+    expect(seen.filter((one) => !one.matched).map((one) => one.name)).toEqual([
+      'A Hotel Nobody Here Has',
+      'No Price On This One',
+    ]);
+  });
+
+  it('spends one unit per town, and stops when the allowance runs out', async () => {
+    // Three towns and two searches left: two get asked, the third does not, and
+    // nothing goes over.
+    const asked = [];
+    const source = {
+      name: 'serpapi',
+      covers: 'area',
+      ready: () => true,
+      cost: 1,
+      areas: (places) => [
+        { label: 'one', query: 'q1', places },
+        { label: 'two', query: 'q2', places },
+        { label: 'three', query: 'q3', places },
+      ],
+      quoteArea: async (_places, { query }) => {
+        asked.push(query);
+        return [];
+      },
+    };
+    const ledger = ledgerFor(null, AUGUST);
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger,
+      env: { RATES_QUOTA_SERPAPI: '2' },
+      whenMs: AUGUST,
+      sources: [source],
+    });
+    expect(asked).toEqual(['q1', 'q2']);
+    expect(ledger.spent.serpapi).toBe(2);
   });
 });

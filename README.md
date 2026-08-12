@@ -848,8 +848,12 @@ node --env-file=.env scripts/fetch-rates.mjs --verify=serpapi   # exactly one re
 node --env-file=.env scripts/fetch-rates.mjs --only=serpapi     # a real run, one source
 ```
 
-`--verify` makes a single call, prints every price it got back with the name the
-service used for each hotel, and writes nothing. Its three outcomes are all
+`--verify` makes a single call and writes nothing. It prints **both halves**: the
+hotels it matched, and every property the service returned that it could not
+place. That second list is the point — the interesting failure is not an error,
+it is twenty hotels coming back and two of them matching, which is a
+name-matching problem and looks exactly like a thin response unless both are
+shown. Its three outcomes are all
 useful: prices means the adapter works; *"it answered, and matched none of our
 hotels"* means the request was fine and the **name matching** is what needs work;
 and an error is the adapter refusing to guess at a response it did not recognise

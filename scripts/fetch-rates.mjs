@@ -164,20 +164,56 @@ if (verify) {
     process.exit(2);
   }
 
-  const asking = places.filter((one) => !inBlock.has(one.id)).slice(0, 8);
-  console.error(`\nasking ${verify} about ${asking.length} hotels outside the block…\n`);
+  const asking = places.filter((one) => !inBlock.has(one.id));
+  const group = source.areas ? source.areas(asking)[0] : { places: asking, label: 'everywhere' };
+  console.error(
+    `\nasking ${verify} for "${group.query ?? group.label}" ` +
+      `— ${group.places.length} of our hotels are in that group…\n`,
+  );
+
+  /*
+   * Everything the service returned, matched or not.
+   *
+   * The interesting failure here is not an error. It is twenty hotels coming
+   * back and two of them matching, which is a name-matching problem and looks
+   * exactly like a thin response unless both halves are printed.
+   */
+  const seen = [];
   try {
     const rows = source.quoteArea
-      ? await source.quoteArea(asking, { env, whenMs: now, keys: store.keys })
-      : [await source.quote(asking[0], { env, whenMs: now, keys: store.keys })].filter(Boolean);
-    if (rows.length === 0) {
-      console.error('It answered, and matched none of our hotels to a price.');
-      console.error('That is a name-matching problem rather than a broken request.');
-    }
-    for (const row of rows) {
-      const place = places.find((one) => one.id === row.placeId);
-      console.error(`  ${String(row.nightly).padStart(6)} ${row.currency ?? 'USD'}  ${place?.name ?? row.placeId}`);
-      if (row.via) console.error(`         they called it: ${row.via}`);
+      ? await source.quoteArea(group.places, {
+          env,
+          whenMs: now,
+          query: group.query,
+          keys: store.keys,
+          report: (one) => seen.push(one),
+        })
+      : [await source.quote(group.places[0], { env, whenMs: now, keys: store.keys })].filter(Boolean);
+
+    const matched = seen.filter((one) => one.matched);
+    if (seen.length > 0) {
+      console.error(`  matched ${matched.length} of the ${seen.length} it returned:\n`);
+      for (const one of matched) {
+        console.error(`    ${String(one.nightly).padStart(6)}  ${one.matched}`);
+        if (one.matched !== one.name) console.error(`            they call it: ${one.name}`);
+      }
+      const missed = seen.filter((one) => !one.matched);
+      if (missed.length > 0) {
+        console.error(`\n  ${missed.length} it returned that we could not place:\n`);
+        for (const one of missed.slice(0, 30)) {
+          console.error(`    ${String(one.nightly ?? '-').padStart(6)}  ${one.name}`);
+        }
+        console.error(
+          '\n  Each of those with a price is either a hotel we do not have, or one',
+        );
+        console.error('  we have under a name the matcher will not accept.');
+      }
+    } else {
+      for (const row of rows) {
+        const place = places.find((one) => one.id === row.placeId);
+        console.error(`    ${String(row.nightly).padStart(6)}  ${place?.name ?? row.placeId}`);
+      }
+      if (rows.length === 0) console.error('  It answered and returned nothing usable.');
     }
     console.error(`\n${verify} works. One request was spent; nothing was written.`);
   } catch (error) {

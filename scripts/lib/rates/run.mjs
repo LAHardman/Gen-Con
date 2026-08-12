@@ -75,11 +75,7 @@ export async function runOnce({
    */
   for (const source of alive()) {
     if (source.covers !== 'area' || !source.quoteArea) continue;
-    // Spent before the call, not after: a run that dies mid-request has then
-    // over-counted by one, which costs a request. Counting after would
-    // under-count on the same failure, which costs the quota.
-    if (!spend(ledger, source.name, source.cost, env)) continue;
-    try {
+    {
       /*
        * Area sources are asked only about hotels outside the block.
        *
@@ -89,18 +85,37 @@ export async function runOnce({
        * sit beside.
        */
       const asked = places.filter((one) => !inBlock.has(one.id));
-      const rows = await source.quoteArea(asked, { env, whenMs, fetch: get, keys, cache });
-      const outside = rows.filter((row) => !inBlock.has(row.placeId));
-      for (const row of outside) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
-      log(
-        `  ${source.name}: ${outside.length} prices from one search` +
-          (rows.length > outside.length ? ` (${rows.length - outside.length} block hotels dropped)` : ''),
-      );
-    } catch (error) {
-      down[source.name] = String(error.message ?? error);
-      // Rule 2: give the unit back. It bought nothing.
-      ledger.spent[source.name] -= source.cost;
-      log(`  ${source.name} is down — ${down[source.name]}`);
+      /*
+       * One search per group the source wants to make, not one search full
+       * stop. A downtown query cannot return a motel in Plainfield, and with
+       * Gen Con pricing downtown for free, Plainfield is most of what is left.
+       */
+      const groups = source.areas ? source.areas(asked) : [{ places: asked, label: 'everywhere' }];
+      let total = 0;
+      for (const group of groups) {
+        // Each group is its own unit, checked before its own request.
+        if (!spend(ledger, source.name, source.cost, env)) break;
+        try {
+          const rows = await source.quoteArea(group.places, {
+            env,
+            whenMs,
+            query: group.query,
+            fetch: get,
+            keys,
+            cache,
+          });
+          const outside = rows.filter((row) => !inBlock.has(row.placeId));
+          for (const row of outside) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
+          total += outside.length;
+          log(`  ${source.name} · ${group.label}: ${outside.length} prices`);
+        } catch (error) {
+          down[source.name] = String(error.message ?? error);
+          ledger.spent[source.name] -= source.cost;
+          log(`  ${source.name} is down — ${down[source.name]}`);
+          break;
+        }
+      }
+      log(`  ${source.name}: ${total} prices from ${groups.length} searches`);
     }
   }
 
