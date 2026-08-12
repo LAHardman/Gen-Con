@@ -11,11 +11,11 @@
  * THE NUMBERS ARE UNCERTAIN, DELIBERATELY LOW, AND OVERRIDABLE. Published free
  * tiers disagree with each other and change without notice — SerpApi's own free
  * allowance is reported as both 100 and 250 searches a month by current
- * sources, and Amadeus documents monthly quotas per API without stating one for
- * hotels at all. Every default below is therefore the *lowest* figure that is
- * credible, because guessing high spends somebody's account and guessing low
- * only means fewer prices. Each is overridable by environment variable, so
- * correcting one is a config change and not a patch.
+ * sources, and Amadeus closed its self-service tier to individuals altogether
+ * while this was being written. Every default below is therefore the *lowest*
+ * figure that is credible, because guessing high spends somebody's account and
+ * guessing low only means fewer prices. Each is overridable by environment
+ * variable, so correcting one is a config change and not a patch.
  *
  * THE LEDGER IS A FILE IN THE REPOSITORY, which is the only store this app has
  * — there is no database and adding one for a counter would be the largest
@@ -56,14 +56,6 @@ export const SOURCES = {
     covers: 'place',
     /** It asks for a per-second pace rather than a monthly budget. */
     pacingMs: 1_200,
-  },
-  amadeus: {
-    label: 'Amadeus (test environment)',
-    // Its own docs quote per-API monthly quotas of 2,000 and 3,000 for flights
-    // and do not state one for hotels. Assume the smallest of those, halved.
-    free: 1_000,
-    unit: 'call',
-    covers: 'place',
   },
   apify: {
     label: 'Apify (actor run)',

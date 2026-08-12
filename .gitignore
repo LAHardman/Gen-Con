@@ -12,3 +12,9 @@ public/events.json
 
 # Fetched by npm run plans:campus
 plans/campus
+
+# API keys for scripts/fetch-rates.mjs. Read with `node --env-file=.env`.
+# Never committed: a rate-service key in a public repository is somebody else's
+# quota being spent, and the first thing scrapers grep for.
+.env
+.env.*

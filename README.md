@@ -818,16 +818,46 @@ Indy") fall back to whole-string comparison. The asymmetry is intentional: a
 false positive shortens a list already labelled short, a false negative states
 something untrue.
 
-#### Four sources, for survival rather than coverage
+#### Three sources, for survival rather than coverage
 
-SerpApi (Google Hotels), Xotelo, Amadeus and Apify. These are free tiers of
-commercial products and one unofficial community endpoint, and any of them can be
-gone on a Tuesday with no announcement — four independent ways to learn one
-number means the page keeps working when three of them stop. **A source that
-throws is out for the rest of the run** (one timeout predicts the next two
-hundred), **its quota is not spent on the attempt that broke it**, and the run
-still writes. Nothing is ever deleted, so a month where everything is down leaves
-the page exactly as it was, with real dates on the prices.
+SerpApi (Google Hotels), Xotelo and Apify. These are free tiers of commercial
+products and one unofficial community endpoint, and any of them can be gone on a
+Tuesday with no announcement — independent ways to learn one number mean the page
+keeps working when one or two of them stop. **A source that throws is out for the
+rest of the run** (one timeout predicts the next two hundred), **its quota is not
+spent on the attempt that broke it**, and the run still writes. Nothing is ever
+deleted, so a month where everything is down leaves the page exactly as it was,
+with real dates on the prices.
+
+There were four. **Amadeus is gone**: it closed its Self-Service tier to
+individuals, so there is no key a person can get, and an adapter that can never
+run is a fifth of a file to read past and keep working. The request shape it
+wanted is recorded in a comment where it used to be, in case that changes.
+
+#### Verifying an adapter without spending a hundred requests
+
+None of these request shapes has been run against the live service — every one
+of those hosts is unreachable from the machine this was written on. So the first
+real call is the one that finds out whether an adapter is right, and doing that
+through a full run would spend a hundred requests learning the same thing a
+hundred times.
+
+```
+node --env-file=.env scripts/fetch-rates.mjs --dry              # plan, spend nothing
+node --env-file=.env scripts/fetch-rates.mjs --verify=serpapi   # exactly one request
+node --env-file=.env scripts/fetch-rates.mjs --only=serpapi     # a real run, one source
+```
+
+`--verify` makes a single call, prints every price it got back with the name the
+service used for each hotel, and writes nothing. Its three outcomes are all
+useful: prices means the adapter works; *"it answered, and matched none of our
+hotels"* means the request was fine and the **name matching** is what needs work;
+and an error is the adapter refusing to guess at a response it did not recognise
+rather than reporting it as "no price".
+
+Keys go in `.env`, which is gitignored — a rate-service key in a public
+repository is somebody else's quota being spent, and it is the first thing
+scrapers grep for.
 
 #### The allowances are uncertain, deliberately low, and overridable
 

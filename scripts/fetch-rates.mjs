@@ -1,8 +1,14 @@
 /**
  * Ask what a room costs, within the month's free allowances.
  *
- *     node scripts/fetch-rates.mjs --dry     # plan only, no requests, no writes
+ *     node scripts/fetch-rates.mjs --dry          # plan only, no requests, no writes
+ *     node scripts/fetch-rates.mjs --verify=serpapi   # exactly one request
+ *     node scripts/fetch-rates.mjs --only=serpapi     # a real run, one source
  *     node scripts/fetch-rates.mjs
+ *
+ * With a key in a file rather than the shell, Node reads it for you:
+ *
+ *     node --env-file=.env scripts/fetch-rates.mjs --verify=serpapi
  *
  * Reads `src/data/rate-store.json`, spends what quota there is, writes it back.
  * The ledger of what has been spent lives in that same file, because a
@@ -40,6 +46,10 @@ const STORE = join(ROOT, 'src/data/rate-store.json');
 const OUT = join(ROOT, 'src/data/rates.ts');
 
 const dry = process.argv.includes('--dry');
+/** `--verify=serpapi`: one request, printed in full, nothing written. */
+const verify = process.argv.find((one) => one.startsWith('--verify='))?.slice(9) ?? null;
+/** `--only=serpapi`: a real run using one source, so a quota is spent on purpose. */
+const only = process.argv.find((one) => one.startsWith('--only='))?.slice(7) ?? null;
 const now = Date.now();
 const env = process.env;
 
@@ -134,6 +144,57 @@ if (dry) {
   process.exit(0);
 }
 
+/*
+ * One request, reported in full.
+ *
+ * The adapters were written from documentation against services this machine
+ * cannot reach, so the first real call is the one that finds out whether they
+ * are right. Doing that through a full run would spend a hundred requests
+ * discovering the same thing a hundred times; this spends one and prints what
+ * came back.
+ */
+if (verify) {
+  const source = ALL.find((one) => one.name === verify);
+  if (!source) {
+    console.error(`no such source: ${verify}. Try ${ALL.map((one) => one.name).join(', ')}.`);
+    process.exit(2);
+  }
+  if (!source.ready(env)) {
+    console.error(`${verify} is not configured — see the header of this file for which variables it wants.`);
+    process.exit(2);
+  }
+
+  const asking = places.filter((one) => !inBlock.has(one.id)).slice(0, 8);
+  console.error(`\nasking ${verify} about ${asking.length} hotels outside the block…\n`);
+  try {
+    const rows = source.quoteArea
+      ? await source.quoteArea(asking, { env, whenMs: now, keys: store.keys })
+      : [await source.quote(asking[0], { env, whenMs: now, keys: store.keys })].filter(Boolean);
+    if (rows.length === 0) {
+      console.error('It answered, and matched none of our hotels to a price.');
+      console.error('That is a name-matching problem rather than a broken request.');
+    }
+    for (const row of rows) {
+      const place = places.find((one) => one.id === row.placeId);
+      console.error(`  ${String(row.nightly).padStart(6)} ${row.currency ?? 'USD'}  ${place?.name ?? row.placeId}`);
+      if (row.via) console.error(`         they called it: ${row.via}`);
+    }
+    console.error(`\n${verify} works. One request was spent; nothing was written.`);
+  } catch (error) {
+    console.error(`${verify} failed: ${error.message}`);
+    console.error('\nThat message comes from the adapter, which refuses to guess at an');
+    console.error('unfamiliar response rather than reporting it as "no price".');
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+const chosen = only ? ALL.filter((one) => one.name === only) : ALL;
+if (only && chosen.length === 0) {
+  console.error(`no such source: ${only}`);
+  process.exit(2);
+}
+
 const result = await runOnce({
   places,
   quotes: store.quotes,
@@ -142,6 +203,7 @@ const result = await runOnce({
   env,
   whenMs: now,
   inBlock,
+  sources: chosen,
   log: (line) => console.error(line),
 });
 

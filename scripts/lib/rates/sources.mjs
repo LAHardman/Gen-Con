@@ -142,71 +142,19 @@ export const xotelo = {
   },
 };
 
-/* ------------------------------------------------------------------ Amadeus */
+/* ---------------------------------------------------- Amadeus, and why it is gone */
 
-/**
- * Amadeus, in its test environment.
+/*
+ * Amadeus used to be here and is not any more: its Self-Service tier became
+ * business-only, so there is no key an individual can get. The adapter has been
+ * removed rather than left switched off, because a source that can never run is
+ * a fifth of this file to read past and a fifth of it to keep working.
  *
- * Confidence: **fair**. OAuth2 client-credentials and the
- * `/v3/shopping/hotel-offers` shape are documented; what is *not* documented is
- * a monthly quota for the hotel APIs at all, which is why its budget in
- * `quota.mjs` is a guess biased low.
- *
- * The test environment carries a limited, partly synthetic data set. A price
- * from here is real in shape and may not be real in amount — so quotes carry
- * their source all the way to the page, and the page says which is which.
+ * If it reopens, the shape it wanted was OAuth2 client-credentials against
+ * `/v1/security/oauth2/token`, then `/v3/shopping/hotel-offers?hotelIds=…`,
+ * with the cheapest of `data[0].offers[].price.total`. It also needed a
+ * hotel id per hotel, resolved through `/v1/reference-data/locations/hotels`.
  */
-export const amadeus = {
-  name: 'amadeus',
-  covers: 'place',
-  ready: (env) => Boolean(env.AMADEUS_KEY && env.AMADEUS_SECRET),
-  cost: 1,
-
-  /** Bearer tokens last ~30 minutes; one per run is plenty. */
-  async token({ env, fetch: get = fetch, cache }) {
-    if (cache?.amadeusToken) return cache.amadeusToken;
-    const response = await get('https://test.api.amadeus.com/v1/security/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: env.AMADEUS_KEY,
-        client_secret: env.AMADEUS_SECRET,
-      }),
-    });
-    const body = await readJson(response, 'amadeus token');
-    if (!body.access_token) throw new Error('amadeus: no access_token');
-    if (cache) cache.amadeusToken = body.access_token;
-    return body.access_token;
-  },
-
-  async quote(place, context) {
-    const hotelId = context.keys?.[`amadeus:${place.id}`];
-    if (!hotelId) return null;
-    const get = context.fetch ?? fetch;
-    const token = await this.token(context);
-
-    const url = new URL('https://test.api.amadeus.com/v3/shopping/hotel-offers');
-    url.searchParams.set('hotelIds', hotelId);
-    url.searchParams.set('checkInDate', nightOf(context.whenMs, 30));
-    url.searchParams.set('checkOutDate', nightOf(context.whenMs, 31));
-    url.searchParams.set('adults', '1');
-
-    const response = await get(url, { headers: { Authorization: `Bearer ${token}` } });
-    // A hotel with nothing available answers 400 with its own error code, which
-    // is an answer about that hotel rather than a broken source.
-    if (response.status === 400) return null;
-    const body = await readJson(response, 'amadeus');
-    const offers = body.data?.[0]?.offers;
-    if (!Array.isArray(offers)) return null;
-
-    const nightly = offers
-      .map((offer) => money(offer.price?.total, offer.price?.base))
-      .filter(Boolean)
-      .sort((a, b) => a - b)[0];
-    return nightly ? { nightly, currency: body.data[0].offers[0]?.price?.currency ?? 'USD', via: 'amadeus-test' } : null;
-  },
-};
 
 /* -------------------------------------------------------------------- Apify */
 
@@ -340,4 +288,4 @@ export function matchByName(places, name) {
 }
 
 /** In the order the run loop should try them: cheapest allowance spent last. */
-export const ALL = [serpapi, xotelo, amadeus, apify];
+export const ALL = [serpapi, xotelo, apify];

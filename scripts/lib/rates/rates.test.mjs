@@ -87,7 +87,7 @@ describe('the monthly allowance', () => {
 });
 
 describe('who gets asked about', () => {
-  const budgets = { serpapi: 100, xotelo: 0, amadeus: 0, apify: 0 };
+  const budgets = { serpapi: 100, xotelo: 0, apify: 0 };
   const BLOCK = new Set(['w2']);
 
   it('never spends a request on a hotel Gen Con publishes', () => {
@@ -177,7 +177,7 @@ describe('who gets asked about', () => {
     const { tasks } = planRun({
       places: PLACES,
       quotes: [],
-      budgets: { serpapi: 0, xotelo: 0, amadeus: 0, apify: 0 },
+      budgets: { serpapi: 0, xotelo: 0, apify: 0 },
       whenMs: AUGUST,
     });
     expect(tasks).toEqual([]);
@@ -204,7 +204,7 @@ describe('what is worth keeping', () => {
 });
 
 describe('when a service goes offline', () => {
-  const env = { SERPAPI_KEY: 'k', AMADEUS_KEY: 'k', AMADEUS_SECRET: 's' };
+  const env = { SERPAPI_KEY: 'k', APIFY_TOKEN: 't', APIFY_ACTOR: 'a' };
 
   const areaSource = (name, impl) => ({
     name,

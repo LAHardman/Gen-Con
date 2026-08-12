@@ -18,7 +18,8 @@
 #
 # ONE-TIME SETUP: the same "Allow GitHub Actions to create and approve pull
 # requests" tick that `refresh.yml` needs, plus whichever of these secrets you
-# have — SERPAPI_KEY, AMADEUS_KEY, AMADEUS_SECRET, APIFY_TOKEN, APIFY_ACTOR.
+# have — SERPAPI_KEY, APIFY_TOKEN, APIFY_ACTOR. (Amadeus is gone: it closed its
+# self-service tier to individuals, so there is no key to hold.)
 
 name: Refresh hotel prices
 
@@ -64,8 +65,6 @@ jobs:
         if: ${{ inputs.dry != true }}
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-          AMADEUS_KEY: ${{ secrets.AMADEUS_KEY }}
-          AMADEUS_SECRET: ${{ secrets.AMADEUS_SECRET }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
           APIFY_ACTOR: ${{ secrets.APIFY_ACTOR }}
         run: node scripts/fetch-rates.mjs
