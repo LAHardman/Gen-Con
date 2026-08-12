@@ -10,17 +10,24 @@
  * year and its multiplier and the page prints both.
  *
  * THE PAIRING answers "what would I pay instead, a similar walk away". Each
- * block hotel is matched to the nearest hotel that is *not* in the block, and no
- * non-block hotel is ever used twice — because a comparison table where the same
- * Hampton Inn is the alternative to six different hotels tells you one thing six
- * times. When two block hotels want the same neighbour the nearer one keeps it
- * and the other takes its next choice, which is a stable marriage in miniature
- * and is implemented as one.
+ * block hotel is matched to the nearest hotel that is *not* in the block, and
+ * they are spread as evenly as the candidates allow — because a comparison table
+ * where the same Hampton Inn is the alternative to six different hotels tells
+ * you one thing six times. When two block hotels want the same neighbour the
+ * nearer one keeps it and the other takes its next choice, which is a stable
+ * marriage in miniature and is implemented as one.
  *
  * WHY NOT JUST TAKE THE NEAREST FOR EACH. Because that is the version that
  * looks right and is not: on this campus four block hotels sit within two
  * hundred metres of one another, and greedy nearest-neighbour hands all four the
  * same alternative. Gale–Shapley costs twenty lines and cannot do that.
+ *
+ * WHY NOT ONE EACH, THEN. Because downtown does not have enough hotels outside
+ * the block to go round — thirty-one of the thirty-five within a walk of the
+ * hall are in it. Insisting on distinctness leaves most of the table empty, and
+ * "no comparison" is a worse answer than a repeated one. So each alternative
+ * carries an even share of the block, and a row that leans on a shared one says
+ * so.
  */
 
 import { LODGING, type Lodging } from './lodging';
@@ -235,35 +242,55 @@ export function preference(
 export interface Pairing {
   partner: Lodging;
   rate: BlockRate;
-  /** The nearest hotel not in the block, or null if every one was taken. */
+  /** The nearest hotel outside the block. Null only if there are none at all. */
   alternative: Lodging | null;
   alternativeRate: Rate | null;
   /** Metres between the two, so the comparison can be judged. */
   apart: number | null;
   /** Block rate minus the alternative's, where both are known. */
   saving: number | null;
+  /** True where another block hotel is compared against this one too. */
+  shared: boolean;
 }
 
 /**
- * Pair every block hotel with a distinct non-block one.
+ * How far out an alternative may be, which is further than the walk ring.
  *
- * Gale–Shapley: block hotels propose down their preference list; a non-block
- * hotel holds the best proposal it has seen and rejects the rest, who move on to
- * their next choice. It terminates because every hotel proposes to each
- * candidate at most once, and no non-block hotel is ever held by two.
+ * Thirty-one of the thirty-five hotels within a walk of the hall are in Gen
+ * Con's block. A candidate pool that stops at the ring is four hotels answering
+ * thirty-one questions; three kilometres doubles it without leaving downtown,
+ * and every row prints its own distance, so nothing is hidden by the reach.
+ */
+export const ALTERNATIVE_METRES = 3000;
+
+/**
+ * Pair every block hotel with the nearest one outside the block.
  *
- * The non-block hotel's own preference is simple proximity — of two suitors it
- * keeps the nearer, which is what "if one would be used twice, the other takes
- * the next closest" means when written down carefully.
+ * Gale–Shapley, with shares: block hotels propose down their preference list and
+ * each candidate holds the nearest `cap` proposals, rejecting the rest, who move
+ * on to their next choice. It terminates because every hotel proposes to each
+ * candidate at most once.
+ *
+ * WHY SHARES RATHER THAN ONE EACH. Distinctness was a rule and could not stay
+ * one. With thirty-one block hotels and four alternatives, a strict one-each
+ * matching answers twenty-seven of them with silence — and silence is a worse
+ * answer than a repeat, because the reader planning around the Marriott is told
+ * there is nothing to compare it with while the Atlas stands four hundred metres
+ * away. A free-for-all is no better: everybody takes their first choice and one
+ * hotel is named twenty-three times. A capacity of `ceil(hotels / candidates)`
+ * spreads the list evenly, keeps the nearest suitor on each candidate, and
+ * leaves every block hotel with something beside it. Repeats are marked, so a
+ * reader can see when two rows lean on the same alternative.
  */
 export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING): Pairing[] {
   const partnerIds = new Set(PARTNERS.map((one) => one.placeId).filter(Boolean));
-  // Only the walk ring: an alternative you would have to drive to is not an
-  // alternative to a hotel across the road from the hall.
+  // Only the walk ring: a block hotel you would have to drive to is not the
+  // question this comparison answers.
   const walk = places.filter((one) => one.ring === 'walk');
   const blockHotels = walk.filter((one) => partnerIds.has(one.id));
   /*
-   * Everything else — minus the ones that only *look* like block entries.
+   * Everything else within reach — minus the ones that only *look* like block
+   * entries.
    *
    * Matching is strict, so some block hotels never get tied to an id. Each of
    * those would otherwise land in this list and be offered as an "alternative
@@ -272,8 +299,12 @@ export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING)
    * hotels they share a block with, because Gen Con writes them "by Marriott"
    * and OpenStreetMap does not.
    */
-  const others = walk.filter(
-    (one) => !partnerIds.has(one.id) && !SUSPECTED_IN_BLOCK.has(one.id),
+  const others = places.filter(
+    (one) =>
+      one.metres <= ALTERNATIVE_METRES &&
+      one.kind === 'hotel' &&
+      !partnerIds.has(one.id) &&
+      !SUSPECTED_IN_BLOCK.has(one.id),
   );
 
   /** Each block hotel's candidates, keenest first. */
@@ -288,8 +319,17 @@ export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING)
     wishes.set(partner.id, ranked);
   }
 
+  /**
+   * How many block hotels one alternative may stand for.
+   *
+   * An even share, rounded up so the shares always cover the list. With four
+   * candidates and thirty-one hotels that is eight each: enough to seat
+   * everybody, few enough that no candidate takes the whole page.
+   */
+  const cap = others.length > 0 ? Math.ceil(blockHotels.length / others.length) : 0;
+
   /** Who currently holds each alternative, and the next index each will try. */
-  const heldBy = new Map<string, Lodging>();
+  const heldBy = new Map<string, Lodging[]>(others.map((one) => [one.id, []]));
   const nextTry = new Map<string, number>(blockHotels.map((one) => [one.id, 0]));
   const free = [...blockHotels];
 
@@ -297,27 +337,36 @@ export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING)
     const suitor = free.shift()!;
     const list = wishes.get(suitor.id) ?? [];
     const index = nextTry.get(suitor.id)!;
-    if (index >= list.length) continue; // Nothing left to ask; stays unpaired.
+    if (index >= list.length) continue; // Only reachable with no candidates at all.
     nextTry.set(suitor.id, index + 1);
 
     const wanted = list[index];
-    const holder = heldBy.get(wanted.id);
-    if (!holder) {
-      heldBy.set(wanted.id, suitor);
-      continue;
-    }
-    // Contested: the nearer one keeps it, the other tries its next choice.
-    if (between(suitor, wanted) < between(holder, wanted)) {
-      heldBy.set(wanted.id, suitor);
-      free.push(holder);
-    } else {
-      free.push(suitor);
-    }
+    const held = heldBy.get(wanted.id)!;
+    held.push(suitor);
+    if (held.length <= cap) continue;
+    // Over its share: the furthest away gives up its place and tries the next.
+    held.sort((a, b) => between(a, wanted) - between(b, wanted));
+    free.push(held.pop()!);
   }
 
+  /*
+   * Everybody gets a seat, and the shares are why.
+   *
+   * A suitor only gives up when every candidate has rejected it, which means
+   * every candidate is full — `others.length * cap` hotels seated. But
+   * `cap = ceil(blockHotels.length / others.length)`, so that product is at
+   * least the number of suitors, and there is nobody left over to be the one
+   * turned away. `alternative` is therefore null in exactly one case: no
+   * candidate exists at all.
+   */
   const pairedWith = new Map<string, Lodging>();
-  for (const [otherId, suitor] of heldBy) {
-    pairedWith.set(suitor.id, others.find((one) => one.id === otherId)!);
+  for (const other of others) {
+    for (const suitor of heldBy.get(other.id)!) pairedWith.set(suitor.id, other);
+  }
+
+  const timesUsed = new Map<string, number>();
+  for (const alternative of pairedWith.values()) {
+    timesUsed.set(alternative.id, (timesUsed.get(alternative.id) ?? 0) + 1);
   }
 
   return blockHotels
@@ -331,7 +380,8 @@ export function pairings(year: number, places: ReadonlyArray<Lodging> = LODGING)
         alternative,
         alternativeRate,
         apart: alternative ? between(partner, alternative) : null,
-        saving: alternativeRate ? rate.low - alternativeRate.nightly : null,
+        saving: alternative && alternativeRate ? rate.low - alternativeRate.nightly : null,
+        shared: alternative ? (timesUsed.get(alternative.id) ?? 0) > 1 : false,
       };
     })
     .sort((a, b) => a.partner.metres - b.partner.metres);

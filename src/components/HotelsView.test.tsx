@@ -127,89 +127,158 @@ describe('when two services disagree', () => {
   });
 });
 
-describe('the two rings', () => {
-  it('opens on the walk ring, nearest first', () => {
-    // Distance is the number this app is sure of, so it decides the order.
+describe('filters that can all be off at once', () => {
+  const listed = () =>
+    [...page().querySelectorAll('.hotels__list .hotels__row h3')].map(
+      (one) => one.firstChild!.textContent,
+    );
+  const chip = (name: string) => screen.getByRole('button', { name });
+  const slide = (label: string, value: number) =>
+    fireEvent.change(screen.getByLabelText(label), { target: { value: String(value) } });
+
+  it('opens showing everything, nearest first', () => {
+    /*
+     * There used to be three tabs and one of them was always chosen, so there
+     * was no way to see the whole list. Distance is the number this app is sure
+     * of, so with nothing chosen it decides the order.
+     */
     render(<HotelsView nowMs={NOW} />);
-    expect(rows().map((one) => one.querySelector('h3')!.firstChild!.textContent)).toEqual([
+    expect(listed()).toEqual([
       'JW Marriott Indianapolis',
       'The Westin Indianapolis',
       'Nestle Inn',
       'Holiday Inn Express',
       'Unasked Lodge',
+      'Super 8 Airport',
+      'Airport Motel',
+      'Motel 6 Southport',
     ]);
-    expect(within(row('JW Marriott')).getByText(/min walk/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
   });
 
-  it('lists only priced places out there, cheapest first, in minutes not kilometres', () => {
-    // A drive-ring hotel with no price is not an option — it is one nobody has
-    // asked about. The only reason to sleep out there is to spend less, so the
-    // price is what makes it a candidate, and Super 8 has none.
+  it('turns any filter off by pressing it again', () => {
+    // The whole point of dropping the "All" chip: the way back is the way in,
+    // and it has to be true of every group rather than the first one.
     render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
-    expect(rows().map((one) => one.querySelector('h3')!.firstChild!.textContent)).toEqual([
+    for (const name of ['Walking distance', 'Gen Con block', 'Driving distance', 'Third party']) {
+      fireEvent.click(chip(name));
+      expect(chip(name).getAttribute('aria-pressed')).toBe('true');
+      expect(listed().length).toBeLessThan(8);
+
+      fireEvent.click(chip(name));
+      expect(chip(name).getAttribute('aria-pressed')).toBe('false');
+      expect(listed()).toHaveLength(8);
+    }
+  });
+
+  it('lets a distance filter and a source filter both apply', () => {
+    /*
+     * The old tabs made "Gen Con block" a distance, so a block hotel could not
+     * also be a drive away — and plenty of Gen Con's block is out by the airport.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(chip('Walking distance'));
+    fireEvent.click(chip('Gen Con block'));
+    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis']);
+  });
+
+  it('keeps an unpriced hotel on the list until somebody asks about price', () => {
+    // A blank is honest — "nobody has asked" — and only a budget makes it
+    // irrelevant, because a hotel with no price cannot be shown to fit one.
+    render(<HotelsView nowMs={NOW} />);
+    expect(row('Unasked Lodge')).toBeTruthy();
+    slide('Up to', 200);
+    expect(listed()).not.toContain('Unasked Lodge');
+  });
+
+  it('sorts by price once a budget is set, not by distance', () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: '1' }));
+    slide('Up to', 200);
+    expect(listed()).toEqual([
       'Motel 6 Southport',
       'Airport Motel',
+      'Holiday Inn Express',
+      'Nestle Inn',
     ]);
-    expect(within(row('Motel 6')).getByText(/about \d+ min drive/)).toBeTruthy();
   });
 
-  it('says how many out there are still waiting to be priced', () => {
-    // Otherwise a one-row list reads as "there is one hotel within a drive".
+  it('reads the distance slider in kilometres, and says "any" until it is moved', () => {
     render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
-    expect(page().textContent).toMatch(/1 more out here have no price yet/);
+    expect(page().querySelector('#hotels-within-out')!.textContent).toBe('any');
+    slide('Within', 1);
+    expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1 km');
+    expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis', 'Nestle Inn']);
   });
 
-  it('keeps an unpriced walkable hotel on the list', () => {
-    // The opposite rule, and it has to be the opposite: you would consider
-    // walking to any of them at any price, so the blank is honest there.
+  it('says what is filtered, and takes it all off in one press', () => {
     render(<HotelsView nowMs={NOW} />);
-    expect(row('Nestle Inn')).toBeTruthy();
+    fireEvent.click(chip('Driving distance'));
+    slide('Within', 10);
+    const clear = screen.getByRole('button', { name: /Clear/ });
+    expect(clear.textContent).toMatch(/a drive away, within 10 km of the hall/);
+    fireEvent.click(clear);
+    expect(listed()).toHaveLength(8);
+    expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
   });
 
-  it('says a drive time is arithmetic rather than a route', () => {
+  it('says which hotels are missing rather than showing an empty page', () => {
     render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
+    fireEvent.click(chip('Driving distance'));
+    slide('Within', 1);
+    expect(page().querySelector('.hotels__empty')!.textContent).toBe(
+      'No hotel is a drive away, within 1 km of the hall.',
+    );
+  });
+
+  it('gives a drive time out there rather than a walk, and marks it as arithmetic', () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(chip('Driving distance'));
+    expect(within(row('Airport Motel')).getByText(/about \d+ min drive\*/)).toBeTruthy();
     expect(page().textContent).toMatch(/rather than a routed drive/i);
-  });
-
-  it('says how many out here still have no price', () => {
-    // A short list without an explanation reads as broken.
-    render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
-    expect(page().textContent).toMatch(/have no price yet|Cheapest first/i);
   });
 });
 
 
 describe('the Gen Con block, estimated', () => {
-  const openBlock = () => {
-    render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
-  };
+  // No longer behind a tab: the comparison sits under the list wherever block
+  // hotels are in view, which is everywhere except "Third party".
+  const openBlock = () => render(<HotelsView nowMs={NOW} />);
+  const blockCaution = () => page().querySelectorAll('.hotels__caution')[1]!;
 
   it('says these are Gen Con’s own rates, and links to the page they are on', () => {
     // They are published prices, not estimates, and underselling them as
     // guesses would be as wrong as overselling a guess as a price.
     openBlock();
-    const caution = page().querySelector('.hotels__caution')!;
-    expect(caution.textContent).toMatch(/Gen Con’s real 2025 block rates|published 2025 block rates/);
-    expect(within(caution as HTMLElement).getByRole('link')).toBeTruthy();
+    expect(blockCaution().textContent).toMatch(
+      /Gen Con’s real 2025 block rates|published 2025 block rates/,
+    );
+    expect(within(blockCaution() as HTMLElement).getByRole('link')).toBeTruthy();
+  });
+
+  it('goes away when the reader has asked for third-party prices only', () => {
+    // It is a statement about the block; with the block filtered out it is an
+    // answer to a question nobody asked.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Third party' }));
+    expect(page().querySelector('.hotels__pair')).toBeNull();
   });
 
   it('repeats Gen Con’s own caveat about tax and room type', () => {
     // A rate that excludes tax and varies by room is not the number somebody
     // will be charged, and the page has to say so where the number is.
     openBlock();
-    expect(page().querySelector('.hotels__caution')!.textContent).toMatch(/before local taxes/i);
+    expect(blockCaution().textContent).toMatch(/before local taxes/i);
   });
 
   it('shows both ends of a published range', () => {
     // Only the low end would make the block look cheaper than anybody pays.
     openBlock();
     fireEvent.click(screen.getByRole('button', { name: '1' }));
-    const shown = row('JW Marriott').querySelector('.hotels__money')!.textContent!;
+    const pair = [...page().querySelectorAll('.hotels__pair')].find((one) =>
+      one.textContent?.includes('JW Marriott'),
+    )!;
+    const shown = pair.querySelector('.hotels__money')!.textContent!;
     // 2027 planning year, so both ends are carried forward two years.
     expect(shown).toMatch(/^\$\d+–\$\d+$/);
     const [low, high] = shown.split('–').map((one) => Number(one.replace(/\D/g, '')));
@@ -254,6 +323,14 @@ describe('the Gen Con block, estimated', () => {
     expect(page().textContent).toMatch(/\d+ m from it/);
   });
 
+  it('says nothing about sharing when nothing is shared', () => {
+    // The mock has two block hotels and two alternatives, so each gets its own,
+    // and a label that is true of nothing is a label the eye learns to skip.
+    openBlock();
+    expect(page().textContent).not.toMatch(/stands in for others/);
+    expect(page().textContent).not.toMatch(/lean on an alternative/);
+  });
+
   it('calls the saving a direction rather than a sum', () => {
     // It subtracts an estimate from a quote. Printing that as a firm figure
     // would be the most confident wrong number on the page.
@@ -281,15 +358,7 @@ describe('the four facts on every row', () => {
   it('gives a walk time near the hall and a drive time far from it', () => {
     render(<HotelsView nowMs={NOW} />);
     expect(within(row('Nestle Inn')).getByText(/min walk/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
     expect(within(row('Airport Motel')).getByText(/min drive/)).toBeTruthy();
-  });
-
-  it('marks a drive time as arithmetic rather than a route', () => {
-    render(<HotelsView nowMs={NOW} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Within a drive' }));
-    expect(within(row('Airport Motel')).getByText(/min drive\*/)).toBeTruthy();
-    expect(page().textContent).toMatch(/rather than a routed drive/i);
   });
 
   it('puts the distance from the ICC on every row', () => {

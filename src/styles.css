@@ -2986,7 +2986,82 @@ body {
 
 .hotels__rings {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+/*
+ * One label column across all five control rows, so they read as one panel
+ * rather than five unrelated things stacked up.
+ */
+.hotels__rings > .hotels__party-label,
+.hotels__slider > .hotels__party-label,
+.hotels__party > .hotels__party-label {
+  flex: 0 0 auto;
+  min-width: 104px;
+}
+
+@media (max-width: 460px) {
+  /* Too narrow for a column: the label takes its own line instead. */
+  .hotels__rings > .hotels__party-label,
+  .hotels__slider > .hotels__party-label,
+  .hotels__party > .hotels__party-label {
+    flex-basis: 100%;
+  }
+}
+
+.hotels__slider {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.hotels__slider input {
+  flex: 0 1 260px;
+  min-width: 90px;
+  height: 20px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Reserves the width of the longest reading, so the row does not twitch. */
+.hotels__slider output {
+  flex: 0 0 auto;
+  min-width: 7ch;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hotels__slider output.hotels__any {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Says what is on, and takes it off again — the only way back to everything. */
+.hotels__clear {
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotels__clear:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.hotels__pairhead {
+  margin: 14px 0 0;
+  font-size: 16px;
 }
 
 .hotels__ring {
@@ -3181,6 +3256,9 @@ body {
 .hotels__party {
   display: flex;
   align-items: center;
+  /* Without this the label's full-width line on a phone pushes the numbers off
+     the right edge instead of onto the next one. */
+  flex-wrap: wrap;
   gap: 6px;
 }
 

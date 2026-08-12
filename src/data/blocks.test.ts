@@ -157,13 +157,72 @@ describe('pairing each block hotel with something to compare against', () => {
     for (const one of paired) expect(one.alternative).not.toBeNull();
   });
 
-  it('leaves a block hotel unpaired rather than reusing one, when they run out', () => {
-    // Three block hotels and one alternative: two must go without, and saying
-    // so is better than showing the same comparison three times.
+  it('repeats an alternative rather than leaving a block hotel with nothing', () => {
+    /*
+     * Three block hotels and one alternative. This used to answer two of them
+     * with "no comparison", which reads as a fault in the page rather than as a
+     * fact about downtown — and downtown is where it happens: thirty-one of the
+     * thirty-five hotels within a walk of the hall are in the block.
+     */
     const scarce = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20)];
     const paired = pairings(2026, scarce);
-    expect(paired.filter((one) => one.alternative).length).toBe(1);
-    expect(paired.filter((one) => !one.alternative).length).toBe(2);
+    expect(paired.filter((one) => one.alternative).length).toBe(3);
+    expect(paired.map((one) => one.alternative?.id)).toEqual(['near', 'near', 'near']);
+  });
+
+  it('marks a comparison that another block hotel leans on too', () => {
+    // The honesty that repeating buys: a reader can see the same hotel twice
+    // and know it, rather than reading two rows as two findings.
+    const scarce = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20)];
+    for (const one of pairings(2026, scarce)) expect(one.shared).toBe(true);
+
+    // Where there are enough to go round, nothing is shared.
+    for (const one of pairings(2026, CLUSTER)) expect(one.shared).toBe(false);
+  });
+
+  it('spreads the block evenly over the alternatives rather than piling on the first', () => {
+    /*
+     * Three block hotels, two alternatives, and 'near' is everybody's first
+     * choice — it is closer and it is cheaper than the block. An even share is
+     * two, so the third hotel takes 'mid'; without a share, 'near' answers all
+     * three and 'mid' answers none.
+     */
+    const twoWays = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20), at('mid', 300)];
+    const counts = new Map<string, number>();
+    for (const one of pairings(2026, twoWays)) {
+      counts.set(one.alternative!.id, (counts.get(one.alternative!.id) ?? 0) + 1);
+    }
+    expect(counts.get('near')).toBe(2);
+    expect(counts.get('mid')).toBe(1);
+  });
+
+  it('gives a shared alternative to the block hotels nearest it', () => {
+    // A share is not a queue: the two that keep 'near' are the two closest to
+    // it, and the one that gives way is the one furthest off.
+    const twoWays = [at('jw', 0), at('westin', 40), at('hilton', 80), at('near', 20), at('mid', 300)];
+    const paired = pairings(2026, twoWays);
+    expect(paired.find((one) => one.partner.id === 'hilton')!.alternative!.id).toBe('mid');
+    expect(paired.find((one) => one.partner.id === 'jw')!.alternative!.id).toBe('near');
+    expect(paired.find((one) => one.partner.id === 'westin')!.alternative!.id).toBe('near');
+  });
+
+  it('reaches past the walk ring for an alternative, since downtown has so few', () => {
+    /*
+     * Every walkable hotel is in the block, so the only candidate is 1.9 km
+     * out. Stopping at the ring would answer the whole table with nothing.
+     */
+    const boxedIn = [
+      at('jw', 0),
+      at('westin', 40),
+      { ...at('outside', 1900), ring: 'drive' as const },
+    ];
+    const paired = pairings(2026, boxedIn);
+    expect(paired.map((one) => one.alternative?.id)).toEqual(['outside', 'outside']);
+  });
+
+  it('will not reach so far that the comparison stops being downtown', () => {
+    const tooFar = [at('jw', 0), { ...at('airport', 12_000), ring: 'drive' as const }];
+    expect(pairings(2026, tooFar)[0].alternative).toBeNull();
   });
 
   it('never offers a hotel that only looks like it is outside the block', () => {
