@@ -175,6 +175,30 @@ export function tagsOf(exhibitor: Exhibitor): string[] {
   return (exhibitor.tags ?? []).map((at) => EXHIBITOR_TAGS[at]).filter(Boolean);
 }
 
+/**
+ * Who is at a stand, by the number printed on it.
+ *
+ * A list rather than one, because ten of the 561 numbered stands are shared by
+ * two exhibitors — a booth is a patch of floor and two small publishers can
+ * split one. `area` narrows it because the numbers are only unique within an
+ * area: the Block Party has a Food Truck 3 and the trade floor has a Booth 3,
+ * and they are two miles of aisle apart.
+ */
+const BY_BOOTH = new Map<string, Exhibitor[]>();
+
+export function standing(area: string, booth: string): Exhibitor[] {
+  if (BY_BOOTH.size === 0) {
+    for (const one of EXHIBITORS) {
+      if (!one.booth) continue;
+      const key = `${one.area}/${one.booth}`;
+      const held = BY_BOOTH.get(key);
+      if (held) held.push(one);
+      else BY_BOOTH.set(key, [one]);
+    }
+  }
+  return BY_BOOTH.get(`${area}/${booth}`) ?? [];
+}
+
 export const EXHIBITORS: Exhibitor[] = [
   { name: '1985 Games', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 1637', booth: '1637', level: 1, id: 13752, tags: [44,88] },
   { name: '25th Century Games', kind: 'Exhibitors', area: 'Exhibit Hall', spot: 'Booth 2219', booth: '2219', level: 1, id: 13727, tags: [82,8,14,74] },

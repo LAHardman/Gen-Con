@@ -1091,6 +1091,105 @@ body {
   stroke: rgba(206, 220, 240, 0.6);
 }
 
+/*
+ * A stand somebody is standing in is a thing you can open.
+ *
+ * The booth number is the only address anybody on that floor has — it is
+ * printed on the stand, in the programme and on every sign, and the hall letter
+ * is on none of them. So a taken stand says it can be tapped, and an empty one
+ * stays a square on a plan.
+ */
+.map__booth--taken {
+  fill: rgba(232, 84, 63, 0.16);
+  stroke: rgba(232, 84, 63, 0.55);
+  cursor: pointer;
+}
+
+.map__booth--taken:hover {
+  fill: rgba(232, 84, 63, 0.34);
+  stroke: rgba(232, 84, 63, 0.95);
+}
+
+/* Who is in it, on hover, without having to open anything. */
+.map__booth-who {
+  max-width: 15rem;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.map__booth-who::before {
+  display: none;
+}
+
+/*
+ * Gen Con's trade floor, drawn as the one room it is during the convention.
+ *
+ * Its six halls keep their outlines and their ids — a route still goes to one,
+ * a search still finds one, and every stand still knows which it stands in —
+ * but they are not drawn, because the walls between them are not there while
+ * anybody is reading this.
+ */
+.map__floor {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/*
+ * A trade hall is invisible until it is the one you asked for.
+ *
+ * Then it is a wash over that part of the floor rather than a room with a wall
+ * round it — enough to answer "which end of this is Hall I", which is the only
+ * question the letters are still good for, without putting back the six
+ * outlines the merge exists to remove.
+ */
+.map__room--merged {
+  fill: transparent;
+  stroke: none;
+}
+
+.map__room--merged.map__room--selected {
+  fill: rgba(232, 84, 63, 0.16) !important;
+  fill-opacity: 1 !important;
+  stroke: rgba(232, 84, 63, 0.75) !important;
+  stroke-width: 1.5 !important;
+  stroke-dasharray: 5 4;
+}
+
+/*
+ * The Block Party's pitches: thirty trucks and thirteen stands down a street.
+ *
+ * Their positions are Gen Con's numbering laid evenly along the kerbs rather
+ * than a survey, so they are drawn as marks rather than as footprints — a dot
+ * claims a spot on a street, an outline claims a patch of tarmac.
+ */
+.map__pitch {
+  fill: #e8543f;
+  fill-opacity: 0.85;
+  stroke: #12141c;
+  cursor: pointer;
+}
+
+.map__pitch--south {
+  fill: #5fb98a;
+}
+
+.map__pitch:hover {
+  fill-opacity: 1;
+  stroke: #ffffff;
+}
+
+.map__room-label--floor > span {
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
 .map__booth-name {
   display: grid;
   place-items: center;

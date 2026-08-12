@@ -40,6 +40,7 @@ afterEach(cleanup);
 const HANDLERS = () => ({
   onSelectRoom: vi.fn(),
   onOpenRoom: vi.fn(),
+  onOpenStand: vi.fn(),
   onOpenVenue: vi.fn(),
   onPickPlace: vi.fn(),
 });

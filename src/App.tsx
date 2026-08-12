@@ -12,6 +12,7 @@ import { AppMenu, type MenuPage } from './components/AppMenu';
 import { EventDialog, type Detail } from './components/EventDialog';
 import type { SearchHit } from './data/search';
 import type { Pin } from './data/offsite';
+import type { Exhibitor } from './data/exhibitors';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
@@ -202,6 +203,23 @@ export default function App() {
 
   // A pin has no room to select and no building to open, so opening one is
   // asking the way there — the only thing anybody can do with an address.
+  /**
+   * A stand on the trade floor, opened by the number printed on it.
+   *
+   * The same dialog a vendor search result opens, because it is the same
+   * question — who is this and how do I get there — reached by pointing at the
+   * floor instead of typing a name. Where two exhibitors share a stand, the
+   * first is opened and the other is one tap away in the search.
+   */
+  const handleOpenStand = useCallback(
+    ({ exhibitors, hall }: { exhibitors: Exhibitor[]; booth: string; hall: Room | undefined }) => {
+      const [first] = exhibitors;
+      if (!first) return;
+      setOpenDetail({ kind: 'vendor', exhibitor: first, room: hall });
+    },
+    [],
+  );
+
   const handleOpenPin = useCallback((pin: Pin) => {
     setNav({ from: null, to: pinPlace(pin) });
     setEditing('from');
@@ -500,6 +518,7 @@ export default function App() {
           selectedRoomId={selectedRoomId}
           onSelectRoom={handleSelectRoom}
           onOpenRoom={setOpenRoom}
+          onOpenStand={handleOpenStand}
           focusRequest={focusRequest}
           basemapId={basemapId}
           eventCounts={eventCounts}

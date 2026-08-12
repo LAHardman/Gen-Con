@@ -21,6 +21,9 @@ import { BASEMAPS, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import type { Pin } from '../data/offsite';
 import { PLACED_BOOTHS } from '../data/booth-place';
+import { TRADE_FLOOR, TRADE_FLOOR_NAME, TRADE_HALLS } from '../data/exhibit-floor';
+import { PITCHES } from '../data/block-party';
+import { standing, type Exhibitor } from '../data/exhibitors';
 import { METRES_PER_DEGREE_LAT } from '../utils/geo';
 import { placeKey, type DeviceFix, type NavPlace, type RouteSummary } from '../data/navigation';
 import { allVerticals } from '../data/vertical';
@@ -30,6 +33,8 @@ interface Props {
   selectedRoomId: string | null;
   onSelectRoom: (roomId: string | null) => void;
   onOpenRoom: (room: Room) => void;
+  /** A stand on the trade floor, opened by the number printed on it. */
+  onOpenStand: (at: { exhibitors: Exhibitor[]; booth: string; hall: Room | undefined }) => void;
   focusRequest: { room: Room; token: number } | null;
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
@@ -53,6 +58,18 @@ interface Props {
   route: RouteSummary | null;
   /** Where the device says it is, drawn whenever a route is asking for it. */
   deviceFix: DeviceFix | null;
+}
+
+/** Even-odd, on a [lat, lng] ring — which hall a click on the merged floor is in. */
+function inRing(ring: PlanRing, lat: number, lng: number): boolean {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ai, aj] = [ring[i], ring[j]];
+    if (ai[1] > lng !== aj[1] > lng && lat < ((aj[0] - ai[0]) * (lng - ai[1])) / (aj[1] - ai[1]) + ai[0]) {
+      hit = !hit;
+    }
+  }
+  return hit;
 }
 
 /** Label visibility: room names only make sense once you're zoomed into a venue. */
@@ -151,6 +168,7 @@ export function MapView({
   selectedRoomId,
   onSelectRoom,
   onOpenRoom,
+  onOpenStand,
   focusRequest,
   basemapId,
   eventCounts,
@@ -171,13 +189,15 @@ export function MapView({
   const labelLayerRef = useRef<L.TileLayer | null>(null);
   // Rectangle and Polygon both, since whole-venue rooms are drawn as outlines.
   const roomLayersRef = useRef(new Map<string, L.Path>());
+  /** The six trade halls drawn as one, so it can be shown and hidden as one. */
+  const tradeFloorRef = useRef<L.Polygon | null>(null);
   const venueLayersRef = useRef(new Map<string, L.Path>());
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
   // `picking` rides along for the same reason: the click handlers are bound
   // once, and have to read whether a route is asking for a place *now*.
-  const handlers = useRef({ onSelectRoom, onOpenRoom, onOpenVenue, onPickPlace, picking });
-  handlers.current = { onSelectRoom, onOpenRoom, onOpenVenue, onPickPlace, picking };
+  const handlers = useRef({ onSelectRoom, onOpenRoom, onOpenStand, onOpenVenue, onPickPlace, picking });
+  handlers.current = { onSelectRoom, onOpenRoom, onOpenStand, onOpenVenue, onPickPlace, picking };
 
   const allBounds = useMemo(() => {
     const bounds = L.latLngBounds([]);
@@ -506,13 +526,44 @@ export function MapView({
         // a fit. Half of each side either way from its middle.
         const dLat = stand.deep / 2 / METRES_PER_DEGREE_LAT;
         const dLng = stand.wide / 2 / (METRES_PER_DEGREE_LAT * Math.cos((stand.lat * Math.PI) / 180));
+        /*
+         * A stand is a thing you can open, because the booth number is the
+         * only address anybody on that floor has. Drawn interactive so a tap
+         * on the square asks who is standing in it — which is the question the
+         * number is for, and the one the map could not answer before.
+         */
+        const at = standing('Exhibit Hall', stand.booth);
         const outline = L.rectangle(
           [
             [stand.lat - dLat, stand.lng - dLng],
             [stand.lat + dLat, stand.lng + dLng],
           ],
-          { className: 'map__booth', interactive: false, weight: 1 },
+          {
+            className: `map__booth${at.length ? ' map__booth--taken' : ''}`,
+            interactive: at.length > 0,
+            bubblingMouseEvents: false,
+            weight: 1,
+          },
         );
+        if (at.length) {
+          outline.on('click', (event) => {
+            L.DomEvent.stopPropagation(event);
+            if (handlers.current.picking) {
+              handlers.current.onPickPlace({ kind: 'room', roomId: stand.hall });
+              return;
+            }
+            handlers.current.onOpenStand({
+              exhibitors: at,
+              booth: stand.booth,
+              hall: ROOMS_BY_ID[stand.hall],
+            });
+          });
+          outline.on('dblclick', (event) => L.DomEvent.stopPropagation(event));
+          outline.bindTooltip(at.map((one) => one.name).join(' · '), {
+            direction: 'top',
+            className: 'map__booth-who',
+          });
+        }
         outline.addTo(map);
         layers.push(outline);
         if (!named) continue;
@@ -532,6 +583,74 @@ export function MapView({
       for (const layer of layers) layer.remove();
     };
   }, [openVenueId, levels]);
+
+  /* ------------------------------------------- the Block Party's own pitches */
+  /*
+   * Thirty food trucks and thirteen stands down a closed street.
+   *
+   * Drawn only while the street is the open "building", the same rule the trade
+   * floor's stands follow, and for the same reason: forty-three marks on a
+   * campus view is a smear across a block. Each one opens whoever is in it.
+   *
+   * Their positions are derived rather than surveyed — Gen Con's numbering laid
+   * evenly along the kerbs — which `block-party.ts` says at length and the
+   * tooltip says in a line.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const layers: L.Layer[] = [];
+    const street = ROOMS_BY_ID['block-party-street'];
+    const draw = () => {
+      for (const layer of layers) layer.remove();
+      layers.length = 0;
+      /*
+       * On zoom rather than on the street being "open".
+       *
+       * A closed street has no inside to open — there is no floor picker and no
+       * door — so the gesture the buildings use does not exist here. What does
+       * exist is the same rule the trade floor's stands follow: past the zoom
+       * where a pitch is bigger than the mark for it, and only what is in view.
+       */
+      if (map.getZoom() < BOOTH_MIN_ZOOM) return;
+      const seen = map.getBounds().pad(0.2);
+      for (const pitch of PITCHES) {
+        if (!seen.contains([pitch.lat, pitch.lng])) continue;
+      const mark = L.circleMarker([pitch.lat, pitch.lng], {
+        className: `map__pitch map__pitch--${pitch.side}`,
+        radius: 6,
+        weight: 2,
+        bubblingMouseEvents: false,
+      });
+      mark.bindTooltip(`${pitch.name} · ${pitch.spot}`, {
+        direction: 'top',
+        className: 'map__booth-who',
+      });
+      mark.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        if (handlers.current.picking) {
+          handlers.current.onPickPlace({ kind: 'room', roomId: 'block-party-street' });
+          return;
+        }
+        handlers.current.onOpenStand({
+          exhibitors: standing('Block Party', pitch.booth),
+          booth: pitch.booth,
+          hall: street,
+        });
+      });
+      mark.on('dblclick', (event) => L.DomEvent.stopPropagation(event));
+        mark.addTo(map);
+        layers.push(mark);
+      }
+    };
+    draw();
+    map.on('zoomend moveend', draw);
+    return () => {
+      map.off('zoomend moveend', draw);
+      for (const layer of layers) layer.remove();
+    };
+  }, []);
 
   /* ------------------------------------------------------------------ pins */
   /*
@@ -640,6 +759,28 @@ export function MapView({
         fillOpacity: 0.38,
         weight: 2.5,
       };
+      /*
+       * The trade floor is one room, so its six halls are not drawn.
+       *
+       * Halls F to K are six rooms in the convention centre's plan and one room
+       * at Gen Con: during the convention the walls between them are not there
+       * and the aisles run straight through. Six outlines with six names over
+       * one floor draws a building nobody is standing in. The merged outline
+       * goes on below; the halls keep their layer so a route, a search and a
+       * selection all still find them, and it is simply never given a shape.
+       */
+      /*
+       * A trade hall keeps its real outline and is simply not drawn: no stroke,
+       * no fill. The layer has to stay, and stay the right shape, because a
+       * selection, a focus and a route all reach for it by id — what changes is
+       * only that the reader never sees six rooms where they are standing in
+       * one. The merged outline below is what they see.
+       */
+      if (TRADE_HALLS.has(room.id)) {
+        shape.className = 'map__room map__room--merged';
+        shape.weight = 0;
+        shape.fillOpacity = 0;
+      }
       const drawn = roomShapes(room);
       const shapeLayer =
         drawn.length > 0
@@ -666,6 +807,42 @@ export function MapView({
       shapeLayer.addTo(map);
       layers.push(shapeLayer);
       roomLayersRef.current.set(room.id, shapeLayer);
+    }
+
+    /*
+     * The trade floor itself: one outline where six were, traced off the six.
+     *
+     * A click on it opens the hall it landed in — the halls are still where a
+     * route goes and still what a stand's address says, so the floor being one
+     * shape must not cost the reader the ability to reach one.
+     */
+    {
+      const style = CATEGORY_STYLES.exhibit;
+      const floor = L.polygon(toLatLngs(TRADE_FLOOR as unknown as PlanRing), {
+        className: 'map__floor',
+        color: '#141822',
+        fillColor: style.fill,
+        fillOpacity: 0.38,
+        weight: 2.5,
+      });
+      floor.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        const at = event.latlng;
+        const hall = [...TRADE_HALLS]
+          .map((id) => ROOMS_BY_ID[id])
+          .find((room) => room && roomShapes(room).some((ring) => inRing(ring, at.lat, at.lng)));
+        if (!hall) return;
+        if (handlers.current.picking) {
+          handlers.current.onPickPlace({ kind: 'room', roomId: hall.id });
+          return;
+        }
+        handlers.current.onSelectRoom(hall.id);
+        handlers.current.onOpenRoom(hall);
+      });
+      floor.on('dblclick', (event) => L.DomEvent.stopPropagation(event));
+      floor.addTo(map);
+      layers.push(floor);
+      tradeFloorRef.current = floor;
     }
 
     return () => {
@@ -700,11 +877,35 @@ export function MapView({
 
     const applyLabels = () => {
       const zoom = map.getZoom();
+      /*
+       * One name over the trade floor instead of six.
+       *
+       * It sits on the merged outline, and only while the halls it covers are
+       * the floor being shown — the same rule the halls' own labels followed.
+       */
+      const floor = tradeFloorRef.current;
+      if (floor) {
+        const anyHall = ROOMS_BY_ID['hall-i'];
+        const shown = anyHall ? roomState(anyHall) === 'shown' : false;
+        floor.unbindTooltip();
+        floor.setStyle({ opacity: shown ? 1 : 0, fillOpacity: shown ? 0.38 : 0 });
+        if (shown && zoom >= ROOM_LABEL_MIN_ZOOM) {
+          floor.bindTooltip(`<span class="map__room-name">${TRADE_FLOOR_NAME}</span>`, {
+            permanent: true,
+            direction: 'center',
+            className: 'map__room-label map__room-label--floor',
+            opacity: 1,
+          });
+        }
+      }
+
       for (const room of ROOMS) {
         const layer = roomLayersRef.current.get(room.id);
         if (!layer) continue;
 
         layer.unbindTooltip();
+        // The trade halls have one name between them, on the merged outline.
+        if (TRADE_HALLS.has(room.id)) continue;
         if (roomState(room) !== 'shown') continue;
         if (!roomShowsLabel(map, room, { zoom, selectedRoomId })) continue;
 
