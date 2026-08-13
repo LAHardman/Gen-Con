@@ -12,7 +12,9 @@
  *
  *   The worker skips waiting and claims its clients, so a new deploy replaces
  *   the old one on the next load rather than the next time every tab is shut.
- *   Paired with `stale-while-revalidate`, that means at most one stale load.
+ *   Paired with a network-first `index.html`, that means no stale load at all
+ *   while there is a signal — see `public/sw.js`, where serving the page itself
+ *   stale-while-revalidate pinned the app to one build and hid three deploys.
  *
  * Registered late — after the page is interactive — because installing it
  * competes with the map for the same network and the same main thread, and the
@@ -87,7 +89,13 @@ export function registerServiceWorker(enabled = import.meta.env.PROD) {
   const wasControlled = Boolean(navigator.serviceWorker.controller);
   window.addEventListener('load', () => {
     void navigator.serviceWorker
-      .register(WORKER)
+      // `updateViaCache: 'none'` because the check below is an HTTP request
+      // like any other, and by default it is allowed to be answered out of the
+      // browser's own cache. GitHub Pages serves `max-age=600`, so for ten
+      // minutes after any load the question "is there a new worker" is answered
+      // by the old worker's own cached bytes — the check runs, costs nothing,
+      // and cannot possibly find anything. This asks the network every time.
+      .register(WORKER, { updateViaCache: 'none' })
       .then((registration) => {
         watchForUpdates(registration, wasControlled);
         return navigator.serviceWorker.ready;

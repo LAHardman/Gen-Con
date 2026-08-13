@@ -150,25 +150,38 @@ function loadWorker() {
   );
 }
 
-/** Fire one of the worker's handlers and wait for whatever it kept alive. */
+/**
+ * Fire one of the worker's handlers and answer as the browser would.
+ *
+ * `kept` is the point of the return value as much as the response is. A browser
+ * stops a worker once everything it was asked for has been answered, and work
+ * the worker did not hand to `waitUntil` is killed there — so a test that
+ * simply awaits the background fetch proves nothing about whether the browser
+ * would have let it finish. Only what went through `waitUntil` survives, and
+ * only that is what these tests may await.
+ */
 async function fire(type: string, event: Record<string, unknown>) {
-  const waits: Promise<unknown>[] = [];
+  const kept: Promise<unknown>[] = [];
   let responded: Promise<FakeResponse> | undefined;
   const handler = world.handlers.get(type);
   expect(handler, `no ${type} handler`).toBeTruthy();
   handler!({
     ...event,
-    waitUntil: (promise: Promise<unknown>) => waits.push(promise),
+    waitUntil: (promise: Promise<unknown>) => kept.push(promise),
     respondWith: (promise: Promise<FakeResponse>) => {
       responded = promise;
     },
   } as never);
-  await Promise.all(waits);
-  return responded ? ((await responded) as FakeResponse) : null;
+  const response = responded ? ((await responded) as FakeResponse) : null;
+  await Promise.all(kept);
+  return { response, kept: kept.length };
 }
 
-const app = () => world.caches.get('gencon-app-v1');
-const tiles = () => world.caches.get('gencon-tiles-v1');
+/** Most tests only want the response. */
+const answer = async (type: string, event: Record<string, unknown>) => (await fire(type, event)).response;
+
+const app = () => world.caches.get('gencon-app-v2');
+const tiles = () => world.caches.get('gencon-tiles-v2');
 const TILE = 'https://a.basemaps.cartocdn.com/dark_nolabels/16/17081/24865.png';
 
 beforeEach(() => {
@@ -193,16 +206,16 @@ describe('installing', () => {
     world.fetch = async () => {
       throw new Error('offline');
     };
-    await expect(fire('install', {})).resolves.toBeNull();
+    await expect(answer('install', {})).resolves.toBeNull();
     expect(world.skipWaiting).toHaveBeenCalled();
   });
 
   it('throws away caches from an older version of these rules', async () => {
-    await cacheStore.open('gencon-app-v0');
     await cacheStore.open('gencon-app-v1');
+    await cacheStore.open('gencon-app-v2');
     await fire('activate', {});
-    expect(await cacheStore.keys()).not.toContain('gencon-app-v0');
-    expect(await cacheStore.keys()).toContain('gencon-app-v1');
+    expect(await cacheStore.keys()).not.toContain('gencon-app-v1');
+    expect(await cacheStore.keys()).toContain('gencon-app-v2');
     expect(world.claim).toHaveBeenCalled();
   });
 });
@@ -212,33 +225,81 @@ describe('the app itself', () => {
     request: new FakeRequest(url, { mode }),
   });
 
-  it('answers from the cache and refreshes behind you', async () => {
+  it('answers a hashed asset from the cache and refreshes behind you', async () => {
     // Stale-while-revalidate, and the "stale" half is the point: on a
     // connection that is present but hopeless — a convention hall — most of the
-    // wait is waiting for the network to fail.
-    const cache = await cacheStore.open('gencon-app-v1');
+    // wait is waiting for the network to fail. It is safe here because the
+    // filename carries a content hash, so this URL is these bytes for ever.
+    const cache = await cacheStore.open('gencon-app-v2');
     await cache.put('https://example.test/assets/index-abc.js', new FakeResponse('basic', true, 200, 'cached'));
-    const response = await fire('fetch', page());
+    const { response } = await fire('fetch', page());
     expect(response?.body).toBe('cached');
-    // ...and the fresh copy landed for next time.
     expect((await cache.match('https://example.test/assets/index-abc.js'))?.body).toContain('fresh:');
   });
 
-  it('goes to the network when it has nothing, and keeps what comes back', async () => {
-    const response = await fire('fetch', page());
-    expect(response?.body).toContain('fresh:');
-    expect(app()?.entries).toHaveLength(1);
+  it('holds the worker open for the refresh, or there is no refresh', async () => {
+    // The bug that hid three deploys. A browser stops a worker once the last
+    // thing asked of it has been answered, and answering from the cache is
+    // instant — so a background fetch that was never handed to `waitUntil` is
+    // started and killed, every single time. The cache then never updates, and
+    // nothing anywhere reports it: the app is fast, correct, and one build
+    // behind for ever.
+    const cache = await cacheStore.open('gencon-app-v2');
+    await cache.put('https://example.test/assets/index-abc.js', new FakeResponse('basic', true, 200, 'cached'));
+    expect((await fire('fetch', page())).kept).toBe(1);
   });
 
-  it('falls back to the page when a navigation has nothing and no network', async () => {
+  it('takes the page from the network even when it has one cached', async () => {
+    // The other half of the same bug, and the half that pinned the app. Every
+    // asset URL carries a content hash except this one: `index.html` keeps its
+    // URL and names which hashed assets to load. Served from the cache it names
+    // the old build, so the old build loads — and re-caches itself — and the
+    // deploy that went out an hour ago is invisible for ever.
+    const cache = await cacheStore.open('gencon-app-v2');
+    await cache.put('https://example.test/', new FakeResponse('basic', true, 200, 'last week'));
+    const { response } = await fire('fetch', page('https://example.test/', 'navigate'));
+    expect(response?.body).toContain('fresh:');
+    expect((await cache.match('https://example.test/'))?.body).toContain('fresh:');
+  });
+
+  it('keeps one page however it was reached, not one per path', async () => {
+    // A deep link is the same app with a different path. Filing it under its
+    // own URL fills the cache with copies of one file and still misses the next
+    // path somebody opens.
+    await fire('fetch', page('https://example.test/deep/link', 'navigate'));
+    expect(app()?.entries.map((entry) => entry.url)).toEqual(['https://example.test/']);
+  });
+
+  it('falls back to the page when a navigation has no network', async () => {
     // A map with a stale schedule beats a browser error page.
-    const cache = await cacheStore.open('gencon-app-v1');
+    const cache = await cacheStore.open('gencon-app-v2');
     await cache.put('https://example.test/', new FakeResponse('basic', true, 200, 'the app'));
     world.fetch = async () => {
       throw new Error('offline');
     };
-    const response = await fire('fetch', page('https://example.test/deep/link', 'navigate'));
+    const { response } = await fire('fetch', page('https://example.test/deep/link', 'navigate'));
     expect(response?.body).toBe('the app');
+  });
+
+  it('does not wait on a connection that is present but hopeless', async () => {
+    // Which is exactly what a hall with fifty thousand phones in it has, and
+    // why the page is network-*first* rather than network-only. An uncapped
+    // wait would hand the whole app back to the failure this file exists to
+    // avoid.
+    vi.useFakeTimers();
+    try {
+      const cache = await cacheStore.open('gencon-app-v2');
+      await cache.put('https://example.test/', new FakeResponse('basic', true, 200, 'the app'));
+      world.fetch = async (request) => {
+        await new Promise((resolve) => setTimeout(resolve, 60_000));
+        return new FakeResponse('basic', true, 200, `fresh:${request.url}`);
+      };
+      const pending = fire('fetch', page('https://example.test/', 'navigate'));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect((await pending).response?.body).toBe('the app');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not keep a failure, which it would then serve for ever', async () => {
@@ -255,26 +316,26 @@ describe('the app itself', () => {
     // Anything that is not ours and not a tile is somebody else's business, and
     // answering for it is how a service worker breaks a page it has never heard
     // of.
-    const response = await fire('fetch', { request: new FakeRequest('https://elsewhere.test/x.js') });
+    const response = await answer('fetch', { request: new FakeRequest('https://elsewhere.test/x.js') });
     expect(response).toBeNull();
   });
 
   it('ignores anything that is not a GET', async () => {
     const request = new FakeRequest('https://example.test/x');
     request.method = 'POST';
-    expect(await fire('fetch', { request })).toBeNull();
+    expect(await answer('fetch', { request })).toBeNull();
   });
 });
 
 describe('the tiles', () => {
   it('answers from the cache without asking the network', async () => {
     // A map tile for a city block does not change during a convention.
-    const cache = await cacheStore.open('gencon-tiles-v1');
+    const cache = await cacheStore.open('gencon-tiles-v2');
     await cache.put(TILE, new FakeResponse('opaque', false, 0, 'held'));
     world.fetch = async () => {
       throw new Error('should not have been asked');
     };
-    const response = await fire('fetch', { request: new FakeRequest(TILE) });
+    const response = await answer('fetch', { request: new FakeRequest(TILE) });
     expect(response?.body).toBe('held');
   });
 
@@ -283,7 +344,7 @@ describe('the tiles', () => {
     // 0, unreadable, and all an `<img>` needs. Insisting on a readable 200
     // leaves the tile cache empty while every other cache fills up, so the app
     // looks cached and the map is a blank grid.
-    const response = await fire('fetch', { request: new FakeRequest(TILE) });
+    const response = await answer('fetch', { request: new FakeRequest(TILE) });
     expect(response?.type).toBe('opaque');
     expect(tiles()?.entries).toHaveLength(1);
   });
@@ -297,7 +358,7 @@ describe('the tiles', () => {
   it('stays under its cap, oldest first', async () => {
     // Panning downtown at every zoom would otherwise fill the origin's quota
     // and get everything evicted — the app with it.
-    const cache = await cacheStore.open('gencon-tiles-v1');
+    const cache = await cacheStore.open('gencon-tiles-v2');
     for (let n = 0; n < 950; n += 1) {
       await cache.put(`https://a.basemaps.cartocdn.com/dark/16/${n}/1.png`, new FakeResponse('opaque', false, 0));
     }

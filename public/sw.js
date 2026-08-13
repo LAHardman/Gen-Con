@@ -16,6 +16,19 @@
  * connection that is present but hopeless, which is what a convention hall
  * actually has, waiting for the network to fail is most of the wait.
  *
+ * WITH ONE EXCEPTION, WHICH COST A DEPLOY. The page itself is served
+ * **network-first**, with the cached copy as a fallback after a short wait.
+ * Stale-while-revalidate is right for everything whose filename carries a
+ * content hash — a hashed asset at a given URL is the same bytes for ever, so
+ * serving it from the cache is not staleness at all. `index.html` is the one
+ * file that must *not* work that way: its URL never changes and its contents
+ * name which hashed assets to load. Served stale, it names the old build, so
+ * the old build is what loads — and because it also then re-caches the old
+ * assets, the app pins itself to that build and stays there. Every deploy after
+ * that is invisible. The page is about a kilobyte and the wait below is capped,
+ * so the hall keeps its offline mode and the reader stops getting last week's
+ * app.
+ *
  * THE TILES, which are somebody else's: **cache-first**, because a map tile
  * for a city block does not change during a convention and re-fetching one is
  * pure cost. Capped, because panning around downtown at every zoom would
@@ -41,8 +54,13 @@
  * The hashes in the asset filenames already make a new build a new URL, so this
  * is not for ordinary deploys — it is for changing what is cached or how, when
  * the entries already on somebody's phone were made under different rules.
+ *
+ * v2 is exactly that, and is also the only way to reach the phones the v1 bug
+ * stranded. A worker is replaced when its own bytes change, so a build that
+ * touches nothing here installs no new worker and the stale `index.html` in
+ * `gencon-app-v1` keeps answering for ever. Renaming the cache abandons it.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 
 const APP_CACHE = `gencon-app-${VERSION}`;
 const TILE_CACHE = `gencon-tiles-${VERSION}`;
@@ -139,37 +157,74 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(tile(request));
     return;
   }
-  if (url.origin === self.location.origin) {
-    event.respondWith(app(request));
-  }
+  if (url.origin !== self.location.origin) return;
+  event.respondWith(request.mode === 'navigate' ? shell(request, event) : app(request, event));
 });
 
 /**
- * Same-origin: the cached copy now, a fresh one for next time.
+ * The page: the network if it answers promptly, otherwise the copy we have.
  *
- * A navigation with nothing cached and no network falls back to the page
- * itself, which the install step put there — the app is a map before it is
- * anything else, and a map with a stale schedule beats a browser error page.
+ * Always stored under `./` whatever was asked for, because there is one page —
+ * a deep link is the same app with a different path, and caching it by its own
+ * URL would fill the cache with copies and still miss the next path.
+ *
+ * The wait is what keeps this honest in a hall. Network-first with no cap means
+ * a connection that is present but hopeless blocks the app for as long as the
+ * browser is willing to wait, which is the failure this whole file exists to
+ * avoid. A second and a half is long enough for a kilobyte on a working
+ * connection and short enough not to be a hang on a broken one.
  */
-async function app(request) {
+const SHELL_WAIT = 1500;
+
+async function shell(request, event) {
+  const cache = await caches.open(APP_CACHE);
+
+  const fresh = fetch(request)
+    .then(async (response) => {
+      if (response.ok) await cache.put('./', response.clone());
+      return response;
+    })
+    .catch(() => null);
+  // Held open explicitly: without this the browser may stop the worker the
+  // moment the cached page is handed back, and the copy it was fetching to
+  // replace it never lands. See `app` below, where the same mistake was worse.
+  event.waitUntil(fresh);
+
+  const cached = (await cache.match(request)) ?? (await cache.match('./'));
+  if (!cached) return (await fresh) ?? Response.error();
+
+  const wait = new Promise((resolve) => {
+    setTimeout(resolve, SHELL_WAIT);
+  });
+  return (await Promise.race([fresh, wait])) ?? cached;
+}
+
+/**
+ * Everything else same-origin: the cached copy now, a fresh one for next time.
+ *
+ * `event.waitUntil` is not decoration. A worker is stopped when the last thing
+ * it was asked for has been answered, and answering from the cache is instant —
+ * so without this the background fetch is started and then killed, every time,
+ * and the cache never refreshes at all. Stale-while-revalidate with no
+ * revalidate is just stale, and it fails silently: the app is fast and correct
+ * and one build behind for ever.
+ */
+async function app(request, event) {
   const cache = await caches.open(APP_CACHE);
   const cached = await cache.match(request);
 
   const fresh = fetch(request)
-    .then((response) => {
-      if (response.ok) cache.put(request, response.clone());
+    .then(async (response) => {
+      if (response.ok) await cache.put(request, response.clone());
       return response;
     })
     .catch(() => null);
 
-  if (cached) return cached;
-  const response = await fresh;
-  if (response) return response;
-  if (request.mode === 'navigate') {
-    const shell = await cache.match('./');
-    if (shell) return shell;
+  if (cached) {
+    event.waitUntil(fresh);
+    return cached;
   }
-  return Response.error();
+  return (await fresh) ?? Response.error();
 }
 
 /** Somebody else's tiles: whatever is cached, and only otherwise the network. */

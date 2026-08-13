@@ -92,7 +92,21 @@ describe('whether it registers at all', () => {
     registerServiceWorker(true);
     sw.load();
     await sw.settle();
-    expect(sw.register).toHaveBeenCalledWith('./sw.js');
+    expect(sw.register).toHaveBeenCalledWith('./sw.js', expect.anything());
+  });
+
+  it('asks the network whether the worker changed, not the browser cache', async () => {
+    // Every check below is an HTTP request, and by default it may be answered
+    // out of the browser's own cache — which holds a copy of the *old* worker.
+    // GitHub Pages serves `max-age=600`, so for ten minutes after any load the
+    // question "is there a new build" is answered by the build being replaced.
+    // The checks still run and still cost nothing; they simply cannot find
+    // anything, and no reload ever happens.
+    const sw = stub();
+    registerServiceWorker(true);
+    sw.load();
+    await sw.settle();
+    expect(sw.register).toHaveBeenCalledWith('./sw.js', { updateViaCache: 'none' });
   });
 });
 
