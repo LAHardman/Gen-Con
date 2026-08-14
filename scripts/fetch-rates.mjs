@@ -209,6 +209,15 @@ if (verify) {
           query: group.query,
           keys: store.keys,
           report: (one) => seen.push(one),
+          /*
+           * One page, which is what "one request" means.
+           *
+           * Refusing the charge is how a paging source is told to stop, and
+           * without it this walked to its twelve-page cap and spent twelve of
+           * the month's hundred searches while printing "one request was
+           * spent". A verification that quietly costs twelve is not one.
+           */
+          charge: () => false,
         })
       : [await source.quote(group.places[0], { env, whenMs: now, keys: store.keys })].filter(Boolean);
 
@@ -270,7 +279,7 @@ if (verify) {
       }
       if (rows.length === 0) console.error('  It answered and returned nothing usable.');
     }
-    console.error(`\n${verify} works. One request was spent; nothing was written.`);
+    console.error(`\n${verify} works. One page was asked for; nothing was written.`);
   } catch (error) {
     console.error(`${verify} failed: ${error.message}`);
     console.error('\nThat message comes from the adapter, which refuses to guess at an');

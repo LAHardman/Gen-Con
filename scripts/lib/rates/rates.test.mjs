@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cheapFirst, isFresh, keeps, planRun, walkFloor } from './plan.mjs';
 import { budget, ledgerFor, noteTried, quotaFor, remaining, spend } from './quota.mjs';
 import { merge, runOnce, usable } from './run.mjs';
-import { matchByName, matchByPoint, serpapi, words } from './sources.mjs';
+import { matchByName, matchByPoint, onePerPlace, serpapi, words } from './sources.mjs';
 
 const AUGUST = Date.parse('2026-08-11T12:00:00Z');
 const JULY = Date.parse('2026-07-11T12:00:00Z');
@@ -614,6 +614,50 @@ describe('one search per town, rather than one search', () => {
       'A Hotel Nobody Here Has',
       'No Price On This One',
     ]);
+  });
+
+  it('takes the cheapest room when a hotel comes back once per room', async () => {
+    /*
+     * Real rows from the first live response, verbatim. A search answers per
+     * room, not per hotel: this one hotel arrived four times, and 69 is the
+     * answer rather than whichever of 81, 82, 82 happened to be last.
+     */
+    const rows = [
+      { placeId: 'd1', nightly: 69, via: 'Comfort Inn Indianapolis South I-65' },
+      { placeId: 'd1', nightly: 81, via: 'Comfort Inn Indianapolis South I-65 - Queen Room with Two Queen Beds - Non-Smoking' },
+      { placeId: 'd1', nightly: 82, via: 'Comfort Inn Indianapolis South I-65 - King Room - Non-Smoking' },
+      { placeId: 'd1', nightly: 82, via: 'Comfort Inn Indianapolis South I-65 - Accessible Queen Room - Non-Smoking' },
+    ];
+    expect(onePerPlace(rows)).toEqual([rows[0]]);
+  });
+
+  it('refuses a hotel that two different hotels both claim', () => {
+    /*
+     * Also real, and the reason this exists. Position matching is one-way: it
+     * refuses two of *ours* near one returned point and says nothing when two
+     * returned points land on one of ours. Our Ramada Indianapolis Airport was
+     * claimed by a Holiday Inn and a La Quinta in the same response. One of
+     * those prices is some other building's, and nothing downstream could tell
+     * — it would simply have appeared under the Ramada's name.
+     */
+    const clashes = [];
+    const kept = onePerPlace(
+      [
+        { placeId: 'd1', nightly: 100, via: 'Holiday Inn Indianapolis - Airport Area N' },
+        { placeId: 'd1', nightly: 64, via: 'La Quinta Inn by Wyndham Indianapolis Airport Executive Dr' },
+      ],
+      (one) => clashes.push(one),
+    );
+
+    expect(kept).toEqual([]);
+    expect(clashes[0].names).toHaveLength(2);
+  });
+
+  it('keeps a hotel that merely changed its name', () => {
+    // Renames are common and are not clashes: one row, nothing to disagree
+    // with. Our Knights Inn is their Exceed Inn, and the price is still real.
+    const rows = [{ placeId: 'd1', nightly: 55, via: 'Exceed Inn' }];
+    expect(onePerPlace(rows)).toEqual(rows);
   });
 
   it('walks the pages, because one search is about twenty hotels', async () => {

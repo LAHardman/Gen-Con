@@ -196,7 +196,11 @@ export const serpapi = {
         how: place ? (byPoint ? 'position' : 'name') : null,
       });
     }
-    return found;
+    // A search answers per room and can put two hotels on one of ours. Both are
+    // settled here rather than left for the store to guess at.
+    return onePerPlace(found, (clash) =>
+      report?.({ name: clash.names.join('  ≠  '), nightly: null, matched: null, how: 'refused' }),
+    );
   },
 };
 
@@ -425,6 +429,58 @@ export function matchByPoint(places, point) {
   // Two hotels within eighty metres of one point is a car park, not a match.
   if (near.length > 1 && near[1].away - near[0].away < 25) return null;
   return near[0].place;
+}
+
+/**
+ * Whether two names describe one hotel, by the same containment rule.
+ *
+ * Needed because a search answers per *room*, not per hotel. "Comfort Inn
+ * Indianapolis South I-65" came back four times in one response — plain, then
+ * Queen, King and Accessible Queen — at 69, 81, 82 and 82. Those are one hotel
+ * and its cheapest room is the answer.
+ *
+ * The same grouping is what catches the opposite case. Position matching is
+ * one-way: it refuses two of *our* hotels near one returned point, and has
+ * nothing to say when two returned points land on one of ours. In the first
+ * real response that happened four times — our Ramada Indianapolis Airport was
+ * claimed by both a Holiday Inn and a La Quinta, our Best Western Airport
+ * Suites by a Wyndham and a Quality Suites. Those are not rooms, they are
+ * different buildings, and there is no way to tell which price is the hotel's.
+ */
+export function sameHotel(a, b) {
+  const one = words(a);
+  const two = words(b);
+  if (one.size === 0 || two.size === 0) return false;
+  const shared = [...one].filter((word) => two.has(word)).length;
+  if (shared !== Math.min(one.size, two.size)) return false;
+  return shared >= 2 || (one.size === 1 && two.size === 1);
+}
+
+/**
+ * One price per hotel: the cheapest room, or nothing at all if the rows
+ * disagree about which hotel they are.
+ *
+ * Reported rather than silently dropped, because a place two hotels claim is a
+ * fact about the matcher worth seeing — it is the shape a wrong price on the
+ * page would have arrived in.
+ */
+export function onePerPlace(rows, note) {
+  const byPlace = new Map();
+  for (const row of rows) {
+    if (!byPlace.has(row.placeId)) byPlace.set(row.placeId, []);
+    byPlace.get(row.placeId).push(row);
+  }
+
+  const kept = [];
+  for (const [placeId, group] of byPlace) {
+    const agrees = group.every((row) => sameHotel(row.via, group[0].via));
+    if (!agrees) {
+      note?.({ placeId, names: group.map((row) => row.via) });
+      continue;
+    }
+    kept.push(group.reduce((best, row) => (row.nightly < best.nightly ? row : best)));
+  }
+  return kept;
 }
 
 export function matchByName(places, name) {
