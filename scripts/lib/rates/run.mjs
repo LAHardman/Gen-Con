@@ -155,7 +155,16 @@ export async function runOnce({
   for (const { place, why } of plan.tasks) {
     if (priced.has(place.id)) continue;
     for (const source of alive()) {
-      if (source.covers !== 'place' || !source.quote) continue;
+      /*
+       * Any source that can name one hotel, not only the per-place ones.
+       *
+       * An area source has already had its sweeps by the time this runs — the
+       * loop above is exhaustive — so reaching it here means the sweeps are
+       * done and there is allowance left. Letting it answer about a single
+       * hotel spends that remainder on the plan's order, which is the walk ring
+       * nearest-first, rather than letting it expire on the first of the month.
+       */
+      if (!source.quote) continue;
       // Asked before the ledger is charged, because the charge happens whether
       // or not a request follows: a source with no identifier for this hotel
       // would otherwise spend the month sending nothing.

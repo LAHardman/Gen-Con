@@ -119,6 +119,12 @@ async function readJson(response, who) {
   }
 }
 
+/** A returned property's position, or null when it did not carry one. */
+const pointOf = (row) =>
+  row?.gps_coordinates
+    ? { lat: Number(row.gps_coordinates.latitude), lng: Number(row.gps_coordinates.longitude) }
+    : null;
+
 /** The first finite positive number in a set of candidates, else null. */
 const money = (...candidates) => {
   for (const candidate of candidates) {
@@ -184,6 +190,48 @@ export const serpapi = {
   },
 
   /**
+   * One hotel, by name, for whatever the town sweeps did not reach.
+   *
+   * A sweep answers with the hotels Google thinks are most relevant to a town,
+   * and past the first few pages that stops being ours — so the run stops
+   * paging, and some hotels are never returned by any sweep at all. Naming one
+   * costs the same single search and asks the question directly.
+   *
+   * Spent last, and only on what is left: the run loop reaches this after every
+   * area sweep, working the plan's order, which is the walk ring nearest-first.
+   * So a leftover allowance goes on the hotels closest to the hall rather than
+   * on a motel sixteen kilometres out.
+   *
+   * Matched on position, never on the name we asked with. Asking for "Comfort
+   * Inn" and trusting whatever comes back to *be* that Comfort Inn is how a
+   * price lands on the wrong one of the four in this city.
+   */
+  async quote(place, { env, whenMs, nights, fetch: get = fetch }) {
+    const stay = nights ?? conventionNights(whenMs);
+    const url = new URL('https://serpapi.com/search.json');
+    url.searchParams.set('engine', 'google_hotels');
+    url.searchParams.set('q', `${place.name} ${place.city || 'Indianapolis'} Indiana`);
+    url.searchParams.set('check_in_date', stay.in);
+    url.searchParams.set('check_out_date', stay.out);
+    url.searchParams.set('adults', '1');
+    url.searchParams.set('currency', 'USD');
+    url.searchParams.set('api_key', env.SERPAPI_KEY);
+
+    const body = await readJson(await get(url), 'serpapi');
+    if (body.error) throw new Error(`serpapi: ${body.error}`);
+    if (!Array.isArray(body.properties)) return null;
+
+    for (const row of body.properties) {
+      const nightly = money(row.rate_per_night?.extracted_lowest, row.rate_per_night?.lowest);
+      if (!nightly) continue;
+      // Only this hotel's own building counts as an answer about this hotel.
+      if (matchByPoint([place], pointOf(row))?.id !== place.id) continue;
+      return { nightly, currency: 'USD', via: row.name };
+    }
+    return null;
+  },
+
+  /**
    * One search, one town, many prices back.
    *
    * `report` is for the `--verify` path: it is handed every property the
@@ -221,8 +269,21 @@ export const serpapi = {
      * first and stops when the month says no. The cap is a backstop against a
      * token that never stops arriving, not a budget: the budget is the ledger.
      */
+    /*
+     * AND IT STOPS WHEN A PAGE STOPS PAYING. Google orders by relevance, so the
+     * hotels we hold turn up early and the tail is other people's property. The
+     * first month of this walked all twelve pages of every town and spent 97 of
+     * 100 searches to learn 55 prices — most of them on pages that matched
+     * nothing at all, while the towns at the end of the list went unasked.
+     *
+     * Two barren pages in a row ends that town. Two rather than one because a
+     * single page can be all block hotels, which are deliberately not offered to
+     * the matcher and so match nothing while the page after it is full of ours.
+     */
     const rows = [];
+    const claimed = new Set();
     let token = null;
+    let barren = 0;
     for (let page = 0; page < 12; page += 1) {
       // The first page was paid for by the run loop before it called this.
       if (page > 0 && charge && !charge()) break;
@@ -232,6 +293,15 @@ export const serpapi = {
         throw new Error('serpapi: no properties[] in the response');
       }
       rows.push(...body.properties);
+
+      const before = claimed.size;
+      for (const row of body.properties) {
+        const place = matchByPoint(places, pointOf(row)) ?? matchByName(places, row.name ?? '');
+        if (place) claimed.add(place.id);
+      }
+      barren = claimed.size > before ? 0 : barren + 1;
+      if (barren >= 2) break;
+
       token = body.serpapi_pagination?.next_page_token ?? null;
       if (!token) break;
     }
@@ -249,10 +319,7 @@ export const serpapi = {
        * rightly refuses all of them; their coordinates are sixteen kilometres
        * apart and refuse nothing.
        */
-      const point = row.gps_coordinates
-        ? { lat: Number(row.gps_coordinates.latitude), lng: Number(row.gps_coordinates.longitude) }
-        : null;
-      const byPoint = nightly ? matchByPoint(places, point) : null;
+      const byPoint = nightly ? matchByPoint(places, pointOf(row)) : null;
       const place = byPoint ?? (nightly ? matchByName(places, row.name) : null);
       if (place) found.push({ placeId: place.id, nightly, currency: 'USD', via: row.name });
       report?.({
@@ -260,8 +327,8 @@ export const serpapi = {
         nightly,
         // Enough to stand as a place in its own right if nothing claimed it:
         // where it is, what kind of thing it is, and what it costs.
-        lat: point?.lat ?? null,
-        lng: point?.lng ?? null,
+        lat: pointOf(row)?.lat ?? null,
+        lng: pointOf(row)?.lng ?? null,
         kind: row.type ?? null,
         matched: place?.name ?? null,
         // Which mechanism found it, so a run says whether coordinates arrived.

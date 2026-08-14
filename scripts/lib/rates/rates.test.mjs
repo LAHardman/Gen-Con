@@ -736,6 +736,43 @@ describe('one search per town, rather than one search', () => {
     expect(found.map((one) => one.placeId).sort()).toEqual(['d1', 'd2', 'd3']);
   });
 
+  it('spends what the sweeps left on the nearest hotels, one at a time', async () => {
+    /*
+     * The other half of stopping early: the allowance that stopping saves has
+     * to go somewhere, and it expires on the first of the month if it does not.
+     *
+     * An area source that can also name one hotel is reached by the per-place
+     * loop once its sweeps are done — and that loop works the plan's order,
+     * which is the walk ring nearest-first. So the remainder buys prices for
+     * the hotels by the hall rather than for a motel sixteen kilometres out.
+     */
+    const named = [];
+    const both = {
+      name: 'serpapi',
+      covers: 'area',
+      ready: () => true,
+      cost: 1,
+      areas: () => [{ places: [], label: 'a town with nothing in it' }],
+      quoteArea: async () => [],
+      quote: async (place) => {
+        named.push(place.id);
+        return { nightly: 150, currency: 'USD' };
+      },
+    };
+
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger: ledgerFor(null, AUGUST),
+      env: {},
+      whenMs: AUGUST,
+      sources: [both],
+    });
+
+    // Nearest first, and the walk ring before the drive ring.
+    expect(named.slice(0, 3)).toEqual(['w1', 'w2', 'w3']);
+  });
+
   it('records every page it walked in the ledger, not just the first', async () => {
     /*
      * The wiring, not the adapter. `charge` only bounds anything if the run
@@ -768,6 +805,120 @@ describe('one search per town, rather than one search', () => {
     });
 
     expect(ledger.spent.serpapi).toBe(3);
+  });
+
+  it('stops paging a town once the pages stop being about our hotels', async () => {
+    /*
+     * The lesson of the first real month: 97 of 100 searches spent to learn 55
+     * prices. Google orders by relevance, so our hotels turn up early and the
+     * tail is other people's property — and walking all twelve pages of every
+     * town meant the towns at the end of the list went unasked entirely.
+     */
+    const page = (properties, more = true) => ({
+      properties,
+      ...(more ? { serpapi_pagination: { next_page_token: 'more' } } : {}),
+    });
+    const pages = [
+      page([{ name: 'Motel 6 Southport Indianapolis', rate_per_night: { extracted_lowest: 71 } }]),
+      page([{ name: 'Somebody Else Entirely', rate_per_night: { extracted_lowest: 90 } }]),
+      page([{ name: 'Another Stranger', rate_per_night: { extracted_lowest: 95 } }]),
+      page([{ name: 'Conrad Carmel', rate_per_night: { extracted_lowest: 300 } }]),
+    ];
+    let asked = 0;
+    await serpapi.quoteArea([PLACES[3], PLACES[4]], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => ({ ok: true, status: 200, text: async () => JSON.stringify(pages[asked++]) }),
+      charge: () => true,
+    });
+
+    // Three pages: one that matched, then two that did not. The fourth is never
+    // bought, even though it would have matched — that is the trade, and it is
+    // the right way round when the alternative is nine towns going unasked.
+    expect(asked).toBe(3);
+  });
+
+  it('gives a page of block hotels a second chance before giving up', async () => {
+    /*
+     * One barren page is not evidence. Gen Con's own hotels are deliberately
+     * never offered to the matcher, so a downtown page can be entirely block
+     * and match nothing while the page behind it is full of ours.
+     */
+    const pages = [
+      { properties: [{ name: 'JW Marriott Indianapolis', rate_per_night: { extracted_lowest: 300 } }], serpapi_pagination: { next_page_token: 'b' } },
+      { properties: [{ name: 'Motel 6 Southport Indianapolis', rate_per_night: { extracted_lowest: 71 } }], serpapi_pagination: { next_page_token: 'c' } },
+      { properties: [{ name: 'Nobody', rate_per_night: { extracted_lowest: 80 } }] },
+    ];
+    let asked = 0;
+    const found = await serpapi.quoteArea([PLACES[3]], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => ({ ok: true, status: 200, text: async () => JSON.stringify(pages[asked++]) }),
+      charge: () => true,
+    });
+
+    expect(asked).toBe(3);
+    expect(found.map((one) => one.placeId)).toEqual(['d1']);
+  });
+
+  it('names a single hotel when the sweeps never reached it', async () => {
+    // What the leftover allowance buys. A sweep answers with what Google thinks
+    // is relevant to a town; some hotels are never in that answer at all.
+    let asked = null;
+    const quote = await serpapi.quote(PLACES[3], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      nights: { in: '2027-08-04', out: '2027-08-08', year: 2027 },
+      fetch: async (url) => {
+        asked = new URL(url);
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              properties: [
+                {
+                  name: 'Motel 6 Indianapolis, IN - Southport',
+                  rate_per_night: { extracted_lowest: 71 },
+                  gps_coordinates: { latitude: PLACES[3].lat, longitude: PLACES[3].lng },
+                },
+              ],
+            }),
+        };
+      },
+    });
+
+    expect(asked.searchParams.get('q')).toMatch(/Motel 6 Southport/);
+    expect(asked.searchParams.get('check_in_date')).toBe('2027-08-04');
+    expect(quote).toMatchObject({ nightly: 71, currency: 'USD' });
+  });
+
+  it('refuses an answer that is a different building from the one it named', async () => {
+    /*
+     * The failure this would arrive as. Ask for "Comfort Inn" and Google may
+     * answer with a Comfort Inn — one of four in this city, sixteen kilometres
+     * apart. Trusting the name we asked with is how a price lands on the wrong
+     * one, under the right one's heading, with nothing to show for it.
+     */
+    const quote = await serpapi.quote(PLACES[3], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            properties: [
+              {
+                name: 'Motel 6 Somewhere Else',
+                rate_per_night: { extracted_lowest: 55 },
+                gps_coordinates: { latitude: 40.5, longitude: -85.1 },
+              },
+            ],
+          }),
+      }),
+    });
+    expect(quote).toBeNull();
   });
 
   it('stops paging when the month says stop, rather than spending it unseen', async () => {
