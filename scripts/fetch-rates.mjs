@@ -39,11 +39,18 @@ import { dirname, join } from 'node:path';
 import { planRun } from './lib/rates/plan.mjs';
 import { budget, ledgerFor, SOURCES } from './lib/rates/quota.mjs';
 import { runOnce } from './lib/rates/run.mjs';
-import { ALL } from './lib/rates/sources.mjs';
+import { ALL, conventionNights } from './lib/rates/sources.mjs';
+import { placesFromStrangers } from './lib/rates/strangers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STORE = join(ROOT, 'src/data/rate-store.json');
 const OUT = join(ROOT, 'src/data/rates.ts');
+const LISTINGS_OUT = join(ROOT, 'src/data/listings.ts');
+
+/** The convention centre's north-west corner, as `fetch-lodging.mjs` measures from. */
+const ICC = { lat: 39.765683, lng: -86.166846 };
+/** The drive ring, matching `DRIVE_METRES` in the generated lodging file. */
+const DRIVE_M = 25_000;
 
 const dry = process.argv.includes('--dry');
 /** `--verify=serpapi`: one request, printed in full, nothing written. */
@@ -112,8 +119,30 @@ try {
   console.error('no store yet — starting one');
 }
 
+/**
+ * The stay being priced, and what happens when it moves.
+ *
+ * A quote is a price for a particular set of nights, so quotes gathered for a
+ * different stay are not stale — they are answers to another question, and
+ * `isFresh` would have kept every one of them and skipped the whole run. They
+ * are dropped, once, when the stay changes.
+ */
+const nights = conventionNights(now);
+if (store.nights && store.nights.in !== nights.in) {
+  console.error(
+    `\nthe stay moved: ${store.nights.in}→${store.nights.out} is now ${nights.in}→${nights.out}.` +
+      `\n${store.quotes.length} quotes priced the old one and are being dropped.`,
+  );
+  store.quotes = [];
+}
+store.nights = nights;
+
 const ledger = ledgerFor(store.ledger, now);
 const budgets = budget(ledger, env);
+
+console.error(
+  `\npricing Gen Con ${nights.year}: ${nights.in} to ${nights.out}, Wednesday to Sunday`,
+);
 
 console.error(
   `\n${places.length} places (${places.filter((one) => one.ring === 'walk').length} walkable), ` +
@@ -206,6 +235,7 @@ if (verify) {
       ? await source.quoteArea(group.places, {
           env,
           whenMs: now,
+          nights,
           query: group.query,
           keys: store.keys,
           report: (one) => seen.push(one),
@@ -219,7 +249,7 @@ if (verify) {
            */
           charge: () => false,
         })
-      : [await source.quote(group.places[0], { env, whenMs: now, keys: store.keys })].filter(Boolean);
+      : [await source.quote(group.places[0], { env, whenMs: now, nights, keys: store.keys })].filter(Boolean);
 
     const matched = seen.filter((one) => one.matched);
     if (seen.length > 0) {
@@ -295,6 +325,9 @@ if (only && chosen.length === 0) {
   process.exit(2);
 }
 
+/** Everything the searches returned that none of our hotels claimed. */
+const strangers = [];
+
 const result = await runOnce({
   places,
   quotes: store.quotes,
@@ -302,16 +335,93 @@ const result = await runOnce({
   keys: store.keys,
   env,
   whenMs: now,
+  nights,
   inBlock,
   sources: chosen,
+  sawStranger: (one) => strangers.push(one),
   log: (line) => console.error(line),
 });
 
 writeFileSync(
   STORE,
-  `${JSON.stringify({ quotes: result.quotes, ledger: result.ledger, keys: store.keys }, null, 1)}\n`,
+  `${JSON.stringify({ quotes: result.quotes, ledger: result.ledger, keys: store.keys, nights }, null, 1)}\n`,
   'utf8',
 );
+
+/*
+ * Everywhere else somebody could sleep, which the search knows about and the
+ * survey does not. See `lib/rates/strangers.mjs` for why it is its own file.
+ */
+if (strangers.length > 0) {
+  const { places: extra, why } = placesFromStrangers({
+    strangers,
+    known: places,
+    hall: ICC,
+    driveMetres: DRIVE_M,
+  });
+  console.error(
+    `\n${strangers.length} priced places no hotel of ours claimed → ${extra.length} kept` +
+      ` (${why.alreadyKnown} already listed, ${why.sameDoor} behind one door,` +
+      ` ${why.cheaper} the same listing again, ${why.tooFar} too far)`,
+  );
+
+  writeFileSync(
+    LISTINGS_OUT,
+    `/**
+ * Somewhere to sleep that nobody surveyed. GENERATED — do not edit.
+ *
+ * Run 'node scripts/fetch-rates.mjs' to rebuild this.
+ *
+ * A search for hotels near the hall answers with more than hotels: flats,
+ * condos and lofts let by the night, which for a convention where four people
+ * share a room is often the cheapest way to sleep within walking distance. It
+ * also answers with hotels the OpenStreetMap pull missed. Both are here.
+ *
+ * **This is not 'lodging.ts' and must not be merged into it.** That file is a
+ * survey under ODbL: somebody stood there. Every row here is a booking product
+ * — one listing, which may be one flat in a block of forty, may be gone next
+ * week, and may be the same address as the row beside it under another name.
+ * The rules in 'scripts/lib/rates/strangers.mjs' refuse the duplicates they
+ * can prove and keep the rest; they cannot prove all of them.
+ *
+ * Prices are for Gen Con ${nights.year}, ${nights.in} to ${nights.out}.
+ */
+
+export interface Listing {
+  /** Prefixed 'serp:' so it can never be read as an OpenStreetMap id. */
+  id: string;
+  name: string;
+  /** hotel, motel, hostel, or rental — somebody's flat rather than a front desk. */
+  kind: string;
+  /** Straight-line metres from the convention centre. */
+  metres: number;
+  ring: 'walk' | 'drive';
+  lat: number;
+  lng: number;
+  /** Per night, for the convention stay above. */
+  nightly: number;
+  city?: string;
+}
+
+/** When these were gathered. */
+export const FOUND = '${new Date(now).toISOString().slice(0, 10)}';
+
+/** Nearest first. */
+export const LISTINGS: ReadonlyArray<Listing> = [
+${extra
+  .map(
+    (one) =>
+      `  { id: '${one.id}', name: ${JSON.stringify(one.name)}, kind: '${one.kind}',` +
+      ` metres: ${one.metres}, ring: '${one.ring}', lat: ${one.lat}, lng: ${one.lng},` +
+      ` nightly: ${one.nightly}${one.city ? `, city: ${JSON.stringify(one.city)}` : ''} },`,
+  )
+  .join('\n')}
+];
+`,
+    'utf8',
+  );
+  console.error(`wrote ${LISTINGS_OUT}`);
+}
 
 /*
  * The app reads a generated module rather than the JSON, for the same reason

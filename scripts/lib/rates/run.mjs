@@ -51,10 +51,22 @@ export async function runOnce({
   keys = {},
   env = {},
   whenMs,
+  /** The stay being priced. Defaults to the next Gen Con's own nights. */
+  nights,
   sources = ALL,
   /** Places Gen Con publishes a rate for. Never worth a request. */
   inBlock = new Set(),
   fetch: get,
+  /**
+   * Told about every property a search returned that no hotel of ours claimed.
+   *
+   * Most of them are not in OpenStreetMap because they are not hotels — whole
+   * flats, condos and rooms let by the night, which is a real and often cheaper
+   * way to sleep near the hall. Some are hotels the OSM pull simply missed.
+   * Either way they came back priced and positioned, and dropping them on the
+   * floor is throwing away the answer to "where else could I stay".
+   */
+  sawStranger,
   log = () => {},
 }) {
   const budgets = budget(ledger, env);
@@ -99,6 +111,7 @@ export async function runOnce({
           const rows = await source.quoteArea(group.places, {
             env,
             whenMs,
+            nights,
             query: group.query,
             fetch: get,
             keys,
@@ -110,6 +123,13 @@ export async function runOnce({
              * the ledger never sees.
              */
             charge: () => spend(ledger, source.name, source.cost, env),
+            report: sawStranger
+              ? (seen) => {
+                  if (seen.matched || !seen.nightly) return;
+                  if (!Number.isFinite(seen.lat) || !Number.isFinite(seen.lng)) return;
+                  sawStranger({ ...seen, town: group.label });
+                }
+              : undefined,
           });
           const outside = rows.filter((row) => !inBlock.has(row.placeId));
           for (const row of outside) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
@@ -142,7 +162,7 @@ export async function runOnce({
       if (source.canAsk && !source.canAsk(place, { env, keys })) continue;
       if (!spend(ledger, source.name, source.cost, env)) continue;
       try {
-        const quote = await source.quote(place, { env, whenMs, fetch: get, keys, cache });
+        const quote = await source.quote(place, { env, whenMs, nights, fetch: get, keys, cache });
         if (!quote) {
           // A real answer about this hotel — no rate — so stop asking about it
           // and let the next source have a turn at the next one.

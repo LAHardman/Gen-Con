@@ -44,6 +44,7 @@ import {
 import { planningYear } from '../data/key-dates';
 import { DRIVE_METRES, LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
 import { CHEAPEST } from '../data/partners';
+import { LISTINGS } from '../data/listings';
 import { RATES, REFRESHED, rateFor, type Rate } from '../data/rates';
 
 /** How far, and where the price comes from. Null in either means "don't mind". */
@@ -279,7 +280,16 @@ export function HotelsView({ nowMs }: Props) {
   ].filter(Boolean).length;
 
   const rows = useMemo(() => {
-    const all = LODGING.map((place) => {
+    /*
+     * The surveyed hotels, and the places only the price search knows about.
+     *
+     * The second list is flats, condos and lofts let by the night, plus the
+     * handful of real hotels OpenStreetMap missed. For a convention where four
+     * people share a room those are often the cheapest way to sleep inside the
+     * walk ring, and leaving them out answered "where could I stay" with only
+     * half of it. They carry their own price and can never be in the block.
+     */
+    const surveyed = LODGING.map((place) => {
       const block = blockRate(place.id, year);
       const rate = rateFor(place.id);
       return {
@@ -295,6 +305,19 @@ export function HotelsView({ nowMs }: Props) {
         skywalk: hasSkywalk(place.id) === true,
       };
     });
+
+    const listed = LISTINGS.map((one) => ({
+      place: { ...one, brand: undefined, stars: undefined } as Lodging,
+      block: null,
+      rate: null,
+      source: 'third' as const,
+      nightly: one.nightly,
+      // Nobody surveyed a skywalk into a flat, and a listing that claims one in
+      // its own name is marketing rather than a fact about the building.
+      skywalk: false,
+    }));
+
+    const all = [...surveyed, ...listed];
 
     /*
      * Every filter but the source one. Held apart because the comparison draws

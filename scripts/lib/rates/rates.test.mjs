@@ -17,7 +17,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { cheapFirst, isFresh, keeps, planRun, walkFloor } from './plan.mjs';
 import { budget, ledgerFor, noteTried, quotaFor, remaining, spend } from './quota.mjs';
 import { merge, runOnce, usable } from './run.mjs';
-import { matchByName, matchByPoint, onePerPlace, serpapi, words } from './sources.mjs';
+import {
+  conventionNights,
+  conventionSaturday,
+  matchByName,
+  matchByPoint,
+  onePerPlace,
+  serpapi,
+  words,
+} from './sources.mjs';
 
 const AUGUST = Date.parse('2026-08-11T12:00:00Z');
 const JULY = Date.parse('2026-07-11T12:00:00Z');
@@ -49,6 +57,45 @@ const quote = (placeId, nightly, at, source = 'serpapi') => ({
   currency: 'USD',
   at,
   source,
+});
+
+describe('which nights get priced', () => {
+  it('prices the convention, not a random Tuesday a month out', () => {
+    /*
+     * This was `nightOf(whenMs, 30)` — thirty days from whenever the run
+     * happened. A hotel a mile from the hall is a different market during Gen
+     * Con than in an ordinary week, which is the entire reason the block
+     * exists, so an ordinary week's price understates the real one and does it
+     * worst where it matters most.
+     */
+    const stay = conventionNights(Date.parse('2026-03-01T00:00:00Z'));
+    expect(stay).toMatchObject({ year: 2026, in: '2026-07-29', out: '2026-08-02' });
+  });
+
+  it('rolls to next year once this year’s convention has ended', () => {
+    // Asked the day after it finishes, the useful answer is the next one.
+    expect(conventionNights(Date.parse('2026-08-14T00:00:00Z'))).toMatchObject({
+      year: 2027,
+      in: '2027-08-04',
+      out: '2027-08-08',
+    });
+    // ...and during it, still this one.
+    expect(conventionNights(Date.parse('2026-07-31T00:00:00Z')).year).toBe(2026);
+  });
+
+  it('agrees with the app’s own convention dates, year by year', async () => {
+    /*
+     * The rule is copied rather than imported — this file runs under bare node
+     * in a workflow and `key-dates.ts` is TypeScript the app compiles — so the
+     * copy is checked against the original instead of trusted.
+     */
+    const { conventionSaturday: theirs } = await import('../../../src/data/key-dates.ts');
+    for (let year = 2022; year <= 2032; year += 1) {
+      expect(conventionSaturday(year).toISOString(), String(year)).toBe(
+        theirs(year).toISOString(),
+      );
+    }
+  });
 });
 
 describe('the monthly allowance', () => {

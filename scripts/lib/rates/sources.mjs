@@ -38,9 +38,49 @@
  * each is noted on the adapter. Run `--dry` first and read what comes back.
  */
 
-/** `2026-08-01` — the check-in the ring is priced for. */
+/** `2026-08-01` — a date this many days from a moment. */
 export const nightOf = (whenMs, offsetDays = 0) =>
   new Date(whenMs + offsetDays * 86_400_000).toISOString().slice(0, 10);
+
+const MS_DAY = 86_400_000;
+
+/**
+ * The nights a price is actually wanted for: the next Gen Con's own.
+ *
+ * This used to be "thirty days from whenever the run happened", which is a
+ * price for a random Sunday in September and no use to anybody planning a trip
+ * to a convention in August. Hotels within a mile of the hall are a different
+ * market during Gen Con than they are in an ordinary week — that is the whole
+ * reason the block exists — so an ordinary week's rate understates the real
+ * one, and understates it worst exactly where it matters most.
+ *
+ * Wednesday to Sunday, which is Trade Day through the last morning: the stay
+ * somebody actually books rather than a single night nobody does.
+ *
+ * The rule is Gen Con's own and is duplicated from `key-dates.ts` rather than
+ * imported, as `metresApart` is below, because this file runs under bare node
+ * in a workflow and that one is TypeScript the app compiles. `conventionNights`
+ * is checked against it in the tests, so the copy cannot drift silently.
+ */
+export function conventionSaturday(year) {
+  const first = Date.UTC(year, 7, 1);
+  const weekday = new Date(first).getUTCDay();
+  return new Date(first + ((6 - weekday + 7) % 7) * MS_DAY);
+}
+
+export function conventionNights(whenMs) {
+  const year = new Date(whenMs).getUTCFullYear();
+  const saturday = conventionSaturday(year);
+  // Once this year's Sunday has gone, the next Gen Con is next year's.
+  const sunday = saturday.getTime() + MS_DAY;
+  const next = whenMs > sunday ? conventionSaturday(year + 1) : saturday;
+  return {
+    year: new Date(next).getUTCFullYear(),
+    // Wednesday is Trade Day and the first night most people are in town.
+    in: new Date(next.getTime() - 3 * MS_DAY).toISOString().slice(0, 10),
+    out: new Date(next.getTime() + MS_DAY).toISOString().slice(0, 10),
+  };
+}
 
 /** A response that is not JSON, or not the JSON expected, is a broken source. */
 async function readJson(response, who) {
@@ -126,13 +166,14 @@ export const serpapi = {
    * which is a name-matching problem and looks identical to a thin response
    * unless somebody prints both.
    */
-  async quoteArea(places, { env, whenMs, query, fetch: get = fetch, report, charge }) {
+  async quoteArea(places, { env, whenMs, nights, query, fetch: get = fetch, report, charge }) {
+    const stay = nights ?? conventionNights(whenMs);
     const ask = (token) => {
       const url = new URL('https://serpapi.com/search.json');
       url.searchParams.set('engine', 'google_hotels');
       url.searchParams.set('q', query ?? 'hotels near Indiana Convention Center Indianapolis');
-      url.searchParams.set('check_in_date', nightOf(whenMs, 30));
-      url.searchParams.set('check_out_date', nightOf(whenMs, 31));
+      url.searchParams.set('check_in_date', stay.in);
+      url.searchParams.set('check_out_date', stay.out);
       url.searchParams.set('adults', '1');
       url.searchParams.set('currency', 'USD');
       url.searchParams.set('api_key', env.SERPAPI_KEY);
@@ -191,6 +232,11 @@ export const serpapi = {
       report?.({
         name: row.name,
         nightly,
+        // Enough to stand as a place in its own right if nothing claimed it:
+        // where it is, what kind of thing it is, and what it costs.
+        lat: point?.lat ?? null,
+        lng: point?.lng ?? null,
+        kind: row.type ?? null,
         matched: place?.name ?? null,
         // Which mechanism found it, so a run says whether coordinates arrived.
         how: place ? (byPoint ? 'position' : 'name') : null,
@@ -233,15 +279,16 @@ export const xotelo = {
    */
   canAsk: (place, { keys } = {}) => Boolean(keys?.[place.id]),
 
-  async quote(place, { keys, whenMs, fetch: get = fetch }) {
+  async quote(place, { keys, whenMs, nights, fetch: get = fetch }) {
+    const stay = nights ?? conventionNights(whenMs);
     const hotelKey = keys?.[place.id];
     // Not an error: most places will not have a key until somebody resolves one.
     if (!hotelKey) return null;
 
     const url = new URL('https://data.xotelo.com/api/rates');
     url.searchParams.set('hotel_key', hotelKey);
-    url.searchParams.set('chk_in', nightOf(whenMs, 30));
-    url.searchParams.set('chk_out', nightOf(whenMs, 31));
+    url.searchParams.set('chk_in', stay.in);
+    url.searchParams.set('chk_out', stay.out);
     url.searchParams.set('adults', '1');
 
     const body = await readJson(await get(url), 'xotelo');
@@ -292,7 +339,8 @@ export const apify = {
   ready: (env) => Boolean(env.APIFY_TOKEN && env.APIFY_ACTOR),
   cost: 1,
 
-  async quoteArea(places, { env, whenMs, fetch: get = fetch }) {
+  async quoteArea(places, { env, whenMs, nights, fetch: get = fetch }) {
+    const stay = nights ?? conventionNights(whenMs);
     const url = new URL(
       `https://api.apify.com/v2/acts/${env.APIFY_ACTOR}/run-sync-get-dataset-items`,
     );
@@ -303,8 +351,8 @@ export const apify = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         search: 'Indianapolis downtown',
-        checkIn: nightOf(whenMs, 30),
-        checkOut: nightOf(whenMs, 31),
+        checkIn: stay.in,
+        checkOut: stay.out,
         currency: 'USD',
         maxItems: 100,
       }),
