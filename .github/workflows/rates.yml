@@ -34,6 +34,10 @@ on:
         description: 'Plan only — no requests, no writes'
         type: boolean
         default: false
+      probe:
+        description: 'Ask Xotelo what it returns and print it — no writes, no quota'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,11 +62,25 @@ jobs:
 
       - run: npm ci
 
+      # What the live service actually returns, printed. The sandbox this app is
+      # written in cannot reach any of these hosts, so this is the only place
+      # the request shapes can be checked against reality.
+      - name: Probe
+        if: ${{ inputs.probe == true }}
+        run: node scripts/resolve-hotel-keys.mjs --probe
+
       - name: Show the plan
+        if: ${{ inputs.probe != true }}
         run: node scripts/fetch-rates.mjs --dry
 
+      # Before the prices, because a hotel with no TripAdvisor key is a hotel
+      # the keyless source cannot ask about — and that was every one of them.
+      - name: Resolve hotel keys
+        if: ${{ inputs.dry != true && inputs.probe != true }}
+        run: node scripts/resolve-hotel-keys.mjs
+
       - name: Gather
-        if: ${{ inputs.dry != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true }}
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -72,11 +90,11 @@ jobs:
       # The generated module has to compile and the gathering rules have to
       # still hold, or the pull request is one nobody can merge.
       - name: Check
-        if: ${{ inputs.dry != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true }}
         run: npm run check
 
       - name: Open a pull request
-        if: ${{ inputs.dry != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true }}
         uses: peter-evans/create-pull-request@v6
         with:
           branch: bot/hotel-rates
