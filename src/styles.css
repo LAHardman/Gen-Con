@@ -3062,13 +3062,39 @@ body {
   padding-right: calc(16px + env(safe-area-inset-right));
   padding-bottom: calc(40px + env(safe-area-inset-bottom));
   display: grid;
+  /*
+   * One centred column, and the container is what centres it.
+   *
+   * This was `width: min(46rem, 100%); margin-inline: auto` on every child,
+   * which works right up until a child sets its own `margin` — and two of them
+   * do. `.hotels__list { margin: 0 }` cancelled the centring and sat flush
+   * left; `.hotels__controls { margin: 0 auto }` kept it and sat in the middle.
+   * On a 1600px screen that put the filter bar 416px to the right of the list
+   * it was filtering, with a bare strip beside each. A track the container
+   * centres cannot be cancelled from inside a child.
+   */
+  grid-template-columns: min(46rem, 100%);
+  justify-content: center;
   gap: 12px;
   align-content: start;
 }
 
-.hotels > * {
-  width: min(46rem, 100%);
-  margin-inline: auto;
+/*
+ * A wide screen gets a wider column, because the rows below become a table on
+ * one and a 46rem table wastes most of a monitor. Prose does not widen with it
+ * — see the cap on the notes — because a 74rem line is not readable however
+ * much room there is for one.
+ */
+@media (min-width: 64rem) {
+  .hotels {
+    grid-template-columns: min(74rem, 100%);
+  }
+
+  .hotels__note,
+  .hotels__caution,
+  .hotels__empty {
+    max-width: 46rem;
+  }
 }
 
 .hotels__head h2 {
@@ -3176,7 +3202,7 @@ body {
   z-index: 40;
   display: grid;
   gap: 8px;
-  margin: 0 auto;
+  margin: 0;
   padding: 10px 0;
   background: var(--bg);
 }
@@ -3632,6 +3658,115 @@ body {
 .hotels__beside-meta {
   flex: 1 1 auto;
   color: var(--text-muted);
+}
+
+/* --------------------------------------------- the list as a table, on a desk */
+
+/*
+ * On a phone a hotel is a card: two columns is all that fits, so the name and
+ * the walk stack, and each row needs its own border to say where it ends.
+ *
+ * A monitor is not a wide phone. Given room, the four things a row actually
+ * says — which hotel, how far, what it costs, and what it costs elsewhere —
+ * are four columns that line up down the page, and a reader comparing the
+ * eleventh hotel with the second can run an eye down one of them instead of
+ * reading eleven cards. Once they line up the borders are noise: a rule
+ * between slices does the same job with a twentieth of the ink.
+ *
+ * 64rem because that is where four columns stop being cramped, not because it
+ * is anybody's idea of a desktop.
+ */
+@media (min-width: 64rem) {
+  /*
+   * Seven control rows in two columns. Stacked, they are a 450px huddle on the
+   * left of a 1180px bar with nothing to its right — which is the same empty
+   * strip the centring bug drew, arrived at a different way. Paired, the bar is
+   * half as tall and the list starts higher up.
+   */
+  .hotels__panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 30px;
+    align-items: center;
+  }
+
+  .hotels__list {
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+
+  .hotels__row {
+    /* Money last and narrowest: it is the column an eye returns to, and a
+       fixed right edge is what makes tabular figures worth setting. */
+    /* The money column has a floor rather than a share: "$304 the room" broken
+       after "the" is the one wrap on this page that looks like a mistake. */
+    grid-template-columns: minmax(0, 2fr) minmax(0, 2.2fr) minmax(0, 1.9fr) minmax(13.5rem, 0.9fr);
+    align-items: start;
+    gap: 0 22px;
+    padding: 13px 18px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .hotels__row + .hotels__row {
+    border-top: 1px solid var(--border);
+  }
+
+  /* Which row the pointer is on, across a slice this wide, is worth saying. */
+  .hotels__row:hover {
+    background: var(--panel-raised);
+  }
+
+  /*
+   * The name and the journey are one element on a phone and two columns here.
+   * `display: contents` hands the wrapper's children to the row's own grid, so
+   * the same markup lays out both ways without a second copy of it.
+   */
+  .hotels__what {
+    display: contents;
+  }
+
+  /*
+   * Every column pinned to row 1, which auto-placement will not do on its own:
+   * the comparison comes last in the markup and belongs in column 3, and a
+   * grid's cursor cannot move backwards — having just placed the price in
+   * column 4 it starts a second row rather than filling the gap it passed.
+   * That drew each hotel as an L, twice as tall as it needed to be.
+   */
+  .hotels__what h3,
+  .hotels__where,
+  .hotels__beside,
+  .hotels__price {
+    grid-row: 1;
+  }
+
+  .hotels__what h3 {
+    grid-column: 1;
+  }
+
+  .hotels__where {
+    grid-column: 2;
+    /* A hair down, so 12px type reads as level with 14px type beside it. */
+    margin: 1px 0 0;
+  }
+
+  .hotels__price {
+    grid-column: 4;
+  }
+
+  /* Beside the row rather than under it, now that there is a column for it. */
+  .hotels__beside {
+    grid-column: 3;
+    display: grid;
+    justify-items: start;
+    gap: 1px;
+    margin: 0;
+    padding: 0 0 0 11px;
+    border-top: 0;
+  }
 }
 
 .hotels__party {
