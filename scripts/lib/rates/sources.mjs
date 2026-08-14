@@ -126,20 +126,48 @@ export const serpapi = {
    * which is a name-matching problem and looks identical to a thin response
    * unless somebody prints both.
    */
-  async quoteArea(places, { env, whenMs, query, fetch: get = fetch, report }) {
-    const url = new URL('https://serpapi.com/search.json');
-    url.searchParams.set('engine', 'google_hotels');
-    url.searchParams.set('q', query ?? 'hotels near Indiana Convention Center Indianapolis');
-    url.searchParams.set('check_in_date', nightOf(whenMs, 30));
-    url.searchParams.set('check_out_date', nightOf(whenMs, 31));
-    url.searchParams.set('adults', '1');
-    url.searchParams.set('currency', 'USD');
-    url.searchParams.set('api_key', env.SERPAPI_KEY);
+  async quoteArea(places, { env, whenMs, query, fetch: get = fetch, report, charge }) {
+    const ask = (token) => {
+      const url = new URL('https://serpapi.com/search.json');
+      url.searchParams.set('engine', 'google_hotels');
+      url.searchParams.set('q', query ?? 'hotels near Indiana Convention Center Indianapolis');
+      url.searchParams.set('check_in_date', nightOf(whenMs, 30));
+      url.searchParams.set('check_out_date', nightOf(whenMs, 31));
+      url.searchParams.set('adults', '1');
+      url.searchParams.set('currency', 'USD');
+      url.searchParams.set('api_key', env.SERPAPI_KEY);
+      if (token) url.searchParams.set('next_page_token', token);
+      return url;
+    };
 
-    const body = await readJson(await get(url), 'serpapi');
-    if (body.error) throw new Error(`serpapi: ${body.error}`);
-    const rows = body.properties;
-    if (!Array.isArray(rows)) throw new Error('serpapi: no properties[] in the response');
+    /*
+     * Paged, because one search is one page and one page is about twenty
+     * hotels.
+     *
+     * Indianapolis alone has 184 of ours. "One search per town reaches
+     * everything" was true of the towns with nine hotels in them and quietly
+     * false of the one with most of them — a single search would have priced
+     * the first twenty and left a hundred and sixty looking simply unpriced,
+     * which is indistinguishable from the service not working.
+     *
+     * Every page is another unit, so every page after the first asks `charge`
+     * first and stops when the month says no. The cap is a backstop against a
+     * token that never stops arriving, not a budget: the budget is the ledger.
+     */
+    const rows = [];
+    let token = null;
+    for (let page = 0; page < 12; page += 1) {
+      // The first page was paid for by the run loop before it called this.
+      if (page > 0 && charge && !charge()) break;
+      const body = await readJson(await get(ask(token)), 'serpapi');
+      if (body.error) throw new Error(`serpapi: ${body.error}`);
+      if (!Array.isArray(body.properties)) {
+        throw new Error('serpapi: no properties[] in the response');
+      }
+      rows.push(...body.properties);
+      token = body.serpapi_pagination?.next_page_token ?? null;
+      if (!token) break;
+    }
 
     const found = [];
     for (const row of rows) {

@@ -616,6 +616,96 @@ describe('one search per town, rather than one search', () => {
     ]);
   });
 
+  it('walks the pages, because one search is about twenty hotels', async () => {
+    /*
+     * The gap that would have looked like a broken service. Indianapolis has
+     * 184 of our hotels in it and a Google Hotels search returns a page of
+     * about twenty — so a single search prices the first twenty and leaves a
+     * hundred and sixty reading as simply unpriced.
+     */
+    const pages = [
+      { properties: [{ name: 'Motel 6 Southport Indianapolis', rate_per_night: { extracted_lowest: 71 } }], serpapi_pagination: { next_page_token: 'two' } },
+      { properties: [{ name: 'Conrad Carmel', rate_per_night: { extracted_lowest: 300 } }], serpapi_pagination: { next_page_token: 'three' } },
+      { properties: [{ name: 'Super 8 Airport', rate_per_night: { extracted_lowest: 60 } }] },
+    ];
+    const tokens = [];
+    let page = 0;
+    const found = await serpapi.quoteArea([PLACES[3], PLACES[4], PLACES[5]], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async (url) => {
+        tokens.push(new URL(url).searchParams.get('next_page_token'));
+        const body = pages[page++];
+        return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+      },
+      charge: () => true,
+    });
+
+    expect(tokens).toEqual([null, 'two', 'three']);
+    expect(found.map((one) => one.placeId).sort()).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('records every page it walked in the ledger, not just the first', async () => {
+    /*
+     * The wiring, not the adapter. `charge` only bounds anything if the run
+     * loop actually hands one over — without it a paging source is handed a
+     * missing callback, pages freely, and spends a month's allowance the
+     * ledger has no record of.
+     */
+    const ledger = ledgerFor(null, AUGUST);
+    const pager = {
+      name: 'serpapi',
+      covers: 'area',
+      ready: () => true,
+      cost: 1,
+      areas: (all) => [{ places: all, label: 'one town' }],
+      quoteArea: async (_places, { charge }) => {
+        // Two pages beyond the one the loop already paid for.
+        charge();
+        charge();
+        return [];
+      },
+    };
+
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger,
+      env: {},
+      whenMs: AUGUST,
+      sources: [pager],
+    });
+
+    expect(ledger.spent.serpapi).toBe(3);
+  });
+
+  it('stops paging when the month says stop, rather than spending it unseen', async () => {
+    // Every page is another search. A source that pages without charging for
+    // them spends an allowance the ledger never sees.
+    let page = 0;
+    const found = await serpapi.quoteArea([PLACES[3], PLACES[4]], {
+      env: { SERPAPI_KEY: 'k' },
+      whenMs: AUGUST,
+      fetch: async () => {
+        page += 1;
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              properties: [{ name: 'Motel 6 Southport Indianapolis', rate_per_night: { extracted_lowest: 71 } }],
+              serpapi_pagination: { next_page_token: 'more' },
+            }),
+        };
+      },
+      // The first page is paid for by the run loop; nothing after it is.
+      charge: () => false,
+    });
+
+    expect(page).toBe(1);
+    expect(found).toHaveLength(1);
+  });
+
   it('spends one unit per town, and stops when the allowance runs out', async () => {
     // Three towns and two searches left: two get asked, the third does not, and
     // nothing goes over.

@@ -10,16 +10,25 @@
 # second run with whatever the first left, which is usually nothing. That is
 # also why the store is committed — it is the only memory this has.
 #
-# NO SECRETS ARE REQUIRED. A source with no key configured takes itself out and
-# the run proceeds with the rest, which is the same path as a source being down.
-# On a fork with no secrets at all, this collects nothing, writes an unchanged
-# file, and opens no pull request — which is the correct behaviour rather than a
-# failure.
+# NO SECRETS ARE REQUIRED, AND WITHOUT ONE THIS COLLECTS NOTHING. A source with
+# no key takes itself out, the run proceeds with the rest, and on a fork with no
+# secrets at all it writes an unchanged file and opens no pull request — correct
+# behaviour rather than a failure, but also not prices. Measured on a runner on
+# 2026-08-14, there is no keyless way in:
 #
-# ONE-TIME SETUP: the same "Allow GitHub Actions to create and approve pull
-# requests" tick that `refresh.yml` needs, plus whichever of these secrets you
-# have — SERPAPI_KEY, APIFY_TOKEN, APIFY_ACTOR. (Amadeus is gone: it closed its
-# self-service tier to individuals, so there is no key to hold.)
+#   xotelo  prices a hotel for free but will not hand out the index. Its
+#           /api/search is 401 "RapidAPI only", /api/list refuses every
+#           parameter, and there is no /api/locations. Without a TripAdvisor key
+#           per hotel it cannot be asked anything. See scripts/resolve-hotel-keys.mjs.
+#   apify   needs a token and an actor id you choose.
+#   serpapi needs a key. Free tier, no card, 100 searches a month — and this app
+#           wants about a dozen: one per town, then a page at a time through the
+#           big ones, which is where all 236 hotels actually come from.
+#
+# ONE-TIME SETUP: the "Allow GitHub Actions to create and approve pull requests"
+# tick that `refresh.yml` also needs, and SERPAPI_KEY in the repository's
+# secrets. Then run this with `verify: serpapi` — one search, printed in full,
+# nothing written — before trusting a month's run to it.
 
 name: Refresh hotel prices
 
@@ -38,6 +47,11 @@ on:
         description: 'Ask Xotelo what it returns and print it — no writes, no quota'
         type: boolean
         default: false
+      verify:
+        description: 'One real search against one source, printed in full — no writes'
+        type: choice
+        default: 'no'
+        options: ['no', 'serpapi', 'xotelo', 'apify']
 
 permissions:
   contents: write
@@ -62,25 +76,37 @@ jobs:
 
       - run: npm ci
 
+      # One request, printed in full, nothing written. This is how a new key is
+      # proved before a month's run depends on it: the adapters were written
+      # from documentation and none of these hosts answers from the sandbox
+      # this app is built in, so the first real answer is worth reading.
+      - name: Verify one source
+        if: ${{ inputs.verify != 'no' }}
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_ACTOR: ${{ secrets.APIFY_ACTOR }}
+        run: node scripts/fetch-rates.mjs --verify=${{ inputs.verify }}
+
       # What the live service actually returns, printed. The sandbox this app is
       # written in cannot reach any of these hosts, so this is the only place
       # the request shapes can be checked against reality.
       - name: Probe
-        if: ${{ inputs.probe == true }}
+        if: ${{ inputs.probe == true && inputs.verify == 'no' }}
         run: node scripts/resolve-hotel-keys.mjs --probe
 
       - name: Show the plan
-        if: ${{ inputs.probe != true }}
+        if: ${{ inputs.probe != true && inputs.verify == 'no' }}
         run: node scripts/fetch-rates.mjs --dry
 
       # Before the prices, because a hotel with no TripAdvisor key is a hotel
       # the keyless source cannot ask about — and that was every one of them.
       - name: Resolve hotel keys
-        if: ${{ inputs.dry != true && inputs.probe != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         run: node scripts/resolve-hotel-keys.mjs
 
       - name: Gather
-        if: ${{ inputs.dry != true && inputs.probe != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -90,11 +116,11 @@ jobs:
       # The generated module has to compile and the gathering rules have to
       # still hold, or the pull request is one nobody can merge.
       - name: Check
-        if: ${{ inputs.dry != true && inputs.probe != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         run: npm run check
 
       - name: Open a pull request
-        if: ${{ inputs.dry != true && inputs.probe != true }}
+        if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         uses: peter-evans/create-pull-request@v6
         with:
           branch: bot/hotel-rates

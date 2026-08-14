@@ -103,6 +103,13 @@ export async function runOnce({
             fetch: get,
             keys,
             cache,
+            /*
+             * A source that pages charges for each one. The first page is paid
+             * for above; this is how the second and the tenth are, and how the
+             * month says stop. Without it a paging source spends an allowance
+             * the ledger never sees.
+             */
+            charge: () => spend(ledger, source.name, source.cost, env),
           });
           const outside = rows.filter((row) => !inBlock.has(row.placeId));
           for (const row of outside) fresh.push({ ...row, source: source.name, at: iso(whenMs) });
