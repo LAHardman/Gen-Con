@@ -27,7 +27,7 @@ export interface Rate {
 }
 
 /** When this file was last written, whether or not anything changed. */
-export const REFRESHED = '2026-08-11';
+export const REFRESHED = '2026-08-14';
 
 /**
  * The nights these prices are for, and whether they are the convention's own.
@@ -50,8 +50,8 @@ export interface Stay {
 }
 
 export const STAY: Stay = {
-  in: '',
-  out: '',
+  in: '2026-10-14',
+  out: '2026-10-18',
   isConvention: false,
   /** The convention these stand in for, when they are standing in. */
   conventionYear: 2027,
@@ -59,11 +59,65 @@ export const STAY: Stay = {
 };
 
 /** The cheapest walkable rate — the cap the drive ring was gathered under. */
-export const WALK_FLOOR: number | null = null;
+export const WALK_FLOOR: number | null = 122;
 
 /** Cheapest first. */
 export const RATES: ReadonlyArray<Rate> = [
-
+  { placeId: 'way1033648891', nightly: 54, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way239624857', nightly: 59, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way219234272', nightly: 60, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way297685504', nightly: 70, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'node12556850850', nightly: 75, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1225570047', nightly: 75, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way627884885', nightly: 77, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240398696', nightly: 86, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way195758449', nightly: 89, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240444147', nightly: 90, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way621313970', nightly: 91, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1033669563', nightly: 92, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way222676799', nightly: 93, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way702928832', nightly: 93, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way805171306', nightly: 93, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way974343368', nightly: 96, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way242796033', nightly: 98, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way171495008', nightly: 103, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240442775', nightly: 105, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240445702', nightly: 105, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way956279347', nightly: 105, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way239624856', nightly: 107, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way972458696', nightly: 107, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1076486229', nightly: 109, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way972461709', nightly: 112, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way171495006', nightly: 114, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way702927187', nightly: 114, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1033674748', nightly: 116, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way679849431', nightly: 116, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way802311024', nightly: 116, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way507057663', nightly: 118, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way994115522', nightly: 120, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'relation4842655', nightly: 122, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240897267', nightly: 123, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way596701353', nightly: 137, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way294890955', nightly: 143, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'node4079640859', nightly: 145, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240018523', nightly: 146, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'node4079672858', nightly: 149, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way992299460', nightly: 149, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way171495005', nightly: 150, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way127676083', nightly: 151, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way192523020', nightly: 151, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way296789502', nightly: 151, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way195520116', nightly: 153, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way956146515', nightly: 153, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way195521782', nightly: 169, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way240018513', nightly: 180, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1225570331', nightly: 182, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1025706740', nightly: 192, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way802308281', nightly: 198, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way681928379', nightly: 208, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'relation6081914', nightly: 229, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way1123127692', nightly: 246, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
+  { placeId: 'way341313486', nightly: 289, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0 },
 ];
 
 const BY_PLACE = new Map(RATES.map((rate) => [rate.placeId, rate]));
