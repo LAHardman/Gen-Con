@@ -100,13 +100,16 @@ if (PROBE) {
   const OUT = nightOf(Date.now(), 31);
 
   const tries = [
-    ['list, with the dates the rates endpoint wants', list(`location_key=g37209&chk_in=${IN}&chk_out=${OUT}`)],
-    ['list, dates and paging', list(`location_key=g37209&chk_in=${IN}&chk_out=${OUT}&offset=0&limit=30`)],
-    ['list, paging but no dates', list('location_key=g37209&offset=0&limit=30&sort=best_value')],
-    ['list, geo id without its g', list(`location_key=37209&chk_in=${IN}&chk_out=${OUT}`)],
-    ['list, called hotel_key instead', list(`hotel_key=g37209&chk_in=${IN}&chk_out=${OUT}`)],
-    ['rates, with a plausible key, to see a good response', `https://data.xotelo.com/api/rates?hotel_key=g37209-d1750052&chk_in=${IN}&chk_out=${OUT}&adults=1`],
-    ['heatmap, which may name its hotel', 'https://data.xotelo.com/api/heatmap?hotel_key=g37209-d1750052'],
+    ['list, no paging, no dates', list('location_key=g37209')],
+    ['list, geo without its g, no dates', list('location_key=37209')],
+    ['list, sorted by popularity', list('location_key=g37209&limit=30&offset=0&sort=popularity')],
+    ['list, sorted by price', list('location_key=g37209&limit=30&offset=0&sort=price')],
+    ['list, dates in US order', list('location_key=g37209&chk_in=09/13/2026&chk_out=09/14/2026')],
+    ['list, dates only a week out', list(`location_key=g37209&chk_in=${nightOf(Date.now(), 7)}&chk_out=${nightOf(Date.now(), 8)}`)],
+    ['list, given a hotel key, to see what it says', list('location_key=g37209-d1750052')],
+    ['is there a locations endpoint', 'https://data.xotelo.com/api/locations?query=Indianapolis'],
+    ['is there a hotels endpoint', 'https://data.xotelo.com/api/hotels?location_key=g37209'],
+    ['rates, further out, to see a non-empty one', `https://data.xotelo.com/api/rates?hotel_key=g37209-d1750052&chk_in=${nightOf(Date.now(), 75)}&chk_out=${nightOf(Date.now(), 76)}&adults=1`],
   ];
 
   for (const [what, url] of tries) {
