@@ -144,7 +144,7 @@ function priceStory(
 ): string {
   const { block, rate, nightly } = row;
   if (nightly === null) {
-    return 'No price. Nobody has gathered a market rate for this one yet, and Gen Con publishes none. It is not a sign it is dear or cheap.';
+    return 'No price. Nobody has gathered a market rate for this one yet, and Gen Con publishes none. It is not a sign it is expensive or cheap.';
   }
   if (block?.projected) {
     return (
@@ -187,9 +187,13 @@ function priceStory(
  * returned twenty properties and two prices, where a night six weeks out
  * returned two hundred and thirty.
  *
- * A quiet week's rate is real and useful and *cheaper than* the convention.
+ * A quiet week's rate is real and useful and cheaper than the convention.
  * Printing it without saying which week would make it a convention price, which
  * it is not, and would have somebody budget short.
+ *
+ * Written in the plainest American English the page can manage: this is an app
+ * for a convention in Indianapolis, and a reader should never have to stop and
+ * work out what a word means when the word is about their money.
  */
 export function stayNote(stay: Stay): string {
   if (!stay.in) return '';
@@ -199,7 +203,7 @@ export function stayNote(stay: Stay): string {
   return (
     `Gen Con ${stay.conventionYear} is not on sale yet — hotels open their calendars about a ` +
     `year out — so bought prices are for ${stay.in} to ${stay.out}, the same Wednesday to ` +
-    `Sunday in a quiet week. Expect the real thing to be dearer. `
+    `Sunday in a quiet week. Expect convention week to cost more. `
   );
 }
 
@@ -648,7 +652,7 @@ export function HotelsView({ nowMs }: Props) {
                       : ` · ${dollars(perPerson(alt.nightly, people))} each`}
                     {alt.saving !== null && alt.saving !== 0
                       ? ` · ${dollars(Math.abs(perPerson(alt.saving, people)))} a night each ${
-                          alt.saving > 0 ? 'cheaper' : 'dearer'
+                          alt.saving > 0 ? 'cheaper' : 'more'
                         }`
                       : ''}
                   </span>

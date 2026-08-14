@@ -171,7 +171,7 @@ describe('which nights the bought prices are for', () => {
     });
     expect(said).toMatch(/Gen Con 2027 is not on sale yet/);
     expect(said).toMatch(/2026-10-07 to 2026-10-11/);
-    expect(said).toMatch(/Expect the real thing to be dearer/);
+    expect(said).toMatch(/Expect convention week to cost more/);
     // And never the word that would make it a convention rate.
     expect(said).not.toMatch(/for the convention itself/);
   });
@@ -291,7 +291,7 @@ describe('putting the list in an order', () => {
       'Nestle Inn', // $290, a shade under the Westin's projected block rate
       'The Westin Indianapolis',
       'JW Marriott Indianapolis',
-      'Indy Urban Nest', // $341 the flat, so $171 each — dearer than the block hotels
+      'Indy Urban Nest', // $341 the flat, so $171 each — more than the block hotels
       'Corner Inn',
       'Unasked Lodge',
       'Super 8 Airport',
@@ -649,7 +649,7 @@ describe('the comparison, on the row it is about', () => {
      */
     render(<HotelsView nowMs={NOW} />);
     expect(beside('The Westin')!.textContent).toMatch(/\$1 a night each cheaper/);
-    expect(beside('JW Marriott')!.textContent).toMatch(/\$48 a night each dearer/);
+    expect(beside('JW Marriott')!.textContent).toMatch(/\$48 a night each more/);
   });
 
   it('has no section of its own left under the list', () => {
