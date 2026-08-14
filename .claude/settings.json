@@ -11,5 +11,17 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm run check)",
+      "Bash(npm run check:geometry)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test)",
+      "Bash(npm run build)",
+      "mcp__github__actions_list",
+      "mcp__github__actions_get",
+      "mcp__github__get_job_logs"
+    ]
   }
 }
