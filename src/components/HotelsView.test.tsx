@@ -76,12 +76,30 @@ vi.mock('../data/rates', () => {
   return {
     RATES,
     REFRESHED: '2026-08-11',
+    // The stay the bought prices are for. The convention itself here, so the
+    // fallback wording is exercised by its own test rather than by every one.
+    STAY: {
+      in: '2027-08-04',
+      out: '2027-08-08',
+      isConvention: true,
+      conventionYear: 2027,
+      conventionFrom: '2027-08-04',
+    },
     WALK_FLOOR: 240,
     rateFor: (id: string) => RATES.find((one) => one.placeId === id) ?? null,
   };
 });
 
-const { HotelsView } = await import('./HotelsView');
+const { HotelsView, stayNote } = await import('./HotelsView');
+
+/** A stay with nothing gathered into it yet. */
+const EMPTY_STAY = {
+  in: '2027-08-04',
+  out: '2027-08-08',
+  isConvention: true,
+  conventionYear: 2027,
+  conventionFrom: '2027-08-04',
+};
 
 afterEach(cleanup);
 
@@ -97,6 +115,46 @@ const rows = () => screen.getAllByRole('listitem');
  */
 const row = (name: string) =>
   rows().find((one) => one.querySelector('h3')?.textContent?.includes(name))!;
+
+describe('which nights the bought prices are for', () => {
+  it('says so when they are the convention’s own', () => {
+    render(<HotelsView nowMs={NOW} />);
+    expect(page().textContent).toMatch(
+      /Bought prices are for the convention itself, 2027-08-04 to 2027-08-08/,
+    );
+  });
+
+  it('says plainly when they are a stand-in, and that the real thing costs more', () => {
+    /*
+     * The claim that could actually mislead somebody into budgeting short.
+     *
+     * Hotels open their calendars about a year out, so for most of the year the
+     * next Gen Con cannot be priced at all — measured against the live service,
+     * asking for 2027 returned twenty properties and two prices where a night
+     * six weeks out returned two hundred and thirty. A quiet week's rate is
+     * real, useful and *cheaper than* the convention, and printing it without
+     * saying which week would make it a convention price, which it is not.
+     */
+    const said = stayNote({
+      in: '2026-10-07',
+      out: '2026-10-11',
+      isConvention: false,
+      conventionYear: 2027,
+      conventionFrom: '2027-08-04',
+    });
+    expect(said).toMatch(/Gen Con 2027 is not on sale yet/);
+    expect(said).toMatch(/2026-10-07 to 2026-10-11/);
+    expect(said).toMatch(/Expect the real thing to be dearer/);
+    // And never the word that would make it a convention rate.
+    expect(said).not.toMatch(/for the convention itself/);
+  });
+
+  it('says nothing at all when no stay has been gathered', () => {
+    // The starting state, and the state if every free tier withdraws. A blank
+    // date printed as a date is worse than no sentence.
+    expect(stayNote({ ...EMPTY_STAY, in: '', out: '' })).toBe('');
+  });
+});
 
 describe('what it refuses to be mistaken for', () => {
   /*

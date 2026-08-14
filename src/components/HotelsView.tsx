@@ -45,7 +45,7 @@ import { planningYear } from '../data/key-dates';
 import { DRIVE_METRES, LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
 import { CHEAPEST } from '../data/partners';
 import { LISTINGS } from '../data/listings';
-import { RATES, REFRESHED, rateFor, type Rate } from '../data/rates';
+import { RATES, REFRESHED, STAY, rateFor, type Rate, type Stay } from '../data/rates';
 
 /** How far, and where the price comes from. Null in either means "don't mind". */
 type Ring = 'walk' | 'drive';
@@ -161,6 +161,32 @@ function priceStory(
     `${rate!.sources.join(' and ')}, gathered ${age(rate!.at, nowMs)}` +
     `${rate!.spread > 0 ? `, and they differ by ${dollars(rate!.spread)}` : ''}. ` +
     `It is not a price for your dates, and Gen Con has no block here.`
+  );
+}
+
+/**
+ * Which nights the bought prices are for — the sentence that keeps them honest.
+ *
+ * Gen Con's own rates are for Gen Con by definition. A market rate is for
+ * whichever stay was gathered, and hotels do not open their calendars until
+ * about a year out, so for most of the year the convention cannot be priced at
+ * all. Measured against the live service on 2026-08-14: asking for Gen Con 2027
+ * returned twenty properties and two prices, where a night six weeks out
+ * returned two hundred and thirty.
+ *
+ * A quiet week's rate is real and useful and *cheaper than* the convention.
+ * Printing it without saying which week would make it a convention price, which
+ * it is not, and would have somebody budget short.
+ */
+export function stayNote(stay: Stay): string {
+  if (!stay.in) return '';
+  if (stay.isConvention) {
+    return `Bought prices are for the convention itself, ${stay.in} to ${stay.out}. `;
+  }
+  return (
+    `Gen Con ${stay.conventionYear} is not on sale yet — hotels open their calendars about a ` +
+    `year out — so bought prices are for ${stay.in} to ${stay.out}, the same Wednesday to ` +
+    `Sunday in a quiet week. Expect the real thing to be dearer. `
   );
 }
 
@@ -614,6 +640,18 @@ export function HotelsView({ nowMs }: Props) {
           ? `${rows.length} of ${LODGING.length} hotels are ${words}, ${priced} of them priced. `
           : `${priced} of ${rows.length} priced. `}
         Tap a price to see where it came from.{' '}
+        {/*
+          Which nights the bought prices are for, whenever there are any.
+          Gen Con's own rates are for Gen Con by definition; a market rate is
+          for whichever stay was gathered, and hotels do not open their
+          calendars until about a year out — so for most of the year the
+          convention cannot be priced at all and this stands in for it. Saying
+          which is the difference between a comparison and a claim.
+        */}
+        {rows.some((one) => one.source === 'third') ? stayNote(STAY) : ''}
+        {LISTINGS.length > 0
+          ? `${LISTINGS.length} of these are flats and rooms let by the night rather than hotels, found in the price search and not in any survey. `
+          : ''}
         {/* Said only while that sort is on, because otherwise it explains a
             control nobody has touched. */}
         {sort === 'rating'

@@ -68,6 +68,32 @@ export function conventionSaturday(year) {
   return new Date(first + ((6 - weekday + 7) % 7) * MS_DAY);
 }
 
+/**
+ * The same shape of stay, near enough that hotels are actually selling it.
+ *
+ * MEASURED, on 2026-08-14: asked for Gen Con 2027 — 355 days out — Google
+ * Hotels returned twenty properties, two of them with a price. Asked for a
+ * night in six weeks it returned two hundred and thirty. Hotels open their
+ * calendars eleven to thirteen months ahead, so a convention that far out is
+ * not yet a thing anybody can book, and a page of blanks is worse than a page
+ * of prices for a comparable week honestly labelled.
+ *
+ * Wednesday to Sunday, like the convention, because a weekend prices
+ * differently from a Tuesday and the point is to be comparable.
+ */
+export function nearbyStay(whenMs) {
+  const start = new Date(whenMs + 56 * MS_DAY);
+  // Walk to the next Wednesday. 3 is Wednesday.
+  const wednesday = new Date(
+    start.getTime() + ((3 - start.getUTCDay() + 7) % 7) * MS_DAY,
+  );
+  return {
+    year: wednesday.getUTCFullYear(),
+    in: wednesday.toISOString().slice(0, 10),
+    out: new Date(wednesday.getTime() + 4 * MS_DAY).toISOString().slice(0, 10),
+  };
+}
+
 export function conventionNights(whenMs) {
   const year = new Date(whenMs).getUTCFullYear();
   const saturday = conventionSaturday(year);

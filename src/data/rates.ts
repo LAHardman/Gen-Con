@@ -29,6 +29,35 @@ export interface Rate {
 /** When this file was last written, whether or not anything changed. */
 export const REFRESHED = '2026-08-11';
 
+/**
+ * The nights these prices are for, and whether they are the convention's own.
+ *
+ * Hotels open their calendars about a year out, so for most of the year the
+ * next Gen Con cannot be booked at all and there is nothing to gather. When
+ * that is the case this holds a comparable Wednesday-to-Sunday that *is* on
+ * sale, and `isConvention` is false — the page says so rather than letting a
+ * quiet week's rate pass for a convention one, which it is not and is cheaper
+ * than.
+ */
+export interface Stay {
+  /** Check-in and check-out, ISO. */
+  in: string;
+  out: string;
+  /** Whether these really are the convention's nights, or a stand-in for them. */
+  isConvention: boolean;
+  conventionYear: number;
+  conventionFrom: string;
+}
+
+export const STAY: Stay = {
+  in: '',
+  out: '',
+  isConvention: false,
+  /** The convention these stand in for, when they are standing in. */
+  conventionYear: 2027,
+  conventionFrom: '2027-08-04',
+};
+
 /** The cheapest walkable rate — the cap the drive ring was gathered under. */
 export const WALK_FLOOR: number | null = null;
 

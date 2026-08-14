@@ -37,9 +37,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { planRun } from './lib/rates/plan.mjs';
-import { budget, ledgerFor, SOURCES } from './lib/rates/quota.mjs';
+import { budget, ledgerFor, spend, SOURCES } from './lib/rates/quota.mjs';
 import { runOnce } from './lib/rates/run.mjs';
-import { ALL, conventionNights } from './lib/rates/sources.mjs';
+import { ALL, conventionNights, nearbyStay } from './lib/rates/sources.mjs';
 import { placesFromStrangers } from './lib/rates/strangers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -127,7 +127,59 @@ try {
  * `isFresh` would have kept every one of them and skipped the whole run. They
  * are dropped, once, when the stay changes.
  */
-const nights = conventionNights(now);
+const ledger = ledgerFor(store.ledger, now);
+const wanted = conventionNights(now);
+
+/**
+ * Whether anybody is actually selling those nights yet.
+ *
+ * One page, one unit, before the month's allowance is committed to a stay that
+ * cannot be bought. Hotels open their calendars eleven to thirteen months out,
+ * so for most of the year the next convention is not yet bookable — measured on
+ * 2026-08-14, Gen Con 2027 returned twenty properties and two prices where a
+ * night six weeks out returned two hundred and thirty.
+ *
+ * The fallback is a comparable Wednesday-to-Sunday near enough to be on sale,
+ * and every price says which stay it is for, so the page can too. It is not a
+ * convention rate and must never be printed as one.
+ */
+async function bookable(stay) {
+  const source = ALL.find((one) => one.name === 'serpapi');
+  if (!source?.ready(env)) return true;
+  if (!spend(ledger, 'serpapi', 1, env)) return true;
+  const seen = [];
+  try {
+    await source.quoteArea(
+      places.filter((one) => !inBlock.has(one.id)),
+      {
+        env,
+        whenMs: now,
+        nights: stay,
+        query: 'hotels near Indiana Convention Center Indianapolis',
+        report: (one) => seen.push(one),
+        charge: () => false,
+      },
+    );
+  } catch {
+    // A broken source is not evidence about the calendar. Let the run find out.
+    return true;
+  }
+  const priced = seen.filter((one) => one.nightly).length;
+  console.error(`  ${stay.in}: ${priced} of ${seen.length} on that page carry a price`);
+  return priced >= 10;
+}
+
+const onSale = dry || verify ? true : await bookable(wanted);
+const nights = onSale ? wanted : { ...nearbyStay(now), insteadOf: wanted };
+
+if (!onSale) {
+  console.error(
+    `\nGen Con ${wanted.year} (${wanted.in}) is not on sale yet — hotels open their\n` +
+      `calendars about a year out. Pricing ${nights.in} to ${nights.out} instead, which is\n` +
+      `the same Wednesday-to-Sunday shape, and saying so on every price.`,
+  );
+}
+
 if (store.nights && store.nights.in !== nights.in) {
   console.error(
     `\nthe stay moved: ${store.nights.in}→${store.nights.out} is now ${nights.in}→${nights.out}.` +
@@ -137,7 +189,6 @@ if (store.nights && store.nights.in !== nights.in) {
 }
 store.nights = nights;
 
-const ledger = ledgerFor(store.ledger, now);
 const budgets = budget(ledger, env);
 
 console.error(
@@ -484,6 +535,35 @@ export interface Rate {
 
 /** When this file was last written, whether or not anything changed. */
 export const REFRESHED = '${new Date(now).toISOString().slice(0, 10)}';
+
+/**
+ * The nights these prices are for, and whether they are the convention's own.
+ *
+ * Hotels open their calendars about a year out, so for most of the year the
+ * next Gen Con cannot be booked at all and there is nothing to gather. When
+ * that is the case this holds a comparable Wednesday-to-Sunday that *is* on
+ * sale, and \`isConvention\` is false — the page says so rather than letting a
+ * quiet week's rate pass for a convention one, which it is not and is cheaper
+ * than.
+ */
+export interface Stay {
+  /** Check-in and check-out, ISO. */
+  in: string;
+  out: string;
+  /** Whether these really are the convention's nights, or a stand-in for them. */
+  isConvention: boolean;
+  conventionYear: number;
+  conventionFrom: string;
+}
+
+export const STAY: Stay = {
+  in: '${nights.in}',
+  out: '${nights.out}',
+  isConvention: ${onSale},
+  /** The convention these stand in for, when they are standing in. */
+  conventionYear: ${wanted.year},
+  conventionFrom: '${wanted.in}',
+};
 
 /** The cheapest walkable rate — the cap the drive ring was gathered under. */
 export const WALK_FLOOR: number | null = ${result.floor ?? 'null'};
