@@ -37,7 +37,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { matchByName, matchByPoint } from './lib/rates/sources.mjs';
+import { matchByName, matchByPoint, nightOf } from './lib/rates/sources.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STORE = join(ROOT, 'src/data/rate-store.json');
@@ -86,11 +86,27 @@ const get = async (url) => {
 if (PROBE) {
   console.error('Asking Xotelo what it actually returns. Nothing is written.\n');
 
+  /*
+   * What the first round established, so a second round is not spent on it:
+   *   /api/rates   is free and works — it answered "chk_in is required"
+   *   /api/search  is not — 401, "available only for RapidAPI"
+   *   /api/list    exists and rejected `location_key` alone as a bad request
+   *
+   * So the question left is what else `list` wants. It returns prices, and the
+   * priced endpoint needs dates, which is the first guess below.
+   */
+  const list = (query) => `https://data.xotelo.com/api/list?${query}`;
+  const IN = nightOf(Date.now(), 30);
+  const OUT = nightOf(Date.now(), 31);
+
   const tries = [
-    ['a page of hotels in a town', `https://data.xotelo.com/api/list?location_key=g37209&limit=3&offset=0`],
-    ['the same, with no limit', `https://data.xotelo.com/api/list?location_key=g37209`],
-    ['is there a search endpoint', `https://data.xotelo.com/api/search?query=JW%20Marriott%20Indianapolis`],
-    ['a rates call with no key', `https://data.xotelo.com/api/rates`],
+    ['list, with the dates the rates endpoint wants', list(`location_key=g37209&chk_in=${IN}&chk_out=${OUT}`)],
+    ['list, dates and paging', list(`location_key=g37209&chk_in=${IN}&chk_out=${OUT}&offset=0&limit=30`)],
+    ['list, paging but no dates', list('location_key=g37209&offset=0&limit=30&sort=best_value')],
+    ['list, geo id without its g', list(`location_key=37209&chk_in=${IN}&chk_out=${OUT}`)],
+    ['list, called hotel_key instead', list(`hotel_key=g37209&chk_in=${IN}&chk_out=${OUT}`)],
+    ['rates, with a plausible key, to see a good response', `https://data.xotelo.com/api/rates?hotel_key=g37209-d1750052&chk_in=${IN}&chk_out=${OUT}&adults=1`],
+    ['heatmap, which may name its hotel', 'https://data.xotelo.com/api/heatmap?hotel_key=g37209-d1750052'],
   ];
 
   for (const [what, url] of tries) {

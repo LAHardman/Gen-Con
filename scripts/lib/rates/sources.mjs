@@ -8,6 +8,15 @@
  *   ready(env)  whether it is configured and switched on
  *   cost      units one task takes out of this source's monthly allowance
  *   quote(place, ctx) → { nightly, currency, via } | null    (null = no price)
+ *   canAsk(place, ctx) → boolean   optional; false = nothing to ask *with*
+ *
+ * `canAsk` is not `ready` and it is not `null`. `ready` is about the source,
+ * `canAsk` is about one hotel, and the difference is a whole allowance: the
+ * ledger is charged before the request goes out, so a source that returns null
+ * on its first line because it has no identifier for this hotel is charged for
+ * a request that never left the machine. Xotelo did exactly that for every
+ * hotel — 169 units a run, no traffic, no prices, and a budget that reported
+ * itself spent.
  *
  * A source that cannot answer returns null. A source that is *broken* throws,
  * and the difference matters: null is one hotel with no rate, and the run moves
@@ -183,6 +192,14 @@ export const xotelo = {
   // Free and keyless: the only thing that stops it is being switched off.
   ready: () => true,
   cost: 1,
+
+  /*
+   * A hotel with no resolved key is one this source has no way to name, which
+   * is not the same as one it has no price for — and charging the allowance for
+   * it spends the month on requests that are never made. `resolve-hotel-keys`
+   * is what fills these in.
+   */
+  canAsk: (place, { keys } = {}) => Boolean(keys?.[place.id]),
 
   async quote(place, { keys, whenMs, fetch: get = fetch }) {
     const hotelKey = keys?.[place.id];

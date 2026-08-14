@@ -129,6 +129,10 @@ export async function runOnce({
     if (priced.has(place.id)) continue;
     for (const source of alive()) {
       if (source.covers !== 'place' || !source.quote) continue;
+      // Asked before the ledger is charged, because the charge happens whether
+      // or not a request follows: a source with no identifier for this hotel
+      // would otherwise spend the month sending nothing.
+      if (source.canAsk && !source.canAsk(place, { env, keys })) continue;
       if (!spend(ledger, source.name, source.cost, env)) continue;
       try {
         const quote = await source.quote(place, { env, whenMs, fetch: get, keys, cache });

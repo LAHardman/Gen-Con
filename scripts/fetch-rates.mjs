@@ -165,6 +165,28 @@ if (verify) {
   }
 
   const asking = places.filter((one) => !inBlock.has(one.id));
+
+  /*
+   * A per-place source can only be verified against a hotel it can name.
+   *
+   * Without this, `--verify=xotelo` picked the first hotel on the list, got a
+   * null back before any request was made, and reported "It answered and
+   * returned nothing usable" and "one request was spent" — a source that had
+   * never been asked anything, described as answering.
+   */
+  if (!source.quoteArea && source.canAsk) {
+    const first = asking.find((one) => source.canAsk(one, { env, keys: store.keys }));
+    if (!first) {
+      console.error(
+        `${verify} has nothing to ask about: none of the ${asking.length} hotels has what it\n` +
+          'needs to name one. For xotelo that is a TripAdvisor key — run\n' +
+          '`node scripts/resolve-hotel-keys.mjs` first. No request was made.',
+      );
+      process.exit(2);
+    }
+    asking.splice(0, asking.indexOf(first));
+  }
+
   const group = source.areas ? source.areas(asking)[0] : { places: asking, label: 'everywhere' };
   console.error(
     `\nasking ${verify} for "${group.query ?? group.label}" ` +
