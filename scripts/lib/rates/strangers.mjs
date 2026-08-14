@@ -124,6 +124,35 @@ export function placesFromStrangers({ strangers, known, hall, driveMetres }) {
   return { places: [...kept.values()].sort((a, b) => a.metres - b.metres), why };
 }
 
+/**
+ * Everything found so far, with this month's answers replacing last month's.
+ *
+ * Listings are gathered from whatever the searches happened to return, and a
+ * run with a small allowance returns almost nothing — so rebuilding the file
+ * from one run's findings deletes every place the runs before it found. That
+ * is not a hypothetical: a top-up run with three searches left produced three
+ * listings, and would have dropped the other three hundred and thirty.
+ *
+ * So they accumulate, like the quotes do. A place seen again takes its newer
+ * price, because a fresher number is the more truthful one — which is the
+ * opposite of the cheapest-wins rule inside a single response, where the
+ * duplicates are room types rather than months.
+ *
+ * The doorway rule is then applied across the union, since a listing kept last
+ * month and a differently-named one kept this month can be the same building.
+ */
+export function keepFound(previous, fresh) {
+  const byId = new Map(previous.map((one) => [one.id, one]));
+  for (const one of fresh) byId.set(one.id, one);
+
+  const kept = [];
+  for (const one of [...byId.values()].sort((a, b) => a.metres - b.metres)) {
+    if (kept.some((other) => metresApart(other, one) <= SAME_DOOR_M)) continue;
+    kept.push(one);
+  }
+  return kept;
+}
+
 const slug = (name) =>
   name
     .toLowerCase()

@@ -40,7 +40,7 @@ import { planRun } from './lib/rates/plan.mjs';
 import { budget, ledgerFor, spend, SOURCES } from './lib/rates/quota.mjs';
 import { runOnce } from './lib/rates/run.mjs';
 import { ALL, conventionNights, nearbyStay } from './lib/rates/sources.mjs';
-import { placesFromStrangers } from './lib/rates/strangers.mjs';
+import { keepFound, placesFromStrangers } from './lib/rates/strangers.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STORE = join(ROOT, 'src/data/rate-store.json');
@@ -399,7 +399,11 @@ const result = await runOnce({
 
 writeFileSync(
   STORE,
-  `${JSON.stringify({ quotes: result.quotes, ledger: result.ledger, keys: store.keys, nights }, null, 1)}\n`,
+  `${JSON.stringify(
+    { quotes: result.quotes, ledger: result.ledger, keys: store.keys, nights, listings: store.listings ?? [] },
+    null,
+    1,
+  )}\n`,
   'utf8',
 );
 
@@ -407,18 +411,27 @@ writeFileSync(
  * Everywhere else somebody could sleep, which the search knows about and the
  * survey does not. See `lib/rates/strangers.mjs` for why it is its own file.
  */
-if (strangers.length > 0) {
-  const { places: extra, why } = placesFromStrangers({
+/*
+ * Written whenever there is anything to keep — including nothing new, because
+ * "nothing new" must still write out everything already found rather than an
+ * empty file. See `keepFound`.
+ */
+{
+  const { places: fresh, why } = placesFromStrangers({
     strangers,
     known: places,
     hall: ICC,
     driveMetres: DRIVE_M,
   });
+  const extra = keepFound(store.listings ?? [], fresh);
+  store.listings = extra;
+
   console.error(
-    `\n${strangers.length} priced places no hotel of ours claimed → ${extra.length} kept` +
+    `\n${strangers.length} priced places no hotel of ours claimed → ${fresh.length} kept` +
       ` (${why.alreadyKnown} already listed, ${why.sameDoor} behind one door,` +
       ` ${why.cheaper} the same listing again, ${why.tooFar} too far)`,
   );
+  console.error(`  ${extra.length} listings in all, counting what earlier runs found`);
 
   writeFileSync(
     LISTINGS_OUT,
