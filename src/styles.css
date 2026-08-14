@@ -3646,16 +3646,102 @@ body {
  */
 .hotels__beside {
   grid-column: 1 / -1;
+  /* A button now, and still the note it always looked like. */
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-left: 2px solid var(--border);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
   margin: 8px 0 0;
   padding: 7px 0 0 11px;
-  border-top: 1px solid var(--border);
-  border-left: 2px solid var(--border);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.hotels__beside:hover .hotels__beside-name,
+.hotels__beside:focus-visible .hotels__beside-name {
+  color: var(--accent);
+}
+
+.hotels__beside:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------ one hotel, opened out */
+
+.hotels__dialog-tag {
+  background: var(--panel-raised);
+  color: var(--text-muted);
+}
+
+.hotels__dialog-price {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 6px 0 0;
+}
+
+.hotels__dialog-story {
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/*
+ * Open by definition here — there is nothing to fold in a dialog.
+ *
+ * Scoped to the dialog rather than left to the `--dialog` class alone, because
+ * the base `.hotels__detail { display: none }` is written further down this
+ * file and at equal specificity the later rule wins. It did, and the dialog
+ * came up with its whole middle missing.
+ */
+.hotels__dialog .hotels__detail {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding-top: 11px;
+}
+
+.hotels__dialog-beside {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+/* The comparison, as a way through to that hotel's own reading. */
+.hotels__beside-go {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotels__beside-go:hover {
+  border-color: var(--accent);
+}
+
+.hotels__beside-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .hotels__beside-label {
@@ -3709,7 +3795,7 @@ body {
   border-radius: 4px;
 }
 
-/* A chevron that turns, so the row says whether there is more under it. */
+/* A chevron, so the row says there is more behind it. */
 .hotels__open-mark {
   flex: 0 0 auto;
   width: 7px;
@@ -3720,10 +3806,6 @@ body {
   border-bottom: 2px solid var(--accent);
   transform: rotate(45deg);
   transition: transform 140ms ease;
-}
-
-.hotels__row--open .hotels__open-mark {
-  transform: rotate(-135deg) translate(-2px, -2px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3745,10 +3827,6 @@ body {
   margin: 9px 0 0;
   padding: 9px 0 0;
   border-top: 1px solid var(--border);
-}
-
-.hotels__row--open .hotels__detail {
-  display: block;
 }
 
 .hotels__detail dl {

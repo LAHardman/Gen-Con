@@ -178,35 +178,6 @@ function priceStory(
 }
 
 /**
- * Whether the screen has room to show everything at once.
- *
- * The same 64rem the rows become a table at. Above it the detail is simply
- * there, because there is space and a reader should not have to ask twice for
- * something the page could already have told them; below it, tapping a hotel
- * opens it, because a phone has one column and every row printing six lines of
- * detail is a list nobody can scan.
- *
- * Defaults to wide where `matchMedia` is missing, which is the test environment
- * and any renderer without a window: showing everything is the honest failure,
- * hiding it behind a control that may not work is not.
- */
-export function useWide(): boolean {
-  const query = '(min-width: 64rem)';
-  const [wide, setWide] = useState(
-    () => typeof window === 'undefined' || !window.matchMedia || window.matchMedia(query).matches,
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const media = window.matchMedia(query);
-    const said = () => setWide(media.matches);
-    said();
-    media.addEventListener('change', said);
-    return () => media.removeEventListener('change', said);
-  }, []);
-  return wide;
-}
-
-/**
  * Where you would actually book this, when anybody has said.
  *
  * Gen Con's block is booked through Gen Con and nowhere else — that is what
@@ -227,6 +198,181 @@ export function bookingFor(row: {
   if (row.block) return { href: SOURCE, label: 'Book through Gen Con’s housing' };
   const link = row.listing?.link ?? row.rate?.link ?? null;
   return link ? { href: link, label: 'Where this was listed' } : null;
+}
+
+/** What the dialog needs to say everything about one hotel. */
+export interface HotelRow {
+  place: Lodging;
+  block: ReturnType<typeof blockRate>;
+  rate: Rate | null;
+  listing?: { link?: string | null } | null;
+  nightly: number | null;
+  beside: Beside | null;
+}
+
+/**
+ * One hotel, opened out — the summary and the rest of it in a single reading.
+ *
+ * This was a fold under the row, which put the answer in the middle of the list
+ * and pushed every hotel below it down the page. Somebody comparing two hotels
+ * ended up scrolling between two expanded rows with the second one moving as
+ * the first opened. A dialog holds still, has room for the whole story at once,
+ * and closes back to exactly the place in the list they left.
+ *
+ * IT OPENS ON THE COMPARISON TOO. A block hotel's row names a cheaper place
+ * beside it, and until now that name was the end of the road: no distance
+ * beyond one number, no source, nothing about booking. Now it is a way in, and
+ * the dialog it opens is the same dialog, because it is the same question.
+ */
+function HotelDialog({
+  row,
+  people,
+  nowMs,
+  onClose,
+  onShow,
+}: {
+  row: HotelRow;
+  people: number;
+  nowMs: number;
+  onClose: () => void;
+  onShow: (placeId: string) => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const { place, block, rate, nightly, beside: alt } = row;
+  const booking = bookingFor(row);
+  const skywalk = hasSkywalk(place.id) === true;
+
+  useEffect(() => {
+    closeRef.current?.focus();
+  }, [place.id]);
+
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
+
+  return (
+    <div className="dialog__backdrop" onPointerDown={onClose}>
+      <div
+        className="dialog hotels__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="hotel-dialog-title"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <div className="dialog__header">
+          <span className="dialog__tag hotels__dialog-tag">
+            {block ? 'In Gen Con’s block' : place.kind === 'rental' ? 'Let by the night' : 'Third party'}
+          </span>
+          <button
+            ref={closeRef}
+            type="button"
+            className="dialog__close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <h2 className="dialog__title" id="hotel-dialog-title">
+          {place.name}
+        </h2>
+
+        <p className="hotels__dialog-price">
+          {nightly === null ? (
+            <span className="hotels__none">No price gathered</span>
+          ) : (
+            <>
+              <span className="hotels__money">{dollars(perPerson(nightly, people), rate?.currency ?? 'USD')}</span>
+              <span className="hotels__meta">
+                per person, per night
+                {people > 1 ? ` · ${dollars(nightly, rate?.currency ?? 'USD')} the room` : ''}
+              </span>
+            </>
+          )}
+        </p>
+        {/* The same sentence the price bubble carries in the list, said here
+            without having to be asked for. */}
+        <p className="hotels__dialog-story">{priceStory({ block, rate, nightly }, nowMs)}</p>
+
+        <dl className="hotels__detail hotels__detail--dialog">
+          <div>
+            <dt>Which nights</dt>
+            <dd>
+              {block
+                ? 'Gen Con’s block rate, for the convention itself'
+                : STAY.in
+                  ? STAY.isConvention
+                    ? `${STAY.in} to ${STAY.out}, the convention itself`
+                    : `${STAY.in} to ${STAY.out} — Gen Con ${STAY.conventionYear} is not on sale yet, so this is the same Wednesday to Sunday in a quieter week and the real thing will cost more`
+                  : 'No nights gathered yet'}
+            </dd>
+          </div>
+          <div>
+            <dt>Getting to the hall</dt>
+            <dd>
+              {place.metres < 1000
+                ? `${place.metres} m from the convention centre`
+                : `${trim(place.metres / 1000)} km from the convention centre`}
+              {`, ${journeyTo(place, skywalk).mode === 'drive' ? `about ${journeyTo(place, skywalk).minutes} minutes' drive` : `${journeyTo(place, skywalk).minutes} minutes' walk`}`}
+              {skywalk ? ', on the skywalk, so it is indoors all the way.' : '.'}
+              {/* Only when it is somewhere else. "It is in Indianapolis" under
+                  a hotel 124 m from the hall is a sentence that says nothing,
+                  and the row has always left it out for the same reason. */}
+              {place.city && place.city !== 'Indianapolis' ? ` It is in ${place.city}.` : ''}
+              {place.kind === 'rental'
+                ? ' Let by the night rather than a hotel, so there is no front desk.'
+                : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>How to book</dt>
+            <dd>
+              {booking ? (
+                <a href={booking.href} target="_blank" rel="noreferrer noopener">
+                  {booking.label} ↗
+                </a>
+              ) : (
+                'No booking link gathered for this one.'
+              )}
+            </dd>
+          </div>
+          {rate && (
+            <div>
+              <dt>Where the price came from</dt>
+              <dd>
+                {rate.sources.join(' and ')}, gathered {age(rate.at, nowMs)}
+                {rate.spread > 0 ? `, and they differ by ${dollars(rate.spread)}` : ''}.
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        {alt && (
+          <div className="hotels__dialog-beside">
+            <p className="hotels__beside-label">
+              {alt.because === 'near' ? 'Nearby, outside the block' : 'Similar money, outside the block'}
+            </p>
+            {/* The comparison is a way in here too, so a reader can follow it
+                without closing this and hunting for the row. */}
+            <button type="button" className="hotels__beside-go" onClick={() => onShow(alt.place.id)}>
+              {alt.place.name}
+              <span className="hotels__beside-meta">
+                {alt.apart} m away
+                {alt.nightly === null
+                  ? ' · no price gathered'
+                  : ` · ${dollars(perPerson(alt.nightly, people))} each`}
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -374,22 +520,10 @@ export function HotelsView({ nowMs }: Props) {
     upto < DEAREST,
   ].filter(Boolean).length;
 
-  const wide = useWide();
-  /*
-   * Which rows are open, on a phone. A set rather than a single id because
-   * comparing two hotels means having both open at once, and closing one to
-   * read the other is the thing that makes a list like this tiring.
-   */
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleOpen = useCallback((id: string) => {
-    setOpened((was) => {
-      const next = new Set(was);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }, []);
+  /** The hotel whose dialog is open, if any. */
+  const [showing, setShowing] = useState<string | null>(null);
 
-  const rows = useMemo(() => {
+  const shownRows = useMemo(() => {
     /*
      * The surveyed hotels, and the places only the price search knows about.
      *
@@ -478,13 +612,31 @@ export function HotelsView({ nowMs }: Props) {
      */
     const candidates = kept.filter((one) => !one.block);
     const used = new Set<string>();
-    return shown.map((row) => {
+    const withBeside = shown.map((row) => {
       if (!row.block) return { ...row, beside: null as Beside | null };
       const found = beside(row.place, row.block.low, candidates, used);
       if (found) used.add(found.place.id);
       return { ...row, beside: found };
     });
+
+    /*
+     * Every hotel by id, filtered out or not.
+     *
+     * The dialog can be opened for a comparison as well as for a row, and a
+     * comparison is drawn from what is in view — but the filters can change
+     * under an open dialog, and a hotel that has just left the list is still
+     * the hotel somebody is reading about. Looking it up in the whole set
+     * rather than the shown one means the dialog never empties mid-read.
+     */
+    const byId = new Map(
+      all.map((row) => [row.place.id, { ...row, beside: null as Beside | null }]),
+    );
+    for (const row of withBeside) byId.set(row.place.id, row);
+
+    return { rows: withBeside, byId };
   }, [ring, source, skywalkOnly, withinKm, upto, sort, people, year]);
+
+  const { rows, byId } = shownRows;
 
   const priced = rows.filter((row) => row.nightly !== null).length;
   const walkable = LODGING.filter((place) => place.ring === 'walk').length;
@@ -649,7 +801,21 @@ export function HotelsView({ nowMs }: Props) {
             return (
             <li
               key={place.id}
-              className={`hotels__row${opened.has(place.id) ? ' hotels__row--open' : ''}`}
+              className="hotels__row"
+              /*
+               * The whole pill opens it, which is what somebody will try — but
+               * only when the press did not land on something that is already
+               * a control. The price has its own bubble and the comparison
+               * opens a different hotel; swallowing those would take away two
+               * things the row can do to make one of them easier.
+               */
+              onClick={(event) => {
+                // `[role="button"]` as well as `<button>`: the price bubble is
+                // a span wearing the role, and a guard that only knew about the
+                // tag swallowed the one press that explains the number.
+                if ((event.target as HTMLElement).closest('button, a, [role="button"]')) return;
+                setShowing(place.id);
+              }}
             >
               <div className="hotels__what">
                 <h3>
@@ -659,20 +825,19 @@ export function HotelsView({ nowMs }: Props) {
                     already open and there is nothing for it to do, so it is not
                     a button at all rather than a button that does nothing.
                   */}
-                  {wide ? (
-                    place.name
-                  ) : (
-                    <button
-                      type="button"
-                      className="hotels__open"
-                      aria-expanded={opened.has(place.id)}
-                      aria-controls={`hotel-${place.id}`}
-                      onClick={() => toggleOpen(place.id)}
-                    >
-                      {place.name}
-                      <span className="hotels__open-mark" aria-hidden="true" />
-                    </button>
-                  )}
+                  {/*
+                    A button as well as a clickable row, because a row is not
+                    reachable by keyboard and a hotel that can only be opened
+                    with a pointer is a hotel half the readers cannot open.
+                  */}
+                  <button
+                    type="button"
+                    className="hotels__open"
+                    onClick={() => setShowing(place.id)}
+                  >
+                    {place.name}
+                    <span className="hotels__open-mark" aria-hidden="true" />
+                  </button>
                   {/* "In the block" wrapped onto its own line behind a long
                       hotel name and read as a second heading. One word, and
                       the name breaks around it rather than it breaking. */}
@@ -785,7 +950,11 @@ export function HotelsView({ nowMs }: Props) {
                 than reaching for a hotel a mile away at twice the price.
               */}
               {alt && (
-                <p className="hotels__beside">
+                <button
+                  type="button"
+                  className="hotels__beside"
+                  onClick={() => setShowing(alt.place.id)}
+                >
                   <span className="hotels__beside-label">
                     {alt.because === 'near' ? 'Nearby, outside the block' : 'Similar money, outside the block'}
                   </span>
@@ -801,12 +970,22 @@ export function HotelsView({ nowMs }: Props) {
                         }`
                       : ''}
                   </span>
-                </p>
+                </button>
               )}
             </li>
             );
           })}
         </ol>
+      )}
+
+      {showing && byId.get(showing) && (
+        <HotelDialog
+          row={byId.get(showing)!}
+          people={people}
+          nowMs={nowMs}
+          onClose={() => setShowing(null)}
+          onShow={setShowing}
+        />
       )}
 
       <p className="hotels__note">

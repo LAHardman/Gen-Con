@@ -56,7 +56,8 @@ vi.mock('../data/lodging', () => ({
     { id: 'w6', name: 'Corner Inn', kind: 'hotel', metres: 600, ring: 'walk', ...eastOf(600) },
     { id: 'w3', name: 'Nestle Inn', kind: 'guest_house', metres: 1300, ring: 'walk', ...eastOf(1300) },
     { id: 'w5', name: 'Unasked Lodge', kind: 'hotel', metres: 1400, ring: 'walk', ...eastOf(1400) },
-    { id: 'w4', name: 'Holiday Inn Express', kind: 'hotel', metres: 1200, ring: 'walk', ...eastOf(1200) },
+    // Carries the city the hall is in, which is the one city worth never saying.
+    { id: 'w4', name: 'Holiday Inn Express', kind: 'hotel', metres: 1200, ring: 'walk', ...eastOf(1200), city: 'Indianapolis' },
     { id: 'd1', name: 'Motel 6 Southport', kind: 'motel', metres: 14000, ring: 'drive', ...eastOf(14000), city: 'Southport' },
     { id: 'd2', name: 'Super 8 Airport', kind: 'motel', metres: 9000, ring: 'drive', ...eastOf(9000) },
   ],
@@ -151,12 +152,11 @@ describe('the rest of what is known about one hotel', () => {
    * is a worse layout at the wrong size, hiding it behind a control that may
    * not work is a reader who cannot reach it at all.
    */
-  it('shows the detail without asking, where there is room for it', () => {
+  it('has the detail in the row itself, for a screen with room for it', () => {
+    // CSS decides whether it shows — jsdom does no layout, so what is checked
+    // here is that it is in the document to be shown at all.
     render(<HotelsView nowMs={NOW} />);
-    const detail = row('JW Marriott').querySelector('.hotels__detail')!;
-    expect(detail).toBeTruthy();
-    // ...and no control to press, since there is nothing for it to do.
-    expect(row('JW Marriott').querySelector('.hotels__open')).toBeNull();
+    expect(row('JW Marriott').querySelector('.hotels__detail')).toBeTruthy();
   });
 
   it('says which nights the price covers, and whose they are', () => {
@@ -285,7 +285,7 @@ describe('what it refuses to be mistaken for', () => {
    * at again. The distinction is what decides how far to trust a row, so it
    * lives on the row.
    */
-  const told = (name: string) => within(row(name)).getByRole('button');
+  const told = (name: string) => row(name).querySelector('.hotels__told') as HTMLElement;
 
   it('calls a published block rate what it is', () => {
     render(<HotelsView nowMs={NOW} />);
@@ -752,6 +752,140 @@ describe('the comparison, on the row it is about', () => {
   });
 });
 
+/**
+ * The pop-up, which is how one hotel gets read on a phone.
+ *
+ * The detail used to unfold inside the row, which pushed everything under it
+ * down the page and left the reader scrolling to find what they had just
+ * opened. A pop-up puts the whole hotel — the price and the rest — in one place
+ * over the list, and closes back to where they were.
+ */
+describe('opening one hotel', () => {
+  const dialog = () => screen.getByRole('dialog');
+  const beside = (name: string) => row(name).querySelector('.hotels__beside') as HTMLElement;
+
+  it('opens from anywhere on the pill, not only from the name', () => {
+    // "Tap the hotel" is what somebody will try, and the name is a small
+    // target on a phone. The distance line is part of the hotel too.
+    render(<HotelsView nowMs={NOW} />);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(within(row('JW Marriott')).getByText(/124 m from the ICC/));
+    expect(within(dialog()).getByRole('heading', { name: 'JW Marriott Indianapolis' })).toBeTruthy();
+  });
+
+  it('opens from the name by keyboard, which a pill cannot be', () => {
+    // A row is not focusable, so a hotel that only opens on a pointer is a
+    // hotel half the readers cannot open at all.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(within(row('The Westin')).getByRole('button', { name: /The Westin/ }));
+    expect(within(dialog()).getByRole('heading', { name: 'The Westin Indianapolis' })).toBeTruthy();
+  });
+
+  it('leaves the price bubble to say its own piece', () => {
+    /*
+     * The price carries its own explanation on a press, and swallowing that
+     * into "open the hotel" would take away the one control on the row that
+     * answers the question the number raises.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott').querySelector('.hotels__told') as HTMLElement);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says the price and the rest in one display, without a second press', () => {
+    /*
+     * The whole reason it is a pop-up rather than a fold: everything known
+     * about the hotel at once, so there is nothing left to go looking for.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('Holiday Inn Express'));
+    const said = dialog().textContent!;
+    expect(said).toMatch(/Holiday Inn Express/);
+    expect(said).toMatch(/per person, per night/); // the number, as on the row
+    expect(said).toMatch(/Which nights/);
+    expect(said).toMatch(/2027-08-04 to 2027-08-08/);
+    expect(said).toMatch(/Getting to the hall/);
+    expect(said).toMatch(/1.2 km from the convention centre/);
+    // And no "It is in Indianapolis" under a hotel a mile from the hall.
+    expect(said).not.toMatch(/It is in Indianapolis/);
+    expect(said).toMatch(/How to book/);
+    expect(said).toMatch(/Where the price came from/);
+  });
+
+  it('names the town for somewhere that is not in it', () => {
+    // The city is the whole answer for a motel out by the airport, and noise
+    // for a hotel across the road from the hall.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Driving distance' }));
+    fireEvent.click(row('Airport Motel'));
+    expect(dialog().textContent).toMatch(/It is in Plainfield/);
+  });
+
+  it('is a dialog the screen reader is told about, focused on the way out', () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott'));
+    expect(dialog().getAttribute('aria-modal')).toBe('true');
+    expect(dialog().getAttribute('aria-labelledby')).toBe('hotel-dialog-title');
+    expect(document.activeElement).toBe(within(dialog()).getByRole('button', { name: 'Close' }));
+  });
+
+  it('closes on Escape and on the close button', () => {
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(row('JW Marriott'));
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('opens the comparison hotel, not the row it is printed on', () => {
+    /*
+     * The name beside a block hotel used to be the end of the road — a name and
+     * one number, with no way to find out anything else about it. Pressing it
+     * is the obvious thing to try, and what it should give is that hotel.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(beside('JW Marriott'));
+    expect(within(dialog()).getByRole('heading', { name: 'Corner Inn' })).toBeTruthy();
+    expect(within(dialog()).queryByRole('heading', { name: /JW Marriott/ })).toBeNull();
+  });
+
+  it('opens a comparison the filters have hidden from the list', () => {
+    /*
+     * The comparison ignores the source filter on purpose — with "Gen Con
+     * block" chosen the hotel it names is deliberately not in the list. It
+     * still has to open, or the row is naming somewhere unreachable.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
+    // Matched on the headings, because the JW's row *names* the Corner Inn —
+    // that naming is the whole point, and it is not the same as listing it.
+    expect(rows().map((one) => one.querySelector('h3')?.textContent)).not.toContain('Corner Inn');
+
+    fireEvent.click(beside('JW Marriott'));
+    expect(within(dialog()).getByRole('heading', { name: 'Corner Inn' })).toBeTruthy();
+  });
+
+  it('follows the comparison from inside the pop-up', () => {
+    // Without this the reader has to close it, find the other row and open
+    // that — which is the scrolling the pop-up was meant to end.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott'));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /Corner Inn/ }));
+    expect(within(dialog()).getByRole('heading', { name: 'Corner Inn' })).toBeTruthy();
+  });
+
+  it('shows nothing but the hotel it was opened for', () => {
+    // One at a time, or the list under it is a stack of dialogs.
+    render(<HotelsView nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott'));
+    fireEvent.click(row('The Westin'));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+});
 
 describe('the four facts on every row', () => {
   it('calls out a skywalk as its own thing, not as a short walk', () => {
