@@ -30,15 +30,15 @@
    "currency": "USD",
    "via": "La Quinta Inn & Suites by Wyndham Indianapolis Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "relation6081914",
-   "nightly": 229,
+   "nightly": 212,
    "currency": "USD",
    "via": "TownePlace Suites by Marriott Indianapolis Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way1025706740",
@@ -138,11 +138,11 @@
   },
   {
    "placeId": "way192523020",
-   "nightly": 151,
+   "nightly": 154,
    "currency": "USD",
    "via": "SpringHill Suites by Marriott Indianapolis Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way195520116",
@@ -290,11 +290,11 @@
   },
   {
    "placeId": "way341313486",
-   "nightly": 289,
+   "nightly": 259,
    "currency": "USD",
    "via": "Homewood Suites by Hilton Indianapolis-Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way507057663",
@@ -306,11 +306,11 @@
   },
   {
    "placeId": "way596701353",
-   "nightly": 137,
+   "nightly": 143,
    "currency": "USD",
    "via": "Fairfield by Marriott Inn & Suites Indianapolis Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way621313970",
@@ -362,11 +362,11 @@
   },
   {
    "placeId": "way802308281",
-   "nightly": 198,
+   "nightly": 190,
    "currency": "USD",
    "via": "Home2 Suites by Hilton Indianapolis Downtown",
    "source": "serpapi",
-   "at": "2026-08-14T02:41:40.276Z"
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way802311024",
@@ -391,6 +391,14 @@
    "via": "Motel 6 Indianapolis, IN - Airport",
    "source": "serpapi",
    "at": "2026-08-14T02:41:40.276Z"
+  },
+  {
+   "placeId": "way956146517",
+   "nightly": 111,
+   "currency": "USD",
+   "via": "Holiday Inn Express & Suites Indianapolis W - Airport Area",
+   "source": "serpapi",
+   "at": "2026-08-14T12:08:47.396Z"
   },
   {
    "placeId": "way956279347",
@@ -444,7 +452,7 @@
  "ledger": {
   "month": "2026-08",
   "spent": {
-   "serpapi": 97
+   "serpapi": 100
   },
   "tried": {}
  },
