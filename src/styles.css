@@ -3057,6 +3057,19 @@ body {
   z-index: 1100;
   background: var(--bg);
   overflow-y: auto;
+  /*
+   * Sideways is clipped, not scrolled.
+   *
+   * The sticky bar's shadow is drawn 50vw wider than the column so its edges
+   * never show a seam, and on a 390px phone that is 195px of empty page you can
+   * swipe into — measured: this element scrolled 179px to the right, to nothing
+   * at all. `clip` keeps the bleed and takes away the scroll.
+   *
+   * The price bubble is `position: fixed` and is not clipped by this: an
+   * ancestor only clips fixed children when it is their containing block, which
+   * takes a transform or a filter, and this has neither.
+   */
+  overflow-x: clip;
   padding: 16px;
   padding-left: calc(16px + env(safe-area-inset-left));
   padding-right: calc(16px + env(safe-area-inset-right));
@@ -3209,12 +3222,17 @@ body {
 
 /*
  * The shadow says the list is passing underneath, and only appears when it is.
- * It is drawn wider than the column so the edge does not show a seam.
+ *
+ * It reaches into the page's gutter so its ends do not stop short of the screen,
+ * and no further. It used to reach 50vw each way, which on a 390px phone put
+ * 195px of empty page beyond the right edge that you could swipe into — and
+ * nothing is out there, because every child of `.hotels` is the column's width.
+ * A bleed the size of the gutter lands exactly on the screen edge instead.
  */
 .hotels__controls::after {
   content: '';
   position: absolute;
-  inset: auto -50vw -9px;
+  inset: auto -16px -9px;
   height: 9px;
   background: linear-gradient(rgb(0 0 0 / 0.28), transparent);
   pointer-events: none;
