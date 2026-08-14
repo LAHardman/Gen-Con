@@ -380,7 +380,14 @@ export const WALK_FLOOR: number | null = ${result.floor ?? 'null'};
 
 /** Cheapest first. */
 export const RATES: ReadonlyArray<Rate> = [
-${rows.map((row) => `  ${JSON.stringify(row)},`).join('\n')}
+${rows
+  .map(
+    (row) =>
+      `  { placeId: '${row.placeId}', nightly: ${row.nightly}, currency: '${row.currency}',` +
+      ` sources: [${row.sources.map((one) => `'${one}'`).join(', ')}],` +
+      ` at: '${row.at}', spread: ${row.spread} },`,
+  )
+  .join('\n')}
 ];
 
 const BY_PLACE = new Map(RATES.map((rate) => [rate.placeId, rate]));
