@@ -63,6 +63,33 @@ vi.mock('../data/lodging', () => ({
   WALKABLE: [],
 }));
 
+/*
+ * A place the price search found and no survey has.
+ *
+ * Empty here once, and a whole CI run failed on it: a listing carries a price
+ * with no `Rate` record behind it, and `priceStory` asserted one. Locally
+ * `listings.ts` was still the empty placeholder, so nothing exercised the row
+ * that actually shipped — 333 of them.
+ */
+vi.mock('../data/listings', () => ({
+  FOUND: '2026-08-14',
+  LISTINGS: [
+    {
+      id: 'serp:indy-urban-nest',
+      name: 'Indy Urban Nest',
+      kind: 'rental',
+      // Out in the drive ring on purpose: near the hall it would win the
+      // comparison against every downtown block hotel and the tests below
+      // would be measuring the fixture rather than the rule.
+      metres: 9500,
+      ring: 'drive',
+      ...eastOf(9500),
+      nightly: 341,
+      city: 'Indianapolis',
+    },
+  ],
+}));
+
 vi.mock('../data/rates', () => {
   const RATES = [
     { placeId: 'd1', nightly: 71, currency: 'USD', sources: ['xotelo'], at: '2026-08-09', spread: 0 },
@@ -264,6 +291,7 @@ describe('putting the list in an order', () => {
       'Nestle Inn', // $290, a shade under the Westin's projected block rate
       'The Westin Indianapolis',
       'JW Marriott Indianapolis',
+      'Indy Urban Nest', // $341 the flat, so $171 each — dearer than the block hotels
       'Corner Inn',
       'Unasked Lodge',
       'Super 8 Airport',
@@ -285,6 +313,7 @@ describe('putting the list in an order', () => {
       'Corner Inn', // nothing in the name, so the middle — nearest of those
       'Nestle Inn',
       'Unasked Lodge',
+      'Indy Urban Nest',
       'Holiday Inn Express', // midscale
       'Super 8 Airport', // economy, nearest first among equals
       'Airport Motel',
@@ -371,7 +400,7 @@ describe('filters that can all be off at once', () => {
     expect(fold().getAttribute('aria-expanded')).toBe('false');
     expect(panel().hasAttribute('hidden')).toBe(true);
     // The list is untouched by folding — this hides controls, not hotels.
-    expect(listed()).toHaveLength(9);
+    expect(listed()).toHaveLength(10);
 
     fireEvent.click(fold());
     expect(panel().hasAttribute('hidden')).toBe(false);
@@ -405,6 +434,8 @@ describe('filters that can all be off at once', () => {
       'Nestle Inn',
       'Unasked Lodge',
       'Super 8 Airport',
+      // A flat let by the night, from the price search rather than the survey.
+      'Indy Urban Nest',
       'Airport Motel',
       'Motel 6 Southport',
     ]);
@@ -428,7 +459,7 @@ describe('filters that can all be off at once', () => {
 
       fireEvent.click(chip(name));
       expect(chip(name).getAttribute('aria-pressed')).toBe('false');
-      expect(listed()).toHaveLength(9);
+      expect(listed()).toHaveLength(10);
     }
   });
 
@@ -497,7 +528,7 @@ describe('filters that can all be off at once', () => {
     expect(listed().length).toBeLessThan(9);
     type('Price', '');
     expect(page().querySelector('#hotels-upto-out')!.textContent).toBe('any');
-    expect(listed()).toHaveLength(9);
+    expect(listed()).toHaveLength(10);
   });
 
   it('takes the clear-all button off the page until there is a mess to clear', () => {
@@ -509,7 +540,7 @@ describe('filters that can all be off at once', () => {
 
     slide('Distance', 10);
     fireEvent.click(screen.getByRole('button', { name: 'Clear all filters' }));
-    expect(listed()).toHaveLength(9);
+    expect(listed()).toHaveLength(10);
     expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
   });
 

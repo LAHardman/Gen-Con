@@ -156,6 +156,19 @@ function priceStory(
   if (block) {
     return `Gen Con’s published ${BLOCK_YEAR} block rate. Not an estimate and not a market price — what Gen Con charges. ${CAVEAT}`;
   }
+  /*
+   * A price with no rate record behind it is a listing: somewhere the price
+   * search knows about that no survey does, carrying the only figure anybody
+   * has for it. It has no second source to disagree with and no separate age —
+   * it is as old as the gathering that found it.
+   */
+  if (!rate) {
+    return (
+      'A listed price, from the search that found this place. It is somewhere let by ' +
+      'the night rather than a surveyed hotel, so there is one source and no second ' +
+      'opinion, and it is not a quote for your dates.'
+    );
+  }
   return (
     `A market rate, not a quote. An indicative price for a sample night from ` +
     `${rate!.sources.join(' and ')}, gathered ${age(rate!.at, nowMs)}` +
@@ -591,14 +604,25 @@ export function HotelsView({ nowMs }: Props) {
                           anybody is quoted. */}
                       {people > 1 ? ` · ${dollars(nightly, rate?.currency ?? 'USD')} the room` : ''}
                     </span>
+                    {/*
+                      Three kinds of row, and only two of them have a rate
+                      record. A listing found by the price search carries its
+                      own figure and nothing else — no second source to
+                      disagree with, no age of its own — so it says what it is
+                      rather than reaching for fields that are not there.
+                    */}
                     <span className="hotels__meta">
                       {block
                         ? `Gen Con’s own${block.projected ? ', projected' : ` ${BLOCK_YEAR} rate`}`
-                        : `${age(rate!.at, nowMs)}${
-                            rate!.spread > 0 ? ` · they differ by ${rate!.spread}` : ''
-                          }`}
+                        : rate
+                          ? `${age(rate.at, nowMs)}${
+                              rate.spread > 0 ? ` · they differ by ${rate.spread}` : ''
+                            }`
+                          : 'listed price'}
                     </span>
-                    {!block && <span className="hotels__meta">{rate!.sources.join(', ')}</span>}
+                    {!block && rate && (
+                      <span className="hotels__meta">{rate.sources.join(', ')}</span>
+                    )}
                   </>
                 )}
               </div>

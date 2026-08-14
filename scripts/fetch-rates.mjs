@@ -192,7 +192,11 @@ store.nights = nights;
 const budgets = budget(ledger, env);
 
 console.error(
-  `\npricing Gen Con ${nights.year}: ${nights.in} to ${nights.out}, Wednesday to Sunday`,
+  // Never "Gen Con 2026" for a stand-in week in October, which is what printing
+  // the fallback's own year said and is a convention that does not exist.
+  onSale
+    ? `\npricing Gen Con ${nights.year}: ${nights.in} to ${nights.out}, Wednesday to Sunday`
+    : `\npricing ${nights.in} to ${nights.out}, standing in for Gen Con ${wanted.year}`,
 );
 
 console.error(
