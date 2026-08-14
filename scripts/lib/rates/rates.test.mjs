@@ -349,6 +349,94 @@ describe('when a service goes offline', () => {
   });
 });
 
+describe('a source with nothing to ask with', () => {
+  const env = {};
+  const keyed = (name, impl) => ({
+    name,
+    covers: 'place',
+    ready: () => true,
+    cost: 1,
+    canAsk: (place, ctx) => Boolean(ctx?.keys?.[place.id]),
+    quote: impl,
+  });
+
+  it('is not charged for the hotels it cannot name', async () => {
+    /*
+     * The bug this closes emptied a whole allowance on silence. The ledger is
+     * charged before the request goes out, and Xotelo returns null on its first
+     * line for any hotel it has no TripAdvisor key for — so every run spent one
+     * unit per hotel, sent nothing, and reported the budget as used.
+     */
+    const asked = [];
+    const source = keyed('xotelo', async (place) => {
+      asked.push(place.id);
+      return { nightly: 150, currency: 'USD' };
+    });
+    const ledger = ledgerFor(null, AUGUST);
+
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger,
+      env,
+      whenMs: AUGUST,
+      sources: [source],
+      keys: { w1: 'g37209-d1' },
+    });
+
+    expect(asked).toEqual(['w1']);
+    expect(ledger.spent.xotelo).toBe(1);
+  });
+
+  it('still asks about every hotel it can name', async () => {
+    // The guard must not become a reason to skip work that was possible.
+    const asked = [];
+    const source = keyed('xotelo', async (place) => {
+      asked.push(place.id);
+      return { nightly: 150, currency: 'USD' };
+    });
+    const keys = Object.fromEntries(PLACES.map((one) => [one.id, `g37209-d${one.id}`]));
+
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger: ledgerFor(null, AUGUST),
+      env,
+      whenMs: AUGUST,
+      sources: [source],
+      keys,
+    });
+
+    expect(asked.sort()).toEqual(PLACES.map((one) => one.id).sort());
+  });
+
+  it('leaves a source that never declared canAsk alone', async () => {
+    // `canAsk` is optional, and a source without one has always been askable.
+    const asked = [];
+    const source = {
+      name: 'xotelo',
+      covers: 'place',
+      ready: () => true,
+      cost: 1,
+      quote: async (place) => {
+        asked.push(place.id);
+        return { nightly: 150, currency: 'USD' };
+      },
+    };
+
+    await runOnce({
+      places: PLACES,
+      quotes: [],
+      ledger: ledgerFor(null, AUGUST),
+      env,
+      whenMs: AUGUST,
+      sources: [source],
+    });
+
+    expect(asked.length).toBe(PLACES.length);
+  });
+});
+
 describe('holding on to what was learned', () => {
   it('keeps one quote per place per source, newest winning', () => {
     // Two services disagreeing about one hotel is information — the honest

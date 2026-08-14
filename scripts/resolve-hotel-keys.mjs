@@ -25,12 +25,36 @@
  * key is worse than no key: it does not fail, it prints another hotel's price
  * under this hotel's name, and nothing downstream can tell.
  *
- * --probe EXISTS BECAUSE THIS COULD NOT BE TRIED WHERE IT WAS WRITTEN. Every
- * one of these hosts is unreachable from the sandbox this app is built in, so
- * the request shapes in `sources.mjs` are written from documentation and have
- * never met the live service. `--probe` asks, prints exactly what came back,
- * and writes nothing — run it on a machine with an open network before trusting
- * any of this.
+ * WHAT THE LIVE SERVICE ACTUALLY SAID, measured on a GitHub runner across three
+ * rounds on 2026-08-14, because none of these hosts is reachable from the
+ * sandbox this app is written in:
+ *
+ *   /api/rates      WORKS, free, no key. Answered `{"error":null,"result":
+ *                   {...,"currency":"USD","rates":[]}}` and accepted a
+ *                   `g37209-d1750052` shaped hotel_key. The adapter in
+ *                   `sources.mjs` is reading the right shape.
+ *   /api/search     PAYWALLED. 401, "available only for RapidAPI".
+ *   /api/locations  404. /api/hotels 404. Neither exists.
+ *   /api/list       REFUSES EVERYTHING. `location_key=g37209` alone gives
+ *                   "Failed to fetch list data"; adding dates gives "chk_in is
+ *                   invalid" — for the very same `2026-09-13` string that
+ *                   `/api/rates` accepted in the same run, at a week out and at
+ *                   thirty, in ISO and in US order, with the geo id and without
+ *                   its `g`.
+ *
+ * So there is no free way to *discover* a TripAdvisor key, only to use one. The
+ * priced endpoint is open and the index in front of it is not, which is a
+ * coherent thing for a business to do and leaves this script with nothing to
+ * read. It therefore reports that and writes nothing, rather than failing the
+ * run: a month with no keys is exactly the month everything had before.
+ *
+ * If keys arrive from anywhere — a hand-written table like `block-aliases.mjs`,
+ * a RapidAPI subscription, `list` reopening — drop them into `keys` in the
+ * store and the whole path downstream already works.
+ *
+ * --probe asks, prints exactly what came back, and writes nothing. Run it on a
+ * machine with an open network before trusting any of the above; it is how all
+ * of it was learned.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -163,8 +187,14 @@ async function listArea(area, log) {
       log(`  ${area.name}: HTTP ${status}, stopping there`);
       break;
     }
+    /*
+     * The expected answer, as of the probe above: this endpoint declines. It is
+     * reported once per town and is not an error — an index that is not free is
+     * a fact about the service, not a fault in the run, and the month it leaves
+     * behind is the month everything already had.
+     */
     if (body?.error) {
-      log(`  ${area.name}: ${JSON.stringify(body.error).slice(0, 120)}`);
+      log(`  ${area.name}: declined — ${String(body.error.message ?? '').slice(0, 90)}`);
       break;
     }
     const list = body?.result?.list;
@@ -230,6 +260,24 @@ for (const area of AREAS) {
   listings.push(...found);
 }
 log(`${listings.length} listings in all`);
+
+/*
+ * Nothing listed is the measured case, not a surprise. Said plainly and left
+ * alone: exiting non-zero here would fail a monthly run for a condition that
+ * changes nothing, and every hotel is skipped by `canAsk` exactly as before.
+ */
+if (listings.length === 0) {
+  log('');
+  log('No listings, so no keys. Xotelo prices a hotel for free but does not');
+  log('hand out the index: /api/search is RapidAPI-only and /api/list declines');
+  log('every parameter it was offered. Nothing written, nothing spent — and');
+  log('nothing broken, since a hotel with no key was already being skipped.');
+  log('');
+  log('Keys from anywhere else go straight into `keys` in rate-store.json and');
+  log('the rest of the path already works. Otherwise the prices come from a');
+  log('source with an account: see SERPAPI_KEY in .github/workflows/rates.yml.');
+  process.exit(0);
+}
 
 const { ties, clashes } = tieUp(places, listings);
 
