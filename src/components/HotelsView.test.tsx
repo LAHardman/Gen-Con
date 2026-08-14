@@ -85,6 +85,7 @@ vi.mock('../data/listings', () => ({
       ring: 'drive',
       ...eastOf(9500),
       nightly: 341,
+      link: 'https://example.invalid/urban-nest',
       city: 'Indianapolis',
     },
   ],
@@ -117,7 +118,7 @@ vi.mock('../data/rates', () => {
   };
 });
 
-const { HotelsView, stayNote } = await import('./HotelsView');
+const { HotelsView, bookingFor, stayNote } = await import('./HotelsView');
 
 /** A stay with nothing gathered into it yet. */
 const EMPTY_STAY = {
@@ -142,6 +143,98 @@ const rows = () => screen.getAllByRole('listitem');
  */
 const row = (name: string) =>
   rows().find((one) => one.querySelector('h3')?.textContent?.includes(name))!;
+
+describe('the rest of what is known about one hotel', () => {
+  /*
+   * These render wide, because `useWide` defaults to wide wherever `matchMedia`
+   * is missing — which is jsdom. That is the honest default: showing everything
+   * is a worse layout at the wrong size, hiding it behind a control that may
+   * not work is a reader who cannot reach it at all.
+   */
+  it('shows the detail without asking, where there is room for it', () => {
+    render(<HotelsView nowMs={NOW} />);
+    const detail = row('JW Marriott').querySelector('.hotels__detail')!;
+    expect(detail).toBeTruthy();
+    // ...and no control to press, since there is nothing for it to do.
+    expect(row('JW Marriott').querySelector('.hotels__open')).toBeNull();
+  });
+
+  it('says which nights the price covers, and whose they are', () => {
+    render(<HotelsView nowMs={NOW} />);
+    // A block hotel's rate is Gen Con's, so it is the convention by definition.
+    expect(row('JW Marriott').querySelector('.hotels__detail')!.textContent).toMatch(
+      /Gen Con’s block rate, for the convention itself/,
+    );
+    // A bought one is for whichever stay was gathered, named.
+    expect(row('Holiday Inn Express').querySelector('.hotels__detail')!.textContent).toMatch(
+      /2027-08-04 to 2027-08-08/,
+    );
+  });
+
+  it('describes where it is in words, not only in metres', () => {
+    render(<HotelsView nowMs={NOW} />);
+    expect(row('JW Marriott').querySelector('.hotels__detail')!.textContent).toMatch(
+      /124 m from the convention centre.*on the skywalk, so the walk is indoors/s,
+    );
+    // A rental says it is not a hotel, which is the distinction that matters.
+    expect(row('Indy Urban Nest').querySelector('.hotels__detail')!.textContent).toMatch(
+      /Let by the night rather than a hotel/,
+    );
+  });
+
+  it('points a block hotel at Gen Con rather than at its own front desk', () => {
+    // Being in the block *means* booking through Gen Con. A link to the hotel
+    // would be a link to somewhere that cannot sell the rate on the row above.
+    render(<HotelsView nowMs={NOW} />);
+    const link = within(row('JW Marriott')).getByRole('link', { name: /Gen Con’s housing/ });
+    expect(link.getAttribute('href')).toBe('https://example.invalid/hotelmap');
+  });
+
+  it('says there is no booking link rather than inventing one', () => {
+    /*
+     * Nothing captured a link before 2026-08, so for most rows the truthful
+     * answer is that there is not one. A search URL dressed up as a booking
+     * would look like an answer and be a guess.
+     */
+    render(<HotelsView nowMs={NOW} />);
+    const detail = row('Holiday Inn Express').querySelector('.hotels__detail')!;
+    expect(detail.textContent).toMatch(/No booking link gathered for this one/);
+    expect(within(row('Holiday Inn Express')).queryByRole('link')).toBeNull();
+  });
+
+  it('uses the listing’s own link when the search gave one', () => {
+    render(<HotelsView nowMs={NOW} />);
+    const link = within(row('Indy Urban Nest')).getByRole('link', { name: /listed/ });
+    expect(link.getAttribute('href')).toBe('https://example.invalid/urban-nest');
+    // Somebody else's site, opened as somebody else's site.
+    expect(link.getAttribute('rel')).toMatch(/noreferrer/);
+  });
+});
+
+describe('deciding where a hotel can be booked', () => {
+  const rate = (link?: string | null) =>
+    ({ placeId: 'x', nightly: 100, currency: 'USD', sources: ['serpapi'], at: '2026-08-14', spread: 0, link }) as never;
+
+  it('sends the block to Gen Con whatever else it knows', () => {
+    // Even with a hotel's own link to hand: that page cannot sell the block.
+    const at = bookingFor({ block: { low: 200 } as never, rate: rate('https://hotel.example'), listing: null });
+    expect(at).toMatchObject({ href: 'https://example.invalid/hotelmap' });
+  });
+
+  it('prefers the listing’s link to the rate’s, since the listing is the thing', () => {
+    const at = bookingFor({
+      block: null,
+      rate: rate('https://from-the-rate.example'),
+      listing: { link: 'https://from-the-listing.example' },
+    });
+    expect(at?.href).toBe('https://from-the-listing.example');
+  });
+
+  it('has nothing to offer when nobody gave a link', () => {
+    expect(bookingFor({ block: null, rate: rate(null), listing: null })).toBeNull();
+    expect(bookingFor({ block: null, rate: null, listing: { link: null } })).toBeNull();
+  });
+});
 
 describe('which nights the bought prices are for', () => {
   it('says so when they are the convention’s own', () => {

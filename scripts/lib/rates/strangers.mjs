@@ -117,6 +117,8 @@ export function placesFromStrangers({ strangers, known, hall, driveMetres }) {
       lat: Number(one.lat.toFixed(6)),
       lng: Number(one.lng.toFixed(6)),
       nightly: one.nightly,
+      // Where to book it, when the search said. Often it did not.
+      link: one.link ?? null,
       city: one.town ?? '',
     });
   }

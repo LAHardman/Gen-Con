@@ -468,6 +468,8 @@ export interface Listing {
   lng: number;
   /** Per night, for the convention stay above. */
   nightly: number;
+  /** Where the search said this can be booked, when it said. */
+  link?: string | null;
   city?: string;
 }
 
@@ -481,7 +483,9 @@ ${extra
     (one) =>
       `  { id: '${one.id}', name: ${JSON.stringify(one.name)}, kind: '${one.kind}',` +
       ` metres: ${one.metres}, ring: '${one.ring}', lat: ${one.lat}, lng: ${one.lng},` +
-      ` nightly: ${one.nightly}${one.city ? `, city: ${JSON.stringify(one.city)}` : ''} },`,
+      ` nightly: ${one.nightly}` +
+      `${one.link ? `, link: ${JSON.stringify(one.link)}` : ''}` +
+      `${one.city ? `, city: ${JSON.stringify(one.city)}` : ''} },`,
   )
   .join('\n')}
 ];
@@ -516,6 +520,8 @@ const rows = [...byPlace.entries()]
         quotes.length > 1
           ? Math.round(Math.max(...quotes.map((one) => one.nightly)) - cheapest.nightly)
           : 0,
+      // Where to book, from whichever quote carried one. Often none did.
+      link: quotes.map((one) => one.link).find(Boolean) ?? null,
     };
   })
   .sort((a, b) => a.nightly - b.nightly);
@@ -548,6 +554,13 @@ export interface Rate {
   at: string;
   /** Dearest minus cheapest across sources. Zero when only one answered. */
   spread: number;
+  /**
+   * Where the source said this can be booked, when it said.
+   *
+   * Not every quote carries one and none of the older ones do, so the page
+   * treats its absence as ordinary rather than as a fault.
+   */
+  link?: string | null;
 }
 
 /** When this file was last written, whether or not anything changed. */
@@ -592,7 +605,8 @@ ${rows
     (row) =>
       `  { placeId: '${row.placeId}', nightly: ${row.nightly}, currency: '${row.currency}',` +
       ` sources: [${row.sources.map((one) => `'${one}'`).join(', ')}],` +
-      ` at: '${row.at}', spread: ${row.spread} },`,
+      ` at: '${row.at}', spread: ${row.spread}` +
+      `${row.link ? `, link: ${JSON.stringify(row.link)}` : ''} },`,
   )
   .join('\n')}
 ];

@@ -24,6 +24,13 @@ export interface Rate {
   at: string;
   /** Dearest minus cheapest across sources. Zero when only one answered. */
   spread: number;
+  /**
+   * Where the source said this can be booked, when it said.
+   *
+   * Not every quote carries one and none gathered before 2026-08 do, so the page
+   * treats its absence as ordinary rather than as a fault.
+   */
+  link?: string | null;
 }
 
 /** When this file was last written, whether or not anything changed. */

@@ -3678,6 +3678,103 @@ body {
   color: var(--text-muted);
 }
 
+/* ------------------------------------------- everything else about one hotel */
+
+/*
+ * The name is the way in, on a phone.
+ *
+ * "Tap the hotel" is what somebody will try, so the hotel is what they tap —
+ * rather than a small "more" link beside it that has to be aimed at. A row
+ * rather than a run of text, so the chevron cannot wrap on to a line of its
+ * own, which is what it did behind "JW Marriott Indianapolis" and read as a
+ * stray mark under the name.
+ */
+.hotels__open {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hotels__open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A chevron that turns, so the row says whether there is more under it. */
+.hotels__open-mark {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  /* Level with the first line of the name, however many lines it runs to. */
+  margin-top: 4px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+}
+
+.hotels__row--open .hotels__open-mark {
+  transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hotels__open-mark {
+    transition: none;
+  }
+}
+
+/*
+ * Closed on a phone until asked for, and always there on a desk.
+ *
+ * It is in the document either way. Rendering it only when open would mean a
+ * reader on a wide screen — where it is meant to be visible without asking —
+ * had nothing for a screen reader to find.
+ */
+.hotels__detail {
+  display: none;
+  grid-column: 1 / -1;
+  margin: 9px 0 0;
+  padding: 9px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.hotels__row--open .hotels__detail {
+  display: block;
+}
+
+.hotels__detail dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.hotels__detail dt {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hotels__detail dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hotels__detail a {
+  color: var(--accent);
+}
+
 /* --------------------------------------------- the list as a table, on a desk */
 
 /*
@@ -3773,6 +3870,22 @@ body {
 
   .hotels__price {
     grid-column: 4;
+  }
+
+  /*
+   * On a desk it is simply open, and reads across the row's full width rather
+   * than in one column of it. There is space; a reader should not have to ask
+   * twice for something the page could already have told them.
+   */
+  .hotels__detail {
+    display: block;
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .hotels__detail dl {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 22px;
   }
 
   /* Beside the row rather than under it, now that there is a column for it. */

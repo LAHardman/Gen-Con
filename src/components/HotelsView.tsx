@@ -178,6 +178,58 @@ function priceStory(
 }
 
 /**
+ * Whether the screen has room to show everything at once.
+ *
+ * The same 64rem the rows become a table at. Above it the detail is simply
+ * there, because there is space and a reader should not have to ask twice for
+ * something the page could already have told them; below it, tapping a hotel
+ * opens it, because a phone has one column and every row printing six lines of
+ * detail is a list nobody can scan.
+ *
+ * Defaults to wide where `matchMedia` is missing, which is the test environment
+ * and any renderer without a window: showing everything is the honest failure,
+ * hiding it behind a control that may not work is not.
+ */
+export function useWide(): boolean {
+  const query = '(min-width: 64rem)';
+  const [wide, setWide] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia || window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const media = window.matchMedia(query);
+    const said = () => setWide(media.matches);
+    said();
+    media.addEventListener('change', said);
+    return () => media.removeEventListener('change', said);
+  }, []);
+  return wide;
+}
+
+/**
+ * Where you would actually book this, when anybody has said.
+ *
+ * Gen Con's block is booked through Gen Con and nowhere else — that is what
+ * being in the block means — so a block hotel points at Gen Con's own housing
+ * page rather than at the hotel's front desk, which cannot sell you the rate on
+ * the row above.
+ *
+ * Everything else depends on the search having returned a link, and until the
+ * gathering of 2026-08 nothing captured one. So the common answer is that there
+ * is no link yet, and the page says that rather than inventing a search URL and
+ * calling it a booking.
+ */
+export function bookingFor(row: {
+  block: ReturnType<typeof blockRate>;
+  rate: Rate | null;
+  listing?: { link?: string | null } | null;
+}): { href: string; label: string } | null {
+  if (row.block) return { href: SOURCE, label: 'Book through Gen Con’s housing' };
+  const link = row.listing?.link ?? row.rate?.link ?? null;
+  return link ? { href: link, label: 'Where this was listed' } : null;
+}
+
+/**
  * Which nights the bought prices are for — the sentence that keeps them honest.
  *
  * Gen Con's own rates are for Gen Con by definition. A market rate is for
@@ -322,6 +374,21 @@ export function HotelsView({ nowMs }: Props) {
     upto < DEAREST,
   ].filter(Boolean).length;
 
+  const wide = useWide();
+  /*
+   * Which rows are open, on a phone. A set rather than a single id because
+   * comparing two hotels means having both open at once, and closing one to
+   * read the other is the thing that makes a list like this tiring.
+   */
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleOpen = useCallback((id: string) => {
+    setOpened((was) => {
+      const next = new Set(was);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
   const rows = useMemo(() => {
     /*
      * The surveyed hotels, and the places only the price search knows about.
@@ -339,6 +406,7 @@ export function HotelsView({ nowMs }: Props) {
         place,
         block,
         rate,
+        listing: null as { link?: string | null } | null,
         source: block ? ('block' as const) : rate ? ('third' as const) : null,
         // What the page shows and sorts on: Gen Con's published figure where
         // there is one, because it beats anything bought.
@@ -353,6 +421,7 @@ export function HotelsView({ nowMs }: Props) {
       place: { ...one, brand: undefined, stars: undefined } as Lodging,
       block: null,
       rate: null,
+      listing: one,
       source: 'third' as const,
       nightly: one.nightly,
       // Nobody surveyed a skywalk into a flat, and a listing that claims one in
@@ -575,11 +644,35 @@ export function HotelsView({ nowMs }: Props) {
         <p className="hotels__empty">No hotel is {words}.</p>
       ) : (
         <ol className="hotels__list">
-          {rows.map(({ place, rate, block, nightly, beside: alt }) => (
-            <li key={place.id} className="hotels__row">
+          {rows.map(({ place, rate, block, nightly, listing, beside: alt }) => {
+            const booking = bookingFor({ block, rate, listing });
+            return (
+            <li
+              key={place.id}
+              className={`hotels__row${opened.has(place.id) ? ' hotels__row--open' : ''}`}
+            >
               <div className="hotels__what">
                 <h3>
-                  {place.name}
+                  {/*
+                    The name is the control on a phone, because "tap the hotel"
+                    is what somebody will try. On a wide screen the detail is
+                    already open and there is nothing for it to do, so it is not
+                    a button at all rather than a button that does nothing.
+                  */}
+                  {wide ? (
+                    place.name
+                  ) : (
+                    <button
+                      type="button"
+                      className="hotels__open"
+                      aria-expanded={opened.has(place.id)}
+                      aria-controls={`hotel-${place.id}`}
+                      onClick={() => toggleOpen(place.id)}
+                    >
+                      {place.name}
+                      <span className="hotels__open-mark" aria-hidden="true" />
+                    </button>
+                  )}
                   {/* "In the block" wrapped onto its own line behind a long
                       hotel name and read as a second heading. One word, and
                       the name breaks around it rather than it breaking. */}
@@ -632,6 +725,58 @@ export function HotelsView({ nowMs }: Props) {
               </div>
 
               {/*
+                Everything the page knows about this one, in one place.
+
+                Always in the document, never behind a condition — on a wide
+                screen CSS shows it and there is nothing to press, on a phone
+                CSS hides it until the name above is tapped. Rendering it only
+                when open would mean a screen reader on a desktop never saw it.
+              */}
+              <div className="hotels__detail" id={`hotel-${place.id}`}>
+                <dl>
+                  <div>
+                    <dt>Which nights</dt>
+                    <dd>
+                      {block
+                        ? `Gen Con’s block rate, for the convention itself`
+                        : STAY.in
+                          ? STAY.isConvention
+                            ? `${STAY.in} to ${STAY.out}, the convention itself`
+                            : `${STAY.in} to ${STAY.out} — Gen Con ${STAY.conventionYear} is not on sale yet, so this is the same Wednesday to Sunday in a quieter week and the real thing will cost more`
+                          : 'No nights gathered yet'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Where it is</dt>
+                    <dd>
+                      {place.metres < 1000
+                        ? `${place.metres} m from the convention centre`
+                        : `${trim(place.metres / 1000)} km from the convention centre`}
+                      {place.city ? `, in ${place.city}` : ''}
+                      {`. ${place.kind === 'rental' ? 'Let by the night rather than a hotel' : `A ${place.kind.replace('_', ' ')}`}`}
+                      {hasSkywalk(place.id) === true
+                        ? ', and on the skywalk, so the walk is indoors'
+                        : '.'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>How to book</dt>
+                    <dd>
+                      {booking ? (
+                        <a href={booking.href} target="_blank" rel="noreferrer noopener">
+                          {booking.label} ↗
+                        </a>
+                      ) : (
+                        // Said plainly rather than papered over with a search
+                        // URL dressed up as a booking.
+                        'No booking link gathered for this one.'
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/*
                 The comparison, on the row it is about.
                 It used to be a section of its own under the whole list, which
                 put the answer a screen and a half from the question. Not every
@@ -659,7 +804,8 @@ export function HotelsView({ nowMs }: Props) {
                 </p>
               )}
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
 

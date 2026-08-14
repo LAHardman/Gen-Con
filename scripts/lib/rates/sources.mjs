@@ -119,6 +119,19 @@ async function readJson(response, who) {
   }
 }
 
+/**
+ * Where a returned property can be booked, if it said.
+ *
+ * Only http(s), because this ends up as an anchor on the page and a `link`
+ * field is whatever the upstream chose to put in it. Anything else is dropped
+ * rather than rendered.
+ */
+const linkOf = (row) => {
+  const said = row?.link ?? row?.website ?? null;
+  if (typeof said !== 'string') return null;
+  return /^https?:\/\//.test(said) ? said : null;
+};
+
 /** A returned property's position, or null when it did not carry one. */
 const pointOf = (row) =>
   row?.gps_coordinates
@@ -226,7 +239,7 @@ export const serpapi = {
       if (!nightly) continue;
       // Only this hotel's own building counts as an answer about this hotel.
       if (matchByPoint([place], pointOf(row))?.id !== place.id) continue;
-      return { nightly, currency: 'USD', via: row.name };
+      return { nightly, currency: 'USD', via: row.name, link: linkOf(row) };
     }
     return null;
   },
@@ -321,7 +334,7 @@ export const serpapi = {
        */
       const byPoint = nightly ? matchByPoint(places, pointOf(row)) : null;
       const place = byPoint ?? (nightly ? matchByName(places, row.name) : null);
-      if (place) found.push({ placeId: place.id, nightly, currency: 'USD', via: row.name });
+      if (place) found.push({ placeId: place.id, nightly, currency: 'USD', via: row.name, link: linkOf(row) });
       report?.({
         name: row.name,
         nightly,
@@ -330,6 +343,7 @@ export const serpapi = {
         lat: pointOf(row)?.lat ?? null,
         lng: pointOf(row)?.lng ?? null,
         kind: row.type ?? null,
+        link: linkOf(row),
         matched: place?.name ?? null,
         // Which mechanism found it, so a run says whether coordinates arrived.
         how: place ? (byPoint ? 'position' : 'name') : null,

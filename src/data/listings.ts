@@ -31,6 +31,8 @@ export interface Listing {
   lng: number;
   /** Per night, for the convention stay above. */
   nightly: number;
+  /** Where the search said this can be booked, when it said. */
+  link?: string | null;
   city?: string;
 }
 
