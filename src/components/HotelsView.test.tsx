@@ -105,12 +105,21 @@ vi.mock('../data/rates', () => {
   return {
     RATES,
     REFRESHED: '2026-08-11',
-    // The stay the bought prices are for. The convention itself here, so the
-    // fallback wording is exercised by its own test rather than by every one.
+    /*
+     * The stay the bought prices are for — a stand-in week, which is what has
+     * actually shipped for most of this app's life and is the state that can
+     * mislead somebody into budgeting short.
+     *
+     * It used to be the convention's own dates here, which made the fixture
+     * disagree with production and, worse, made two different things
+     * indistinguishable: booking a hotel records the *convention's* nights, and
+     * a fixture where those are also the price's nights cannot tell a page that
+     * gets it right from one that gets it wrong.
+     */
     STAY: {
-      in: '2027-08-04',
-      out: '2027-08-08',
-      isConvention: true,
+      in: '2026-10-14',
+      out: '2026-10-18',
+      isConvention: false,
       conventionYear: 2027,
       conventionFrom: '2027-08-04',
     },
@@ -120,6 +129,7 @@ vi.mock('../data/rates', () => {
 });
 
 const { HotelsView, bookingFor, stayNote } = await import('./HotelsView');
+const { useBookings } = await import('../hooks/useBookings');
 
 /** A stay with nothing gathered into it yet. */
 const EMPTY_STAY = {
@@ -130,7 +140,23 @@ const EMPTY_STAY = {
   conventionFrom: '2027-08-04',
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // The bookings are kept in `localStorage`, so one test's booking would
+  // otherwise be the next test's starting state.
+  window.localStorage.clear();
+});
+
+/**
+ * The page with its booking store attached, which is how the app renders it.
+ *
+ * A prop rather than a hook inside the component, because the budget page reads
+ * the same store — so the store is exercised here rather than stubbed.
+ */
+function Hotels({ nowMs }: { nowMs: number }) {
+  const bookings = useBookings();
+  return <HotelsView nowMs={nowMs} bookings={bookings} />;
+}
 
 const NOW = Date.parse('2026-08-11T12:00:00Z');
 const page = () => screen.getByRole('region', { name: 'Hotels' });
@@ -155,24 +181,28 @@ describe('the rest of what is known about one hotel', () => {
   it('has the detail in the row itself, for a screen with room for it', () => {
     // CSS decides whether it shows — jsdom does no layout, so what is checked
     // here is that it is in the document to be shown at all.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(row('JW Marriott').querySelector('.hotels__detail')).toBeTruthy();
   });
 
   it('says which nights the price covers, and whose they are', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     // A block hotel's rate is Gen Con's, so it is the convention by definition.
     expect(row('JW Marriott').querySelector('.hotels__detail')!.textContent).toMatch(
       /Gen Con’s block rate, for the convention itself/,
     );
-    // A bought one is for whichever stay was gathered, named.
+    // A bought one is for whichever stay was gathered, named — and when that is
+    // a stand-in week rather than the convention, it says so on the row.
     expect(row('Holiday Inn Express').querySelector('.hotels__detail')!.textContent).toMatch(
-      /2027-08-04 to 2027-08-08/,
+      /2026-10-14 to 2026-10-18/,
+    );
+    expect(row('Holiday Inn Express').querySelector('.hotels__detail')!.textContent).toMatch(
+      /Gen Con 2027 is not on sale yet/,
     );
   });
 
   it('describes where it is in words, not only in metres', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(row('JW Marriott').querySelector('.hotels__detail')!.textContent).toMatch(
       /124 m from the convention centre.*on the skywalk, so the walk is indoors/s,
     );
@@ -185,7 +215,7 @@ describe('the rest of what is known about one hotel', () => {
   it('points a block hotel at Gen Con rather than at its own front desk', () => {
     // Being in the block *means* booking through Gen Con. A link to the hotel
     // would be a link to somewhere that cannot sell the rate on the row above.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const link = within(row('JW Marriott')).getByRole('link', { name: /Gen Con’s housing/ });
     expect(link.getAttribute('href')).toBe('https://example.invalid/hotelmap');
   });
@@ -196,14 +226,14 @@ describe('the rest of what is known about one hotel', () => {
      * answer is that there is not one. A search URL dressed up as a booking
      * would look like an answer and be a guess.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const detail = row('Holiday Inn Express').querySelector('.hotels__detail')!;
     expect(detail.textContent).toMatch(/No booking link gathered for this one/);
     expect(within(row('Holiday Inn Express')).queryByRole('link')).toBeNull();
   });
 
   it('uses the listing’s own link when the search gave one', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const link = within(row('Indy Urban Nest')).getByRole('link', { name: /listed/ });
     expect(link.getAttribute('href')).toBe('https://example.invalid/urban-nest');
     // Somebody else's site, opened as somebody else's site.
@@ -238,10 +268,17 @@ describe('deciding where a hotel can be booked', () => {
 
 describe('which nights the bought prices are for', () => {
   it('says so when they are the convention’s own', () => {
-    render(<HotelsView nowMs={NOW} />);
-    expect(page().textContent).toMatch(
+    // Called directly, because the page's own fixture is the stand-in week —
+    // which is what ships for most of the year. See the mock above.
+    expect(stayNote({ ...EMPTY_STAY, in: '2027-08-04', out: '2027-08-08' })).toMatch(
       /Bought prices are for the convention itself, 2027-08-04 to 2027-08-08/,
     );
+  });
+
+  it('puts the stand-in note on the page rather than only in a function', () => {
+    render(<Hotels nowMs={NOW} />);
+    expect(page().textContent).toMatch(/2026-10-14 to 2026-10-18/);
+    expect(page().textContent).toMatch(/Gen Con 2027 is not on sale yet/);
   });
 
   it('says plainly when they are a stand-in, and that the real thing costs more', () => {
@@ -288,7 +325,7 @@ describe('what it refuses to be mistaken for', () => {
   const told = (name: string) => row(name).querySelector('.hotels__told') as HTMLElement;
 
   it('calls a published block rate what it is', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     // 2027 planning year, so the JW's is carried forward and says so.
     expect(told('JW Marriott').getAttribute('aria-label')).toMatch(
       /An estimate\. Gen Con’s real 2025 block rate of \$287 the room, carried forward 2 years/,
@@ -296,7 +333,7 @@ describe('what it refuses to be mistaken for', () => {
   });
 
   it('calls a bought price an indication rather than a quote', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const say = told('Holiday Inn Express').getAttribute('aria-label')!;
     expect(say).toMatch(/A market rate, not a quote/);
     expect(say).toMatch(/serpapi and xotelo/);
@@ -305,14 +342,14 @@ describe('what it refuses to be mistaken for', () => {
   });
 
   it('says a missing price is a gap in the asking, not a verdict on the hotel', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(told('Unasked Lodge').getAttribute('aria-label')).toMatch(
       /Nobody has gathered a market rate for this one yet/,
     );
   });
 
   it('opens the blurb on hover and shuts it when the pointer leaves', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const price = told('JW Marriott');
     expect(page().querySelector('.hotels__bubble')).toBeNull();
 
@@ -326,7 +363,7 @@ describe('what it refuses to be mistaken for', () => {
   it('opens it on a tap too, and shuts it on a tap elsewhere', () => {
     // A phone has no hover, so a tooltip that only hovers is a tooltip half the
     // readers never see.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(told('JW Marriott'));
     expect(page().querySelector('.hotels__bubble')).toBeTruthy();
 
@@ -337,7 +374,7 @@ describe('what it refuses to be mistaken for', () => {
   it('does not close on a click that follows its own hover', () => {
     // With a mouse the hover has already opened it; a click that toggled would
     // read as the page snatching the answer back.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const price = told('JW Marriott');
     fireEvent.mouseEnter(price);
     fireEvent.click(price);
@@ -345,14 +382,14 @@ describe('what it refuses to be mistaken for', () => {
   });
 
   it('shuts it on Escape', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(told('JW Marriott'));
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(page().querySelector('.hotels__bubble')).toBeNull();
   });
 
   it('says the hotel list is a sample rather than every hotel there is', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(page().textContent).toMatch(/sample rather than a complete list/i);
   });
 });
@@ -365,7 +402,7 @@ describe('putting the list in an order', () => {
   const by = (which: string) => fireEvent.click(screen.getByRole('button', { name: which }));
 
   it('starts on distance, the one number this app is sure of', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(screen.getByRole('button', { name: 'Distance' }).getAttribute('aria-pressed')).toBe(
       'true',
     );
@@ -375,7 +412,7 @@ describe('putting the list in an order', () => {
   it('sorts by price with the unpriced last, not first', () => {
     // "Cheapest first" with a blank at the top would answer a question about
     // money with the one row there is no money for.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     by('Price');
     expect(listed()).toEqual([
       'Motel 6 Southport',
@@ -398,7 +435,7 @@ describe('putting the list in an order', () => {
      * the brand, and the page has to admit that rather than let a reader take
      * it for a score.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     by('Rating');
     expect(listed()).toEqual([
       'JW Marriott Indianapolis', // luxury
@@ -418,7 +455,7 @@ describe('putting the list in an order', () => {
   });
 
   it('says nothing about chains when it is not sorting by them', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(page().textContent).not.toMatch(/orders by the chain/i);
     expect(row('JW Marriott').textContent).not.toMatch(/luxury/);
   });
@@ -426,7 +463,7 @@ describe('putting the list in an order', () => {
 
 describe('how old a price is', () => {
   it('puts an age on every bought one', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(within(row('Holiday Inn Express')).getByText(/yesterday/)).toBeTruthy();
     // Ten weeks old, and it has to look it rather than sitting beside a fresh
     // one in the same typeface with no date.
@@ -434,7 +471,7 @@ describe('how old a price is', () => {
   });
 
   it('shows a gap as a gap, not as a zero', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     // Nobody has asked about this one, and a blank must read as a blank.
     const lodge = row('Unasked Lodge');
     expect(within(lodge).getByText('no price')).toBeTruthy();
@@ -446,13 +483,13 @@ describe('when two services disagree', () => {
   it('says by how much rather than hiding it', () => {
     // The honest width of "about $289". Averaging it away would make one number
     // look surer than the two that produced it.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(within(row('Holiday Inn Express')).getByText(/they differ by 40/)).toBeTruthy();
     expect(within(row('Holiday Inn Express')).getByText(/serpapi, xotelo/)).toBeTruthy();
   });
 
   it('names the single source when only one answered', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const nestle = row('Nestle Inn');
     expect(within(nestle).getByText('serpapi')).toBeTruthy();
     expect(nestle.textContent).not.toMatch(/they differ/);
@@ -485,7 +522,7 @@ describe('filters that can all be off at once', () => {
      * the bar stays put rather than scrolling away with them.
      */
     const panel = () => page().querySelector('.hotels__panel')!;
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(fold().getAttribute('aria-expanded')).toBe('true');
     expect(panel().hasAttribute('hidden')).toBe(false);
 
@@ -502,7 +539,7 @@ describe('filters that can all be off at once', () => {
   it('keeps saying what is on while it is folded', () => {
     // A list quietly filtered by controls that are out of sight is a list that
     // looks wrong, and the reader has no way to find out why.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(fold().textContent).toMatch(/none on · by distance/);
 
     fireEvent.click(chip('Walking distance'));
@@ -518,7 +555,7 @@ describe('filters that can all be off at once', () => {
      * was no way to see the whole list. Distance is the number this app is sure
      * of, so with nothing chosen it decides the order.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(listed()).toEqual([
       'JW Marriott Indianapolis',
       'The Westin Indianapolis',
@@ -538,7 +575,7 @@ describe('filters that can all be off at once', () => {
   it('turns any filter off by pressing it again', () => {
     // The whole point of dropping the "All" chip: the way back is the way in,
     // and it has to be true of every group rather than the first one.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     for (const name of [
       'Walking distance',
       'Gen Con block',
@@ -562,7 +599,7 @@ describe('filters that can all be off at once', () => {
      * outside the block is absent from this list rather than claimed to have
      * no skywalk, which would be this app inventing a fact.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(chip('Skywalk to the ICC'));
     expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis']);
   });
@@ -572,7 +609,7 @@ describe('filters that can all be off at once', () => {
      * The old tabs made "Gen Con block" a distance, so a block hotel could not
      * also be a drive away — and plenty of Gen Con's block is out by the airport.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(chip('Walking distance'));
     fireEvent.click(chip('Gen Con block'));
     expect(listed()).toEqual(['JW Marriott Indianapolis', 'The Westin Indianapolis']);
@@ -581,14 +618,14 @@ describe('filters that can all be off at once', () => {
   it('keeps an unpriced hotel on the list until somebody asks about price', () => {
     // A blank is honest — "nobody has asked" — and only a budget makes it
     // irrelevant, because a hotel with no price cannot be shown to fit one.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(row('Unasked Lodge')).toBeTruthy();
     slide('Price', 200);
     expect(listed()).not.toContain('Unasked Lodge');
   });
 
   it('reads the distance slider in kilometres, and says "any" until it is moved', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('any');
     slide('Distance', 1);
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1 km');
@@ -601,7 +638,7 @@ describe('filters that can all be off at once', () => {
      * number somebody typed on purpose must survive being shown on a coarse
      * control — the thumb rounds, the answer does not.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     type('Distance', '1.3');
     expect(page().querySelector('#hotels-within-out')!.textContent).toBe('1.3 km');
     expect(listed()).toEqual([
@@ -616,7 +653,7 @@ describe('filters that can all be off at once', () => {
   it('reads an emptied field as "no limit" rather than as zero', () => {
     // Clearing the box is undoing the filter. Reading it as "under $0" would
     // empty the page in answer to a gesture that meant the opposite.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     type('Price', '150');
     expect(listed().length).toBeLessThan(9);
     type('Price', '');
@@ -627,7 +664,7 @@ describe('filters that can all be off at once', () => {
   it('takes the clear-all button off the page until there is a mess to clear', () => {
     // One filter comes off by pressing it again, so a button for it would only
     // repeat a chip that is already on screen and already says what it does.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(chip('Driving distance'));
     expect(screen.queryByRole('button', { name: /Clear/ })).toBeNull();
 
@@ -638,7 +675,7 @@ describe('filters that can all be off at once', () => {
   });
 
   it('says which hotels are missing rather than showing an empty page', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(chip('Driving distance'));
     slide('Distance', 1);
     expect(page().querySelector('.hotels__empty')!.textContent).toBe(
@@ -647,7 +684,7 @@ describe('filters that can all be off at once', () => {
   });
 
   it('gives a drive time out there rather than a walk, and marks it as arithmetic', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(chip('Driving distance'));
     expect(within(row('Airport Motel')).getByText(/about \d+ min drive\*/)).toBeTruthy();
     expect(page().textContent).toMatch(/rather than a routed drive/i);
@@ -664,7 +701,7 @@ describe('the comparison, on the row it is about', () => {
      * screen and a half from the question: the row said "$152" and the thing
      * that gives $152 a meaning was somewhere else entirely.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const said = beside('JW Marriott')!.textContent!;
     expect(said).toMatch(/Nearby, outside the block/);
     expect(said).toMatch(/Corner Inn/);
@@ -674,7 +711,7 @@ describe('the comparison, on the row it is about', () => {
   it('puts none on a hotel outside the block', () => {
     // The comparison is a thing said about the block, so a hotel that is not
     // in it has nothing to be compared against.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(beside('Holiday Inn Express')).toBeNull();
   });
 
@@ -685,7 +722,7 @@ describe('the comparison, on the row it is about', () => {
      * nothing is within a quarter of the block rate — so there is no
      * comparison, and reaching for one would be inventing it.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: 'Walking distance' }));
     fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '0.3' } });
     expect(row('JW Marriott')).toBeTruthy();
@@ -694,7 +731,7 @@ describe('the comparison, on the row it is about', () => {
 
   it('draws only on hotels the reader has not filtered away', () => {
     // A hotel they have excluded is not an answer to what they asked.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '1' } });
     const said = beside('JW Marriott')?.textContent ?? '';
     expect(said).not.toMatch(/Unasked Lodge/); // 1.4 km out, filtered away
@@ -706,7 +743,7 @@ describe('the comparison, on the row it is about', () => {
      * nothing outside the block in view, and a comparison drawn from what is in
      * view would then be no comparison at all.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
     expect(beside('JW Marriott')).toBeTruthy();
   });
@@ -720,14 +757,14 @@ describe('the comparison, on the row it is about', () => {
      * a kilometre off — and takes it on money instead, $290 against its own
      * projected $292.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(beside('JW Marriott')!.textContent).toMatch(/^Nearby, outside the block/);
     expect(beside('The Westin')!.textContent).toMatch(/^Similar money, outside the block/);
   });
 
   it('spreads itself down the page rather than naming one hotel every time', () => {
     // Two rows naming the same hotel are one finding printed twice.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const named = [...page().querySelectorAll('.hotels__beside-name')].map((one) => one.textContent);
     expect(named.length).toBeGreaterThan(1);
     expect(new Set(named).size).toBe(named.length);
@@ -740,13 +777,13 @@ describe('the comparison, on the row it is about', () => {
      * from the JW and $97 a room more, and a comparison that only ever reads
      * as a saving is a comparison selling something.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(beside('The Westin')!.textContent).toMatch(/\$1 a night each cheaper/);
     expect(beside('JW Marriott')!.textContent).toMatch(/\$48 a night each more/);
   });
 
   it('has no section of its own left under the list', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(page().querySelector('.hotels__pair')).toBeNull();
     expect(page().textContent).not.toMatch(/Beside the nearest alternative/);
   });
@@ -767,7 +804,7 @@ describe('opening one hotel', () => {
   it('opens from anywhere on the pill, not only from the name', () => {
     // "Tap the hotel" is what somebody will try, and the name is a small
     // target on a phone. The distance line is part of the hotel too.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(screen.queryByRole('dialog')).toBeNull();
 
     fireEvent.click(within(row('JW Marriott')).getByText(/124 m from the ICC/));
@@ -777,7 +814,7 @@ describe('opening one hotel', () => {
   it('opens from the name by keyboard, which a pill cannot be', () => {
     // A row is not focusable, so a hotel that only opens on a pointer is a
     // hotel half the readers cannot open at all.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(within(row('The Westin')).getByRole('button', { name: /The Westin/ }));
     expect(within(dialog()).getByRole('heading', { name: 'The Westin Indianapolis' })).toBeTruthy();
   });
@@ -788,7 +825,7 @@ describe('opening one hotel', () => {
      * into "open the hotel" would take away the one control on the row that
      * answers the question the number raises.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('JW Marriott').querySelector('.hotels__told') as HTMLElement);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -798,7 +835,7 @@ describe('opening one hotel', () => {
      * The whole reason it is a pop-up rather than a fold: everything known
      * about the hotel at once, so there is nothing left to go looking for.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('Holiday Inn Express'));
     const said = dialog().textContent!;
     expect(said).toMatch(/Holiday Inn Express/);
@@ -816,14 +853,14 @@ describe('opening one hotel', () => {
   it('names the town for somewhere that is not in it', () => {
     // The city is the whole answer for a motel out by the airport, and noise
     // for a hotel across the road from the hall.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: 'Driving distance' }));
     fireEvent.click(row('Airport Motel'));
     expect(dialog().textContent).toMatch(/It is in Plainfield/);
   });
 
   it('is a dialog the screen reader is told about, focused on the way out', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('JW Marriott'));
     expect(dialog().getAttribute('aria-modal')).toBe('true');
     expect(dialog().getAttribute('aria-labelledby')).toBe('hotel-dialog-title');
@@ -831,7 +868,7 @@ describe('opening one hotel', () => {
   });
 
   it('closes on Escape and on the close button', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('JW Marriott'));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -847,7 +884,7 @@ describe('opening one hotel', () => {
      * one number, with no way to find out anything else about it. Pressing it
      * is the obvious thing to try, and what it should give is that hotel.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(beside('JW Marriott'));
     expect(within(dialog()).getByRole('heading', { name: 'Corner Inn' })).toBeTruthy();
     expect(within(dialog()).queryByRole('heading', { name: /JW Marriott/ })).toBeNull();
@@ -859,7 +896,7 @@ describe('opening one hotel', () => {
      * block" chosen the hotel it names is deliberately not in the list. It
      * still has to open, or the row is naming somewhere unreachable.
      */
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: 'Gen Con block' }));
     // Matched on the headings, because the JW's row *names* the Corner Inn —
     // that naming is the whole point, and it is not the same as listing it.
@@ -872,7 +909,7 @@ describe('opening one hotel', () => {
   it('follows the comparison from inside the pop-up', () => {
     // Without this the reader has to close it, find the other row and open
     // that — which is the scrolling the pop-up was meant to end.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('JW Marriott'));
     fireEvent.click(within(dialog()).getByRole('button', { name: /Corner Inn/ }));
     expect(within(dialog()).getByRole('heading', { name: 'Corner Inn' })).toBeTruthy();
@@ -880,10 +917,111 @@ describe('opening one hotel', () => {
 
   it('shows nothing but the hotel it was opened for', () => {
     // One at a time, or the list under it is a stack of dialogs.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(row('JW Marriott'));
     fireEvent.click(row('The Westin'));
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+});
+
+/**
+ * Marking a hotel booked, which is a note to yourself rather than a booking.
+ *
+ * Nothing on this page can reserve a room — Gen Con's block is behind a badge
+ * and a login, and every other price came from a search engine. What the button
+ * does is record the choice so the budget stops being a second page somebody
+ * has to keep in step by hand, and the wording has to say so.
+ */
+describe('recording a hotel as booked', () => {
+  const dialog = () => screen.getByRole('dialog');
+  const openBook = (name: string) => {
+    fireEvent.click(row(name));
+    return within(dialog()).getByRole('button', { name: /booked/i });
+  };
+
+  it('says it records rather than reserves', () => {
+    render(<Hotels nowMs={NOW} />);
+    fireEvent.click(row('JW Marriott'));
+    expect(dialog().textContent).toMatch(/It does not reserve anything/);
+    expect(within(dialog()).getByRole('button', { name: 'I have booked this' })).toBeTruthy();
+  });
+
+  it('books it against the convention’s own nights, not the price’s', () => {
+    /*
+     * The distinction that matters most here. `STAY` is whichever week the
+     * *prices* were gathered for, and for most of the year that is a quiet week
+     * standing in for a convention not yet on sale. Booking somebody into
+     * October because that is where the number came from would be the wrong
+     * kind of honest.
+     *
+     * `NOW` is August 2026, so the planning year is 2027: Wednesday 4 August to
+     * Sunday 8 August.
+     */
+    render(<Hotels nowMs={NOW} />);
+    fireEvent.click(openBook('JW Marriott'));
+    expect(dialog().textContent).toMatch(/2027-08-04 to 2027-08-08/);
+  });
+
+  it('turns it off again with the same button', () => {
+    render(<Hotels nowMs={NOW} />);
+    const button = openBook('JW Marriott');
+    fireEvent.click(button);
+    expect(within(dialog()).getByRole('button', { name: /Booked/ }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(within(dialog()).getByRole('button', { name: /Booked/ }));
+    expect(within(dialog()).getByRole('button', { name: 'I have booked this' })).toBeTruthy();
+  });
+
+  it('marks the row, so a list of two hundred says which two you chose', () => {
+    render(<Hotels nowMs={NOW} />);
+    expect(row('JW Marriott').textContent).not.toMatch(/Booked/);
+    fireEvent.click(openBook('JW Marriott'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(row('JW Marriott').textContent).toMatch(/Booked/);
+    expect(row('The Westin').textContent).not.toMatch(/Booked/);
+  });
+
+  it('books more than one, because a party splits across hotels', () => {
+    // Nothing treats a second booking as replacing the first.
+    render(<Hotels nowMs={NOW} />);
+    fireEvent.click(openBook('JW Marriott'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(openBook('The Westin'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(row('JW Marriott').textContent).toMatch(/Booked/);
+    expect(row('The Westin').textContent).toMatch(/Booked/);
+  });
+
+  it('refuses a hotel nobody has priced, and says why', () => {
+    /*
+     * There is nothing for the budget to add up. A booking at $0.00 would sit
+     * in the hotel column reading as a free room.
+     */
+    render(<Hotels nowMs={NOW} />);
+    fireEvent.click(row('Unasked Lodge'));
+    const button = within(dialog()).getByRole('button', { name: 'I have booked this' });
+    expect(button.hasAttribute('disabled')).toBe(true);
+    expect(dialog().textContent).toMatch(/nothing for the budget to add up/);
+  });
+
+  it('copies the price the row is showing, rather than pointing at it', () => {
+    /*
+     * Two claims in one. `rates.ts` is rewritten every month by a scheduled
+     * run, so the figure is copied at the moment the button is pressed — a
+     * budget that re-priced itself overnight is one nobody can reconcile
+     * against a card statement.
+     *
+     * And it is the *shown* price. The Westin is in the block, so what this
+     * page shows is Gen Con's own 2025 rate of $276 carried forward two years
+     * at 2.8% — $292 — not the $240 the market quote says. Copying the market
+     * number would put a figure in the budget that appears nowhere on screen.
+     */
+    render(<Hotels nowMs={NOW} />);
+    expect(row('The Westin').textContent).toMatch(/\$292/);
+    fireEvent.click(openBook('The Westin'));
+    const saved = JSON.parse(window.localStorage.getItem('genCon.bookings')!);
+    expect(saved.bookings[0].nightlyCents).toBe(29_200);
+    expect(saved.bookings[0].placeId).toBe('w2');
+    expect(saved.bookings[0].block).toBe(true);
   });
 });
 
@@ -891,20 +1029,20 @@ describe('the four facts on every row', () => {
   it('calls out a skywalk as its own thing, not as a short walk', () => {
     // Indoors and air-conditioned is the whole difference between two hotels
     // the same distance apart in an Indianapolis August.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(within(row('JW Marriott')).getByText('skywalk')).toBeTruthy();
     // And a hotel with no skywalk claims nothing either way.
     expect(within(row('Nestle Inn')).queryByText('skywalk')).toBeNull();
   });
 
   it('gives a walk time near the hall and a drive time far from it', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(within(row('Nestle Inn')).getByText(/min walk/)).toBeTruthy();
     expect(within(row('Airport Motel')).getByText(/min drive/)).toBeTruthy();
   });
 
   it('puts the distance from the ICC on every row', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     expect(within(row('JW Marriott')).getByText(/124 m from the ICC/)).toBeTruthy();
     expect(within(row('Nestle Inn')).getByText(/1.3 km from the ICC/)).toBeTruthy();
   });
@@ -914,7 +1052,7 @@ describe('splitting the bill', () => {
   it('divides the room between the people in it, and shows both numbers', () => {
     // "$74" beside a hotel is a very different claim from "$296 between four",
     // so the room total is never hidden.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const westin = row('The Westin');
     // Gen Con's 276 carried two years at 2.8%, then halved.
     const each = Number(within(westin).getByText(/^\$\d+$/).textContent!.replace(/\D/g, ''));
@@ -923,7 +1061,7 @@ describe('splitting the bill', () => {
   });
 
   it('changes the answer when the party changes', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const each = () =>
       Number(within(row('The Westin')).getByText(/^\$\d+$/).textContent!.replace(/\D/g, ''));
     fireEvent.click(screen.getByRole('button', { name: '1' }));
@@ -933,7 +1071,7 @@ describe('splitting the bill', () => {
   });
 
   it('says nothing about a room total when nobody is sharing', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     fireEvent.click(screen.getByRole('button', { name: '1' }));
     expect(row('The Westin').textContent).not.toMatch(/the room/);
   });
@@ -943,14 +1081,14 @@ describe('published beats bought', () => {
   it('shows Gen Con’s own rate where there is one, and says so', () => {
     // A bought price sitting where a published one exists would be worse data
     // presented with more confidence.
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const jw = row('JW Marriott');
     expect(within(jw).getByText('Block')).toBeTruthy();
     expect(within(jw).getByText(/Gen Con’s own/)).toBeTruthy();
   });
 
   it('falls back to a bought price only outside the block', () => {
-    render(<HotelsView nowMs={NOW} />);
+    render(<Hotels nowMs={NOW} />);
     const holiday = row('Holiday Inn Express');
     expect(within(holiday).queryByText('in the block')).toBeNull();
     expect(within(holiday).getByText('serpapi, xotelo')).toBeTruthy();

@@ -41,11 +41,13 @@ import {
   tier,
   type Beside,
 } from '../data/blocks';
-import { planningYear } from '../data/key-dates';
+import { conventionDaysOf, conventionWednesday, planningYear } from '../data/key-dates';
 import { DRIVE_METRES, LODGING, PULLED, WALK_METRES, type Lodging } from '../data/lodging';
 import { CHEAPEST } from '../data/partners';
 import { LISTINGS } from '../data/listings';
 import { RATES, REFRESHED, STAY, rateFor, type Rate, type Stay } from '../data/rates';
+import type { Booking } from '../data/bookings';
+import type { Bookings } from '../hooks/useBookings';
 
 /** How far, and where the price comes from. Null in either means "don't mind". */
 type Ring = 'walk' | 'drive';
@@ -228,12 +230,20 @@ function HotelDialog({
   row,
   people,
   nowMs,
+  stay,
+  booked,
+  onBook,
   onClose,
   onShow,
 }: {
   row: HotelRow;
   people: number;
   nowMs: number;
+  /** The nights a new booking would be for — the convention's own. */
+  stay: { in: string; out: string };
+  /** This hotel's booking, if it has one. */
+  booked: Booking | null;
+  onBook: () => void;
   onClose: () => void;
   onShow: (placeId: string) => void;
 }) {
@@ -351,6 +361,35 @@ function HotelDialog({
             </div>
           )}
         </dl>
+
+        {/*
+          Booking is a note to yourself, not a reservation.
+          ------------------------------------------------
+          Nothing here can book a room: Gen Con's block is behind a badge and a
+          login, and every other price on this page came from a search engine.
+          What this does is record that you have booked it somewhere else, so
+          the budget stops being a page you have to keep in step by hand. The
+          wording says so, because a button that reads "Book" on a page full of
+          prices would be read as one that books.
+        */}
+        <div className="hotels__dialog-book">
+          <button
+            type="button"
+            className={`hotels__book${booked ? ' hotels__book--on' : ''}`}
+            aria-pressed={!!booked}
+            onClick={onBook}
+            disabled={nightly === null}
+          >
+            {booked ? 'Booked — in your budget' : 'I have booked this'}
+          </button>
+          <p className="hotels__book-note">
+            {nightly === null
+              ? 'No price gathered for this one, so there is nothing for the budget to add up.'
+              : booked
+                ? `${booked.in} to ${booked.out}, at ${dollars(booked.nightlyCents / 100, rate?.currency ?? 'USD')} a night. Change the nights, or who is in the room, on the Budget page.`
+                : `Records it against ${stay.in} to ${stay.out} at tonight’s price. It does not reserve anything.`}
+          </p>
+        </div>
 
         {alt && (
           <div className="hotels__dialog-beside">
@@ -481,9 +520,17 @@ function Told({ say, children }: { say: string; children: React.ReactNode }) {
 
 interface Props {
   nowMs: number;
+  /**
+   * The hotels somebody has booked, lifted to `App`.
+   *
+   * A prop rather than a hook called here, because the budget page reads the
+   * same store and two independent copies of it would disagree the moment one
+   * of them was written to.
+   */
+  bookings: Bookings;
 }
 
-export function HotelsView({ nowMs }: Props) {
+export function HotelsView({ nowMs, bookings }: Props) {
   /*
    * Every filter starts off, and every one turns off the same way it turned on.
    *
@@ -511,6 +558,23 @@ export function HotelsView({ nowMs }: Props) {
   const [open, setOpen] = useState(true);
   const year = planningYear(nowMs);
 
+  /*
+   * The nights a new booking is made for.
+   *
+   * The convention's own Wednesday-to-Sunday, worked out from the first-
+   * Saturday-of-August rule rather than taken from `STAY` — `STAY` is whichever
+   * week the *prices* were gathered for, and for most of the year that is a
+   * quiet week in October standing in for a convention that is not on sale yet.
+   * Booking somebody into October because that is where the price came from
+   * would be the wrong kind of honest. The dates are theirs to change on the
+   * budget page.
+   */
+  const stay = useMemo(() => {
+    const wednesday = conventionWednesday(year).toISOString().slice(0, 10);
+    const days = conventionDaysOf(year);
+    return { in: wednesday, out: days[days.length - 1] };
+  }, [year]);
+
   /** How many filters are on. Sorting and sharing are not filters. */
   const onNow = [
     ring !== null,
@@ -522,6 +586,31 @@ export function HotelsView({ nowMs }: Props) {
 
   /** The hotel whose dialog is open, if any. */
   const [showing, setShowing] = useState<string | null>(null);
+
+  /**
+   * Records a hotel as booked, or takes the record away again.
+   *
+   * The price is **copied**, in cents, at the moment it is pressed. `rates.ts`
+   * is rewritten every month by a scheduled run, and a budget that re-priced
+   * itself overnight would be one nobody could reconcile against a card
+   * statement. See `bookings.ts`.
+   */
+  const book = useCallback(
+    (row: HotelRow) => {
+      if (row.nightly === null) return;
+      bookings.toggle({
+        placeId: row.place.id,
+        name: row.place.name,
+        nightlyCents: Math.round(row.nightly * 100),
+        in: stay.in,
+        out: stay.out,
+        who: [],
+        link: bookingFor(row)?.href ?? null,
+        block: !!row.block,
+      });
+    },
+    [bookings, stay],
+  );
 
   const shownRows = useMemo(() => {
     /*
@@ -842,6 +931,11 @@ export function HotelsView({ nowMs }: Props) {
                       hotel name and read as a second heading. One word, and
                       the name breaks around it rather than it breaking. */}
                   {block && <span className="hotels__inblock">Block</span>}
+                  {/* So a list of two hundred says which two you chose without
+                      opening any of them. */}
+                  {bookings.booked(place.id) && (
+                    <span className="hotels__inblock hotels__inblock--booked">Booked</span>
+                  )}
                 </h3>
                 <Journey place={place} band={sort === 'rating' ? CLASSES[tier(place)] : null} />
               </div>
@@ -983,6 +1077,9 @@ export function HotelsView({ nowMs }: Props) {
           row={byId.get(showing)!}
           people={people}
           nowMs={nowMs}
+          stay={stay}
+          booked={bookings.of(showing)}
+          onBook={() => book(byId.get(showing)!)}
           onClose={() => setShowing(null)}
           onShow={setShowing}
         />

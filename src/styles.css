@@ -4012,3 +4012,614 @@ body {
   background: var(--accent);
   color: #fff;
 }
+
+/* ------------------------------------------------------------------ budget */
+
+/*
+ * A page of numbers, which is a different layout problem from a page of cards.
+ *
+ * Money has to line up to be read as a column, so every figure here is
+ * `tabular-nums` — proportional digits put a $1,240.00 and a $87.50 out of
+ * alignment by half a character and the eye stops trusting the column. The
+ * headings stack on a phone and become a table on anything wider, because a
+ * seven-by-four grid of money is unreadable at 390px and is the whole point at
+ * 1200.
+ */
+.budget {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  overflow-y: auto;
+  /* Nothing on this page should ever scroll sideways: it is columns of money,
+     and a column you have to pan to see is not a column. */
+  overflow-x: clip;
+  padding: 16px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  /* Centred by the container rather than by each child's own margin: a child
+     that sets `margin` for any other reason cancels `margin-inline: auto`, and
+     the whole page then sits against the left edge. */
+  grid-template-columns: min(46rem, 100%);
+  justify-content: center;
+}
+
+@media (min-width: 64rem) {
+  .budget {
+    grid-template-columns: min(64rem, 100%);
+  }
+}
+
+.budget__head h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+
+.budget__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0;
+}
+
+.budget__total-money {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.budget__total-note {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.budget__waiting {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.budget__party,
+.budget__category,
+.budget__columns,
+.budget__conflicts {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.budget__party h3,
+.budget__category h3,
+.budget__columns h3,
+.budget__conflicts h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.budget__category-total {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.budget__note {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.budget__note--foot {
+  text-align: center;
+}
+
+.budget__note a {
+  color: var(--accent);
+}
+
+/* ----------------------------------------------------------------- people */
+
+.budget__people {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Name, badge, total, remove. The badge is the wide one because a select
+ * showing "Trade Day (Wednesday)" cannot be squeezed, and on a phone it drops
+ * to its own line rather than truncating to "Trade Da…".
+ */
+.budget__person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'name total drop'
+    'badge badge badge';
+  gap: 6px 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+@media (min-width: 40rem) {
+  .budget__person {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas: 'name badge total drop';
+  }
+}
+
+.budget__person-name {
+  grid-area: name;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+
+.budget__person-name:hover,
+.budget__person-name:focus {
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.budget__badge {
+  grid-area: badge;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.budget__person-total {
+  grid-area: total;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.budget__drop {
+  grid-area: drop;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.budget__drop:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.budget__add-person,
+.budget__add-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.budget__add-person label,
+.budget__add-line label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.budget__field-label,
+.budget__money-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.budget input,
+.budget select {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.budget__add-line label:nth-of-type(2) input,
+.budget__add-line label:nth-of-type(3) input {
+  width: 7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget button {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.budget button:hover {
+  border-color: var(--accent);
+}
+
+.budget__open-add {
+  margin-top: 10px;
+}
+
+/* ------------------------------------------------------------------ lines */
+
+.budget__lines {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * On a phone: what it is, then the money, then whose it is, stacked. On a wide
+ * screen the same four parts become one row, which is the shape a budget is
+ * actually read in — the label on the left, the figure on the right, and the
+ * eye running down the right-hand edge.
+ */
+.budget__line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'what drop'
+    'money money'
+    'whose whose';
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+@media (min-width: 52rem) {
+  .budget__line {
+    grid-template-columns: minmax(0, 2fr) auto minmax(0, 1.1fr) auto;
+    grid-template-areas: 'what money whose drop';
+    align-items: center;
+  }
+}
+
+/* A derived line is not editable, and looks it rather than only saying it. */
+.budget__line--derived {
+  border-style: dashed;
+  background: var(--panel);
+}
+
+.budget__line-what {
+  grid-area: what;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.budget__line-label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.budget__line-note,
+.budget__from {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.budget__from {
+  font-style: italic;
+}
+
+.budget__line-money {
+  grid-area: money;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.budget__money,
+.budget__times {
+  display: grid;
+  gap: 3px;
+}
+
+.budget__money input,
+.budget__times input {
+  width: 6.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * "$304.00 × 4" is the working; "$1,216.00" is the answer. Set in the same
+ * weight and colour they read as one number with a stray multiplication in it,
+ * so the working is muted and the answer keeps a gap of its own.
+ */
+.budget__line-each {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.budget__line-total {
+  margin-left: auto;
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.budget__line .budget__drop {
+  grid-area: drop;
+  align-self: start;
+}
+
+/* ------------------------------------------------------------------ whose */
+
+.budget__whose {
+  grid-area: whose;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.budget__who {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.budget__who--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+
+.budget__whose-all,
+.budget__whose-none {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* -------------------------------------------------------------- conflicts */
+
+.budget__conflicts {
+  border-left: 3px solid var(--accent);
+}
+
+.budget__conflicts ul {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budget__conflict {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.budget__conflict-tag {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------------------------------------------------------------- parking */
+
+.budget__parking {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+}
+
+.budget__parking-days {
+  display: grid;
+  gap: 3px;
+  justify-self: start;
+}
+
+.budget__parking-days input {
+  width: 5rem;
+}
+
+.budget__garages {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.budget__garage {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--panel);
+}
+
+.budget__garage-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.budget__garage-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget__garage-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.budget__skywalk {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ----------------------------------------------------------- the columns */
+
+/*
+ * The one thing on this page that may scroll sideways, and it scrolls inside
+ * its own box rather than taking the page with it: six people is six columns
+ * and no phone has room for that, but the page around it must still hold still.
+ */
+.budget__table-scroll {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.budget__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget__table th,
+.budget__table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.budget__table th[scope='row'],
+.budget__table thead th:first-child {
+  text-align: left;
+}
+
+.budget__table thead th {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.budget__table tfoot th,
+.budget__table tfoot td {
+  border-bottom: none;
+  border-top: 2px solid var(--border);
+  font-weight: 700;
+}
+
+/* ------------------------------------- booking a hotel, on the hotels page */
+
+.hotels__dialog-book {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.hotels__book {
+  justify-self: start;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hotels__book:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.hotels__book:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hotels__book--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.hotels__book-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hotels__inblock--booked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--text);
+}
+
+.budget__free {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 400;
+}

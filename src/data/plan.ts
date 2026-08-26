@@ -61,6 +61,18 @@ export interface PlanEntry {
   /** What to print for the place, as it read when this was added. */
   where: string;
   /**
+   * What a ticket costs, in whole dollars, as the feed priced it.
+   *
+   * A copy, like everything else here, and for the sharper version of the same
+   * reason: the budget adds these up, and a number that re-read itself from a
+   * feed fetched an hour ago would change a total somebody had already
+   * reconciled against their card. Most events have none — the exhibit hall,
+   * the anime room, half the seminars are free — and **absent is not zero**.
+   * Absent is "nobody said", which the budget leaves out rather than pricing
+   * at nothing.
+   */
+  cost?: number;
+  /**
    * The event's own description, kept once it has been fetched.
    *
    * Saved rather than re-fetched because a plan is what you read *at* the
@@ -95,6 +107,7 @@ export function planEntry(event: ConEvent, room?: { id: string }, pin?: Pin): Pl
     roomId: room?.id,
     at: pin ? { lat: pin.lat, lng: pin.lng } : undefined,
     where: placeLabelFor(event, room, pin),
+    cost: event.cost,
   };
 }
 
