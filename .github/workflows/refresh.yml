@@ -3,7 +3,7 @@
 #
 # WHAT THIS DOES AND DOES NOT COVER. The schedule is not here: `deploy.yml`
 # imports it at build time every Monday and never commits it, so it needs
-# nothing from this. What this refreshes is `src/data/exhibitors.ts`, which is
+# nothing from this. What this refreshes is `src/data/exhibitors.json`, which is
 # a committed file and until now was only ever updated by somebody remembering
 # to run the script.
 #
@@ -74,11 +74,11 @@ jobs:
       - name: Stop unless something moved
         id: changed
         run: |
-          if git diff --quiet -- src/data/exhibitors.ts; then
+          if git diff --quiet -- src/data/exhibitors.json; then
             echo 'Gen Con has not changed the stand list since the last refresh.'
             echo 'any=false' >> "$GITHUB_OUTPUT"
           else
-            git diff --stat -- src/data/exhibitors.ts
+            git diff --stat -- src/data/exhibitors.json
             echo 'any=true' >> "$GITHUB_OUTPUT"
           fi
 
@@ -124,7 +124,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -B "$BRANCH"
-          git add src/data/exhibitors.ts
+          git add src/data/exhibitors.json
           git commit -m 'Refresh the stand list from Gen Con'
           # Force, because this branch is a rolling snapshot of one generated
           # file rather than a history worth keeping.
@@ -140,7 +140,7 @@ jobs:
           map — `docs/next-steps.md` §9 — not to lower the floor.'
           fi
 
-          BODY="Scheduled refresh of \`src/data/exhibitors.ts\` from Gen Con's exhibitor API.
+          BODY="Scheduled refresh of \`src/data/exhibitors.json\` from Gen Con's exhibitor API.
 
           \`\`\`
           ${SUMMARY}

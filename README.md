@@ -341,7 +341,7 @@ ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
 
 `npm run fetch:exhibitors` reads Gen Con's own exhibitor browser —
 `https://www.gencon.com/api/v1/exhibitor_profiles`, public and paginated — into
-`src/data/exhibitors.ts`: **845 locations, 779 exhibitors, 793 of them
+`src/data/exhibitors.json` (read by `exhibitors.ts`): **845 locations, 779 exhibitors, 793 of them
 numbered**. One row per *place* rather than per exhibitor, because a publisher
 with four booths, a demo hall and a meeting room is six places somebody might
 be looking for.
@@ -764,7 +764,7 @@ look alike:
 The **Gen Con block** tab carries real published rates. `gencon.com/gen-con-indy/hotelmap`
 lists the whole block — 74 hotels across five regions, each with its nightly
 rate, its distance to the convention centre, and whether a skywalk reaches it —
-and `scripts/fetch-block-rates.mjs` reads it into `src/data/partners.ts`.
+and `scripts/fetch-block-rates.mjs` reads it into `src/data/partners.json` (read by `partners.ts`).
 
 Gen Con's own two caveats travel with every figure: they are **starting prices**
 that "vary by room type and occupancy", and they are **before** local sales and
@@ -2102,7 +2102,7 @@ src/
     events.ts        Event types, venue/room matching, schedule helpers
     event-kinds.ts   Gen Con's nineteen type codes, read off its own API
     amenities.ts     Restrooms, from the plans that draw them
-    exhibitors.ts    Every stand, its booth, its tags and its site (generated)
+    exhibitors.json  Every stand, its booth, its tags and its site (generated)
     booths.ts        Booth numbers to halls, and the aisle grid
     food.ts          Trucks and restaurants as one list, and what they sell
     hours.ts         When somewhere is open, including reading OSM's own format

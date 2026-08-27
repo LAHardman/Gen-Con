@@ -1,7 +1,7 @@
 /**
  * Is the hotel block a year behind, and has Gen Con published the new one?
  *
- * `partners.ts` carries `BLOCK_YEAR`, and every figure on the Hotels page is
+ * `partners.json` carries `BLOCK_YEAR`, and every figure on the Hotels page is
  * either that year's fact or arithmetic carried forward from it — including
  * `BLOCK_GROWTH`, which does more work each year it goes unmeasured. The
  * repair is one command, so with `--fix` this probe runs it; without, it
@@ -16,7 +16,7 @@ import { BLOCK_YEAR, SOURCE } from '../../../src/data/partners';
 import { planningYear } from '../../../src/data/key-dates';
 
 const INSTRUCTIONS = [
-  'Run `npm run fetch:block-rates` — it re-reads the hotel map page into `src/data/partners.ts`, recomputing `BLOCK_YEAR` and `BLOCK_GROWTH` as it goes.',
+  'Run `npm run fetch:block-rates` — it re-reads the hotel map page into `src/data/partners.json`, recomputing `BLOCK_YEAR` and `BLOCK_GROWTH` as it goes.',
   'Then `npm run check`: the pairing tests hold the block against the map ids, and a hotel Gen Con added is the usual thing they catch.',
   'If the script itself fails, the page has been restyled — `scripts/fetch-block-rates.mjs` documents the row shape it reads; open the live page beside that comment and adjust `readBlock()` to the new markup.',
 ];
@@ -70,8 +70,8 @@ export const probe: Probe = {
           execFileSync('node', ['scripts/fetch-block-rates.mjs'], { cwd: ctx.root, stdio: 'inherit' });
           return {
             status: 'warn',
-            summary: `${pageYear}'s block is published and \`fetch:block-rates\` has been run — review and commit the diff to src/data/partners.ts`,
-            instructions: ['`git diff src/data/partners.ts`, then `npm run check`, then commit.'],
+            summary: `${pageYear}'s block is published and \`fetch:block-rates\` has been run — review and commit the diff to src/data/partners.json`,
+            instructions: ['`git diff src/data/partners.json`, then `npm run check`, then commit.'],
           };
         }
         return {

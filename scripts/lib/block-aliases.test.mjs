@@ -3,7 +3,7 @@
  *
  * A table of hand-written answers rots in one direction: the world moves and
  * nobody notices, because a stale alias fails by quietly doing nothing. These
- * tests are the noticing. They run against the real `partners.ts` and
+ * tests are the noticing. They run against the real `partners.json` and
  * `lodging.ts`, so a hotel that leaves the block or a building that leaves the
  * hotel list fails the build rather than the page.
  */
@@ -19,14 +19,11 @@ import { auditAliases, NOT_IN_BLOCK, TIES } from './block-aliases.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (path) => readFileSync(join(ROOT, path), 'utf8');
 
-const partners = [
-  ...read('src/data/partners.ts').matchAll(
-    /blockName: ("(?:[^"\\]|\\.)*"), placeId: (null|'[^']+')/g,
-  ),
-].map((row) => ({
-  blockName: JSON.parse(row[1]),
-  placeId: row[2] === 'null' ? null : row[2].slice(1, -1),
-}));
+// A pack table now, so no more reading data literals back out of TypeScript
+// with a regex — the JSON is the file the generator writes.
+const partners = JSON.parse(read('src/data/partners.json')).partners.map(
+  ({ blockName, placeId }) => ({ blockName, placeId }),
+);
 
 const places = [
   ...read('src/data/lodging.ts').matchAll(
@@ -135,6 +132,6 @@ describe('the alias table', () => {
   it('leaves nothing merely suspected', () => {
     // The whole point: with the table filled in, no walkable hotel is still a
     // maybe. If this fails, `fetch-block-rates.mjs` printed the names to add.
-    expect(read('src/data/partners.ts')).toContain('SUSPECTED_IN_BLOCK: ReadonlySet<string> = new Set([])');
+    expect(JSON.parse(read('src/data/partners.json')).suspected).toEqual([]);
   });
 });

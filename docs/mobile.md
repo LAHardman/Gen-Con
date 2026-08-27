@@ -98,6 +98,20 @@ dist/pack/
 its own loader, cache story and mirror; wrapping it in the pack would only
 add a layer to the file that already works.
 
+*Status: the pack exists. `scripts/build-pack.mjs` assembles `public/pack/`
+(manifest with per-table hashes; published with every deploy at
+`<site>/pack/`), `src/data/pack.ts` is the reader with the schema gate and
+its refusal tests, and two tables are converted — `exhibitors.json` and
+`partners.json`, chosen because they are the ones CI refreshes on a
+schedule. Both generators now write the JSON through one shared serialiser
+(`scripts/lib/pack-write.mjs`), and the conversion was verified two ways:
+the data compares deep-equal with the old compiled tables, and a live run
+of each rewritten generator reproduced its file byte-for-byte — the
+byte-stability `refresh.yml` depends on survives. Converting another table
+is the same recipe: generator writes `src/data/<name>.json`, the `.ts`
+module keeps its types and lookups and imports it, one line in
+`build-pack.mjs`'s `TABLES`.*
+
 **The generators change what they write, not what they know.** Each script
 that today writes a `.ts` table writes the JSON instead, and the `.ts` module
 becomes what it should have been all along: the *types*, the *derivations*
