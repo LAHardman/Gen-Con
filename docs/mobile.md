@@ -455,7 +455,17 @@ Phase 4 is deliberately last but not least: phases 1–3 make the apps
 self-updating; phase 4 is what makes the one yearly human moment cheap
 enough that it actually happens.
 
-*Status: phase 4's watching half shipped first — `season:check`, its weekly
+*Status: phases 1–3 are built and phase 4's watching half shipped first.
+The pack (1), the runtime refresh and config (2), and the shells with the
+device importer (3) are all in, verified as far as this environment can go:
+a live import of the whole 27,467-event catalogue through the shared
+importer, the built app read in a real browser, and the pack's
+fetch-verify-store loop watched across two visits. What is left needs
+hardware this session has not got — compiling the two apps, which is what
+`release.yml` is for — and one deliberate gap, native sign-in direct to
+gencon.com (§7).
+
+Phase 4's watching half shipped first — `season:check`, its weekly
 workflow, dependabot and the auto-merge wiring are in (the probes for
 `locations` fold in `season:aliases`' suggestion work; `booth-agreement`
 watches for the moment `season:booths` is needed). It went first because
