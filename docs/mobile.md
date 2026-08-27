@@ -256,6 +256,17 @@ the webview's own storage can be evicted and native storage cannot),
 `cookies.ts`. Web implementations are the current behaviour verbatim; the
 web bundle imports no Capacitor code.
 
+*Status of that gap, stated plainly rather than smoothed over. What is
+built is the seam: `accountBase()` is same-origin on the web, a host from
+the config table if one is given, and null otherwise — and on null the
+panel says signing in lives on the website and that nothing else in the app
+asks who you are. That is honest and it works; it is not yet parity. Native
+sign-in direct to gencon.com is the design below and remains undone,
+because a half-built credential path is the one thing worse than an absent
+one: a form that 404s reads exactly like a rejected password, and somebody
+retypes it until they are locked out. Pointing `accountHost` at the
+deployed Worker gives a shell the full feature today.*
+
 **Login parity (the one true divergence):** the web needs
 `functions/gencon/login.js` because of three browser walls (CORS, `HttpOnly`,
 `SameSite`) that native networking simply does not have. So: one
@@ -269,7 +280,7 @@ retires a server dependency rather than adding one.
 
 ## 6. The Capacitor shells
 
-*Status: built. `ios/` and `android/` are committed Capacitor projects;
+*Status: built, short of compiling. `ios/` and `android/` are committed Capacitor projects;
 `npm run sync` builds `dist/` and copies it into both, pack and schedule
 included, so a first launch works with no network. `src/platform/` holds
 the whole difference between web and native — `http` (native requests have
@@ -338,7 +349,7 @@ no-install answer for "put it on somebody else's phone."
 | Offline after install | SW caches on first visit | bundled snapshot, offline from first launch | native strictly better |
 | Schedule freshness | SW stale-while-revalidate from deploy | pack check + device-direct fallback | native survives dead hosting |
 | Exhibitors / hotels / plans freshness | pack check (new — today waits on a deploy) | pack check | none |
-| Gen Con login | Cloudflare Worker | direct, native cookie jar | equivalent by design (§5) |
+| Gen Con login | Cloudflare Worker | through a configured host, or absent and said so | **the one real gap** — see below |
 | Map tiles | CARTO + cache | CARTO + cache | none; provider list is config (§4) |
 | Install & updates | link, A2HS; deploy updates code | stores; pack updates data, store updates code | the point of the plan |
 
