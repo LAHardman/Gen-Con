@@ -21,7 +21,8 @@
     "data:distances": "node scripts/build-distances.mjs",
     "events:sample": "node scripts/make-sample-events.mjs",
     "build:pages": "npm run fetch:events && npm run build",
-    "fetch:eateries": "node scripts/fetch-eateries.mjs"
+    "fetch:eateries": "node scripts/fetch-eateries.mjs",
+    "season:check": "vite-node scripts/season/check.ts"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

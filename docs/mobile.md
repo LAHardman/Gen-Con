@@ -262,10 +262,15 @@ no-install answer for "put it on somebody else's phone."
 The yearly human moments, each currently knowledge in somebody's head,
 each becoming a script that knows the steps.
 
-**`npm run season:check` — the one command that knows what's stale.** Runs
-every health probe and prints a table; CI runs it weekly and opens an issue
-naming what moved (the pattern `refresh.yml` already uses for the
-booth-agreement floor). What it probes:
+**`npm run season:check` — the one command that knows what's stale.**
+*Built: `scripts/season/` holds the runner and fifteen probes; `season.yml`
+runs it weekly, commits `docs/season-report.md` and keeps one standing issue
+(label `season`) updated with the attention sections.* Every probe answers in
+three layers — what is true, what self-repair found by reading the live pages
+(the current tile generation, the block year off the page's own heading, the
+hour prose with paste-ready lines), and numbered instructions for a person;
+`--fix` lets the probes that can repair safely (block rates, eateries) run
+their own scripts. What it probes:
 
 | Probe | Catches | Exists today as |
 | --- | --- | --- |
@@ -283,8 +288,11 @@ booth-agreement floor). What it probes:
 | Mirror worker `/health` | a KV snapshot going stale or the Worker gone | endpoint exists, nothing calls it |
 | Open `data/refresh-*` / rates pull requests older than N days | automation that ran and then waited forever | nobody notices |
 
-**The automation itself is a thing that breaks**, and it is currently the
-least-watched layer here. Four repairs, all cheap, all belonging to phase 4:
+**The automation itself is a thing that breaks**, and was the least-watched
+layer here. Four repairs, all cheap — *all four now in place: the weekly
+report commit, auto-merge on the passing exhibitors refresh (the rates PR
+stays human-read on purpose — its body asks to be), `.github/dependabot.yml`,
+and the mirror's `/health` probe*:
 
 - **GitHub disables scheduled workflows after 60 days without repository
   activity** (public repos; a maintainer gets one email). In a quiet year —
@@ -350,3 +358,10 @@ Each phase leaves everything working; nothing waits on the phases after it.
 Phase 4 is deliberately last but not least: phases 1–3 make the apps
 self-updating; phase 4 is what makes the one yearly human moment cheap
 enough that it actually happens.
+
+*Status: phase 4's watching half shipped first — `season:check`, its weekly
+workflow, dependabot and the auto-merge wiring are in (the probes for
+`locations` fold in `season:aliases`' suggestion work; `booth-agreement`
+watches for the moment `season:booths` is needed). It went first because
+every later phase leans on the automation it guards, and because it needs no
+architecture the pack refactor might move. Phases 1–3 remain, in order.*

@@ -162,3 +162,14 @@ jobs:
             gh pr create --base "$BASE" --head "$BRANCH" \
               --title 'Refresh the stand list from Gen Con' --body "$BODY"
           fi
+
+          # A refresh that passes its own checks should not then wait on a
+          # person for ever — a stalled data PR is data stalling silently,
+          # which the season check watches for. Auto-merge still waits for the
+          # branch checks to go green on GitHub's side; a *failing* refresh is
+          # left open on purpose, because that failure is how a new year
+          # announces itself and a person should read it.
+          if [ "$PASSED" = 'success' ]; then
+            gh pr merge "$BRANCH" --auto --squash \
+              || echo 'Auto-merge is not enabled for this repository — tick "Allow auto-merge" under Settings → General → Pull Requests, or merge by hand.'
+          fi

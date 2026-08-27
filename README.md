@@ -129,6 +129,7 @@ want to see it on a real device.
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
+| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
 
 `dist/` is fully self-contained and uses relative paths, so it also works
 dropped on any static host, or bundled into a native shell with Capacitor if it
