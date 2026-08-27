@@ -11,6 +11,7 @@
     "sync": "npm run build && cap sync",
     "open:android": "cap open android",
     "open:ios": "cap open ios",
+    "icons": "capacitor-assets generate --iconBackgroundColor '#101820' --iconBackgroundColorDark '#101820' --splashBackgroundColor '#101820' --splashBackgroundColorDark '#101820' && rm -rf icons && git checkout public/manifest.webmanifest public/icon.svg",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -39,6 +40,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",

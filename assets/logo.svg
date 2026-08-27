@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#12141c" />
+  <g transform="translate(256 260)">
+    <!-- d20-ish silhouette: the convention in one glyph -->
+    <polygon points="0,-150 130,-75 130,75 0,150 -130,75 -130,-75" fill="#e8543f" />
+    <polygon points="0,-150 130,-75 0,-30 -130,-75" fill="#ff7a5c" />
+    <polygon points="0,-30 130,-75 130,75 0,40" fill="#c33f2c" />
+    <polygon points="0,-30 -130,-75 -130,75 0,40" fill="#d94a35" />
+    <polygon points="0,40 130,75 0,150 -130,75" fill="#a83322" />
+    <text
+      x="0"
+      y="34"
+      font-family="Georgia, 'Times New Roman', serif"
+      font-size="112"
+      font-weight="700"
+      text-anchor="middle"
+      fill="#fff5ee"
+    >20</text>
+  </g>
+</svg>
