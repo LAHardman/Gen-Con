@@ -14,6 +14,8 @@
  * map that already has them is also what keeps every name drawn exactly once.
  */
 
+import { CONFIG } from './config';
+
 export interface Basemap {
   id: string;
   label: string;
@@ -34,7 +36,7 @@ const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION}, &copy; <a href="https://carto.com
 
 export type BasemapId = 'dark' | 'light' | 'streets';
 
-export const BASEMAPS: Record<BasemapId, Basemap> = {
+const COMPILED: Record<BasemapId, Basemap> = {
   dark: {
     id: 'dark',
     label: 'Dark',
@@ -64,6 +66,20 @@ export const BASEMAPS: Record<BasemapId, Basemap> = {
   },
 };
 
+/**
+ * The compiled styles, with any overrides the pack's config carries laid on
+ * top. The override channel exists for exactly one story: a provider
+ * retires a style out from under installed copies, and the repair is a
+ * config edit and a deploy rather than an app release. With the config
+ * empty — the ordinary case — this is `COMPILED`, byte for byte.
+ */
+export const BASEMAPS: Record<BasemapId, Basemap> = Object.fromEntries(
+  (Object.keys(COMPILED) as BasemapId[]).map((id) => [
+    id,
+    { ...COMPILED[id], ...CONFIG.basemaps[id] },
+  ]),
+) as Record<BasemapId, Basemap>;
+
 export const BASEMAP_IDS = Object.keys(BASEMAPS) as BasemapId[];
 
 /* ------------------------------------------------------------------ rescue */
@@ -91,7 +107,7 @@ export interface RescueBasemap {
   subdomains?: string;
 }
 
-export const BASEMAP_RESCUES: readonly RescueBasemap[] = [
+const COMPILED_RESCUES: readonly RescueBasemap[] = [
   {
     id: 'rescue-voyager',
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -107,6 +123,16 @@ export const BASEMAP_RESCUES: readonly RescueBasemap[] = [
     maxNativeZoom: 19,
   },
 ];
+
+/**
+ * The ladder in force: the pack's replacement when its config carries one,
+ * else the compiled rungs. A replacement is all-or-nothing — the ladder is
+ * an ordered argument about where to retreat, and splicing two arguments
+ * makes neither.
+ */
+export const BASEMAP_RESCUES: readonly RescueBasemap[] =
+  CONFIG.rescues?.map((rescue, at) => ({ id: `rescue-config-${at}`, labelsUrl: null, ...rescue })) ??
+  COMPILED_RESCUES;
 
 /**
  * Whether a run of tile failures means the tileset is dead, and where to go.

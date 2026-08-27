@@ -31,7 +31,7 @@ const OUT = join(ROOT, 'public/pack');
  * Every table in the pack. Adding one is one line here once its data lives
  * as JSON under `src/data/` — the recipe is in docs/mobile.md §3.
  */
-const TABLES = ['exhibitors', 'partners'];
+const TABLES = ['config', 'exhibitors', 'partners'];
 
 /**
  * The schema a reader must share to apply these tables. Bump it ONLY for a

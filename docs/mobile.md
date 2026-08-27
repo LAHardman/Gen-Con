@@ -145,9 +145,8 @@ hash, JSON, and each module's own shape guard — answers "keep the
 snapshot" on failure. Verified in a real browser: first visit fetches
 manifest plus both tables and stores them; the second costs one manifest
 request and boots from the store. Exhibitors and hotel-block data now
-update on deployed copies between deploys, which they never did. Still
-ahead from §4: moving the config constants (basemap URLs, endpoints) into
-`pack/config.json`.*
+update on deployed copies between deploys, which they never did — and so
+does the runtime config (§4), which rides in the same pack.*
 
 **Versioning is what makes "never update the app" survivable.** The manifest
 carries a schema version. Additive changes (a new field, a new table) don't
@@ -176,6 +175,13 @@ compiled value as fallback:
 
 The compiled fallbacks mean config is an override channel, not a dependency:
 an app that has never reached the pack behaves exactly as built.
+
+*Status: shipped for the rows that exist today. `src/data/config.json` is
+the `config` pack table (empty overrides in the ordinary case);
+`config.ts` guards and applies it; basemap URLs, the rescue ladder and the
+events mirror all read through it, with tests holding both directions —
+a valid override lands, a malformed one changes nothing whole. The
+endpoint/pacing rows arrive with the on-device importers in phase 3.*
 
 ## 5. On-device refresh, and the fallback chain
 

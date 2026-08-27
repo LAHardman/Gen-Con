@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { expandFeed, indexEvents, type EventFeed, type EventIndex } from '../data/events';
+import { CONFIG } from '../data/config';
 
 export type FeedStatus = 'loading' | 'ready' | 'absent' | 'error';
 
@@ -24,8 +25,14 @@ const EMPTY_INDEX: EventIndex = {
  * Empty unless `VITE_EVENTS_MIRROR` was set at build time, so the whole
  * fallback is inert by default and no third-party URL is baked into a build
  * that has not asked for one. `worker/` is what serves it.
+ *
+ * The pack's config wins over the build's, because it is newer: a mirror
+ * that moves after the last release can still reach installed copies, which
+ * is the whole reason the mirror exists. Exported for the tests that hold
+ * that precedence.
  */
-const MIRROR = (import.meta.env.VITE_EVENTS_MIRROR ?? '').trim();
+export const EVENTS_MIRROR = (CONFIG.eventsMirror ?? import.meta.env.VITE_EVENTS_MIRROR ?? '').trim();
+const MIRROR = EVENTS_MIRROR;
 
 /**
  * Loads the generated event feed.
