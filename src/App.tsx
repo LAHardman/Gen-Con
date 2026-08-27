@@ -26,7 +26,8 @@ import { useBookings } from './hooks/useBookings';
 import { useBudget } from './hooks/useBudget';
 import { useGenConAccount } from './hooks/useGenConAccount';
 import { usePlanDescriptions } from './hooks/usePlanDescriptions';
-import { isHappeningAt } from './data/events';
+import { feedYear, isHappeningAt } from './data/events';
+import { planningYear } from './data/key-dates';
 import { buildEventSearchIndex } from './data/search';
 import { filterChoices } from './data/filters';
 import { conventionOffset } from './data/plan';
@@ -247,6 +248,20 @@ export default function App() {
     }
     return total;
   }, [index, nowMs]);
+
+  /**
+   * The schedule's year, when it is not the year being planned — null the
+   * rest of the time. Non-null is a normal state, not a warning: every
+   * autumn the newest catalogue is last year's until Gen Con publishes the
+   * next, and a copy of this app that never updates again holds its last
+   * schedule for ever. Both are worth showing; neither is worth showing
+   * unlabelled, so the label is the feature.
+   */
+  const feedVintage = useMemo(() => {
+    if (!feed) return null;
+    const year = feedYear(feed);
+    return year !== null && year < planningYear(nowMs) ? year : null;
+  }, [feed, nowMs]);
 
   // Opening a building starts you on the ground floor, wherever you left it
   // last time. Closing it is the same call with null.
@@ -473,7 +488,7 @@ export default function App() {
             <p>
               <span className="app__page">{PAGES.find((page) => page.id === tab)?.label}</span>
               {status === 'ready' && index
-                ? `${index.total.toLocaleString()} events${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
+                ? `${index.total.toLocaleString()} events${feedVintage !== null ? ` · ${feedVintage} schedule` : ''}${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
                 : status === 'absent'
                   ? 'Venue map · no event data'
                   : status === 'error'
@@ -570,6 +585,7 @@ export default function App() {
             choices={choices}
             offsetMinutes={offsetMinutes}
             nowMs={nowMs}
+            feedVintage={feedVintage}
             onOpenEvent={(hit) =>
               setOpenDetail({ kind: 'event', event: hit.event, room: hit.room, pin: hit.pin })
             }

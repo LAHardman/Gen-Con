@@ -82,6 +82,13 @@ interface Props {
    */
   offsetMinutes: number | null;
   nowMs: number;
+  /**
+   * The catalogue's year, when it is not the year being planned — null the
+   * rest of the time. The schedule page is where somebody commits a year's
+   * plans, so it is the one place an old catalogue must say so out loud
+   * rather than in a header suffix.
+   */
+  feedVintage: number | null;
   /** Open a session in full, which is where adding actually happens. */
   onOpenEvent: (hit: SessionHit) => void;
   /** Open something already on the schedule — where removing it happens. */
@@ -116,6 +123,7 @@ export function PlanView({
   choices,
   offsetMinutes,
   nowMs,
+  feedVintage,
   onOpenEvent,
   onOpenEntry,
 }: Props) {
@@ -143,6 +151,17 @@ export function PlanView({
 
   return (
     <section className="plan" aria-label="Your schedule">
+      {/* An old catalogue is a normal state twice over — every autumn until
+          Gen Con publishes the next, and for ever on a copy that can no
+          longer fetch one — and in both it beats an empty page. What it must
+          not be is silent: these are the sessions somebody would book leave
+          around. */}
+      {feedVintage !== null && (
+        <p className="plan__vintage">
+          These sessions are from the {feedVintage} catalogue — the newest this copy has. A newer
+          year replaces it automatically whenever one can be fetched.
+        </p>
+      )}
       <PlanSearch
         plan={plan}
         events={events}

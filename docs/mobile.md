@@ -179,6 +179,41 @@ the pack-first ordering is what keeps device-direct at hobby scale (the
 handful of users whose host is gone), and `config.json` carries the pacing
 knob if it ever needs turning down fleet-wide.
 
+**The floor under all of it: a copy that never updates again must keep
+working, indefinitely.** Stale-but-labelled beats blank, and derived beats
+absent — the rule every fallback above serves, and the standard every new
+feature has to meet: before shipping anything that consumes a feed, answer
+what it shows five years after the last update. What that already means in
+code, today, web app included:
+
+- **The schedule is shown at any age, and says its year.** The header reads
+  "27,467 events · 2026 schedule" and the schedule page says out loud that
+  the sessions are the newest this copy has (`feedYear` in `events.ts`; the
+  label logic is tested at both levels). Deliberately not an alarm: every
+  autumn the newest catalogue *is* last year's, and the same label serves
+  the frozen copy for ever.
+- **The key dates never expire.** They are derived from the
+  days-before-Wednesday rule for any year, so a 2030 reader of a 2026 build
+  still gets 2030's countdown — guessed by the rule and checkable against
+  the sentence printed under each row. The API comparison is a CI probe,
+  not a runtime dependency.
+- **The map retreats rather than dying.** A tile style retired under a
+  frozen copy walks down `BASEMAP_RESCUES` at runtime — same provider's
+  baked-label styles first, OpenStreetMap's raster last, a different host
+  entirely. The judgement (`nextRescue`) refuses to move while offline or
+  after any tile has loaded, because there the cache is the best map the
+  phone has; its tests hold exactly that.
+- **Money and hours already carry their vintage** — block rates project
+  forward dashed with their multiplier printed, hours say "(2025 hours)",
+  estimates can never be the row marked *next*. The pattern to copy, not
+  invent.
+
+Phases 1–3 inherit the rule: the pack loader must treat "no pack ever
+reachable again" as a permanent, first-class state (the bundled snapshot
+plus these behaviours *are* the app), and the on-device importers must treat
+"gencon.com no longer answers this shape" as the cue to keep what they have,
+labelled, for ever.
+
 **Native networking:** `CapacitorHttp` (requests leave from native code, so
 no CORS and no preflight) behind a `src/platform/` seam — `http.ts`,
 `storage.ts` (SW cache on web; `Filesystem` + `Preferences` on native, where

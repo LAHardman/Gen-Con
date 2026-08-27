@@ -89,6 +89,16 @@ invalidates 15 KB. On a *first* visit the split buys nothing (every chunk is
 preloaded, and eight files cost marginally more than one); it is the second
 visit it is for.
 
+**And it ages as gracefully as it can, for the copy that never updates
+again.** Stale-but-labelled beats blank: an old schedule still draws, with
+the header and the schedule page saying which year it is; the key dates are
+derived from the convention's own rule, so they answer for any year without
+ever being fetched; and if a basemap provider retires a tileset out from
+under a frozen copy, the map walks down a built-in rescue ladder — ending on
+OpenStreetMap's own raster, a different host entirely — rather than drawing
+rooms on a void. The retreat refuses to trigger offline or after any tile
+has loaded, because there the cache is the best map the phone has.
+
 Nothing is precached by name — the built filenames carry a content hash, so a
 list would be wrong on the next deploy. Instead the page tells the worker what
 it just loaded. That hand-over is not a nicety: a worker does not control the

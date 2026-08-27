@@ -2614,6 +2614,15 @@ body {
   font-size: 13px;
 }
 
+/* An old catalogue saying so. Muted rather than alarmed: it is a normal state
+   every autumn, and the permanent state of a copy that can no longer fetch —
+   in both, last year's schedule labelled beats no schedule at all. */
+.plan__vintage {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .plan__empty--column {
   margin: 8px 0 0;
   font-size: 12px;
