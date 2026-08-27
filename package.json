@@ -19,7 +19,7 @@
     "check:geometry": "node scripts/check-geometry.mjs",
     "plans:venues": "node scripts/venue-plans.mjs",
     "plans:campus": "node scripts/gencon-tiles.mjs",
-    "fetch:events": "node scripts/fetch-events.mjs",
+    "fetch:events": "vite-node scripts/fetch-events.mjs",
     "fetch:pavements": "node scripts/fetch-pavements.mjs",
     "fetch:exhibitors": "node scripts/fetch-exhibitors.mjs",
     "data:distances": "node scripts/build-distances.mjs",

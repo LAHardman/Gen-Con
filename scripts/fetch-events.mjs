@@ -46,9 +46,8 @@ import {
   AGENT,
   PAUSE_MS as DEFAULT_PAUSE,
   importCatalogue,
-  shape,
 } from '../src/lib/import-events.ts';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -180,15 +179,17 @@ async function main() {
   );
 }
 
-// Re-exported so `fetch-events.test.mjs` keeps testing the mapping where it
-// is used, even though it is defined once in `src/lib/import-events.ts`.
-export { shape };
-
-// Only when run, not when imported for its `shape` — which is the one piece
-// here worth testing and the one piece that has no network in it.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    console.error(error.message);
-    process.exitCode = 1;
-  });
-}
+// Run, unconditionally.
+//
+// There used to be a guard here — "only when invoked directly, not when
+// imported for its `shape`" — and it could not survive the move to
+// `vite-node`, which strips the script path out of `process.argv`
+// altogether. A guard that silently answers false is the worst shape a bug
+// can take: this fetched the whole catalogue and then exited 0 having
+// written nothing. The mapping is tested where it now lives,
+// `src/lib/import-events.ts`, so nothing needs to import this file any more
+// and there is nothing left to guard against.
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

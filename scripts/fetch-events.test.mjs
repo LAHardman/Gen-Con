@@ -9,7 +9,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { shape } from './fetch-events.mjs';
+// Where the mapping lives: one implementation, shared by this build script
+// and the import a phone runs for itself.
+import { shape } from '../src/lib/import-events.ts';
 
 /** A record with every field Gen Con sends that this app reads. */
 const record = {

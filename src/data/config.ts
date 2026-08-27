@@ -47,6 +47,15 @@ export interface RuntimeConfig {
    * never right in a native shell, where the compiled-in default takes over.
    */
   packHost: string | null;
+  /**
+   * Where the sign-in endpoints live, for a shell with no server of its own.
+   *
+   * Null — the default — means signing in is a web-app feature and the
+   * native panel says so plainly, rather than offering a form that cannot
+   * work. Pointed at a deployed Worker, the native app signs in through it
+   * exactly as the website does.
+   */
+  accountHost: string | null;
 }
 
 const optionalString = (value: unknown) => value === undefined || typeof value === 'string';
@@ -73,6 +82,7 @@ export function isRuntimeConfig(candidate: unknown): candidate is Partial<Runtim
   if (!config || typeof config !== 'object' || Array.isArray(config)) return false;
   if (!nullableString(config.eventsMirror)) return false;
   if (!nullableString(config.packHost)) return false;
+  if (!nullableString(config.accountHost)) return false;
   if (config.basemaps === undefined) return true;
   if (!config.basemaps || typeof config.basemaps !== 'object' || Array.isArray(config.basemaps)) return false;
   for (const override of Object.values(config.basemaps)) {
