@@ -134,6 +134,21 @@ side.
    map buys a class of bug nothing here needs; next-launch is always sound
    and never seen.
 
+*Status: the runtime loop is live on the web app. `main.tsx` boots in the
+order that makes refresh possible at all — read the stored pack, stash it,
+only then import the app, so the data modules initialise from the newest
+verified tables (`pack-runtime.ts` is the synchronous handover,
+`pack-store.ts` the fetch-verify-store loop, and `sw.js` passes `pack/`
+URLs through so the refresher owns its own freshness). Downloads apply on
+the *next* launch, never under a mounted map, and every gate — schema,
+hash, JSON, and each module's own shape guard — answers "keep the
+snapshot" on failure. Verified in a real browser: first visit fetches
+manifest plus both tables and stores them; the second costs one manifest
+request and boots from the store. Exhibitors and hotel-block data now
+update on deployed copies between deploys, which they never did. Still
+ahead from §4: moving the config constants (basemap URLs, endpoints) into
+`pack/config.json`.*
+
 **Versioning is what makes "never update the app" survivable.** The manifest
 carries a schema version. Additive changes (a new field, a new table) don't
 bump it — every reader ignores what it doesn't know. A breaking change bumps

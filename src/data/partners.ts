@@ -29,6 +29,7 @@
  */
 
 import raw from './partners.json';
+import { packTable } from './pack-runtime';
 
 export type Region = 'downtown' | 'airport' | 'east' | 'north' | 'south';
 
@@ -48,12 +49,39 @@ export interface Partner {
   distance: string;
 }
 
-const data = raw as {
+interface PartnersTable {
   year: number;
   growth: number | null;
   partners: Partner[];
   suspected: string[];
-};
+}
+
+/**
+ * Whether downloaded bytes are actually this table. The pack's last gate:
+ * schema and hash have already passed by the time a stored table gets here,
+ * and this is the check that knows what the words mean. Refusal falls back
+ * to the compiled snapshot, which is always present and always sound.
+ */
+export function isPartnersTable(candidate: unknown): candidate is PartnersTable {
+  const table = candidate as Partial<PartnersTable> | null;
+  if (!table || typeof table.year !== 'number') return false;
+  if (table.growth !== null && typeof table.growth !== 'number') return false;
+  if (!Array.isArray(table.suspected) || !table.suspected.every((id) => typeof id === 'string')) return false;
+  if (!Array.isArray(table.partners) || table.partners.length === 0) return false;
+  return table.partners.every(
+    (row) =>
+      !!row &&
+      typeof row.blockName === 'string' &&
+      typeof row.low === 'number' &&
+      typeof row.skywalk === 'boolean' &&
+      typeof row.distance === 'string' &&
+      (row.placeId === null || typeof row.placeId === 'string') &&
+      (row.high === null || typeof row.high === 'number'),
+  );
+}
+
+/** A newer table from the stored pack when one is held and reads; else the snapshot. */
+const data = packTable('partners', isPartnersTable) ?? (raw as PartnersTable);
 
 /** The convention year these rates were published for. */
 export const BLOCK_YEAR: number = data.year;

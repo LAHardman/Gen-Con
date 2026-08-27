@@ -24,6 +24,7 @@
  */
 
 import raw from './exhibitors.json';
+import { packTable } from './pack-runtime';
 
 export interface Exhibitor {
   name: string;
@@ -45,7 +46,33 @@ export interface Exhibitor {
   website?: string;
 }
 
-const data = raw as { tags: string[]; exhibitors: Exhibitor[] };
+interface ExhibitorsTable {
+  tags: string[];
+  exhibitors: Exhibitor[];
+}
+
+/**
+ * Whether downloaded bytes are actually this table. The pack's last gate:
+ * schema and hash have already passed by the time a stored table gets here,
+ * and this is the check that knows what the words mean. Refusal falls back
+ * to the compiled snapshot, which is always present and always sound.
+ */
+export function isExhibitorsTable(candidate: unknown): candidate is ExhibitorsTable {
+  const table = candidate as Partial<ExhibitorsTable> | null;
+  if (!table || !Array.isArray(table.tags) || !Array.isArray(table.exhibitors)) return false;
+  if (!table.tags.every((tag) => typeof tag === 'string')) return false;
+  return table.exhibitors.every(
+    (row) =>
+      !!row &&
+      typeof row.name === 'string' &&
+      typeof row.kind === 'string' &&
+      typeof row.area === 'string' &&
+      typeof row.spot === 'string',
+  );
+}
+
+/** A newer table from the stored pack when one is held and reads; else the snapshot. */
+const data = packTable('exhibitors', isExhibitorsTable) ?? (raw as ExhibitorsTable);
 
 /**
  * Every word Gen Con files exhibitors under, once.

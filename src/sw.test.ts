@@ -325,6 +325,15 @@ describe('the app itself', () => {
     request.method = 'POST';
     expect(await answer('fetch', { request })).toBeNull();
   });
+
+  it('passes the data pack through untouched', async () => {
+    // `pack-store.ts` owns those URLs: its own freshness rules, its own
+    // cache, everything verified against the pack manifest. Answering here
+    // with stale-while-revalidate would hand that refresher the very
+    // staleness it exists to beat, and store every table twice.
+    const request = new FakeRequest('https://example.test/pack/manifest.json');
+    expect(await answer('fetch', { request })).toBeNull();
+  });
 });
 
 describe('the tiles', () => {
