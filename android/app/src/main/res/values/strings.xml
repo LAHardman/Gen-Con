@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Gen Con Trip</string>
+    <string name="title_activity_main">Gen Con Trip</string>
+    <string name="package_name">com.gencontrip.app</string>
+    <string name="custom_url_scheme">com.gencontrip.app</string>
+</resources>

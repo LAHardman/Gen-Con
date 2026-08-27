@@ -1,6 +1,7 @@
 {
-  "_readme": "Runtime overrides an installed copy picks up from the pack, no app update needed. Empty means 'use what was compiled in' — this file exists for the day something external moves: a retired tileset, a dead mirror. basemaps: per-style partial overrides keyed dark/light/streets, each {url?, labelsUrl?, attribution?, maxNativeZoom?, subdomains?}. rescues: a full replacement for the tile rescue ladder, each {url, attribution, maxNativeZoom, subdomains?} (labels are always baked into rescue tiles). eventsMirror: URL of an events.json fallback host, overriding the built-in one.",
+  "_readme": "Runtime overrides an installed copy picks up from the pack, no app update needed. Empty means 'use what was compiled in' — this file exists for the day something external moves: a retired tileset, a dead mirror. basemaps: per-style partial overrides keyed dark/light/streets, each {url?, labelsUrl?, attribution?, maxNativeZoom?, subdomains?}. rescues: a full replacement for the tile rescue ladder, each {url, attribution, maxNativeZoom, subdomains?} (labels are always baked into rescue tiles). eventsMirror: URL of an events.json fallback host, overriding the built-in one. packHost: where the pack itself is published, for a native copy that has no origin of its own to be relative to — overriding the one compiled in, so the pack can move house without an app release.",
   "basemaps": {},
   "rescues": null,
-  "eventsMirror": null
+  "eventsMirror": null,
+  "packHost": null
 }

@@ -139,3 +139,20 @@ describe('the boot stash', () => {
     expect(packTable('absent', isTable)).toBeNull();
   });
 });
+
+describe('where the pack is fetched from', () => {
+  it('is beside the app when nothing says otherwise, which is right on the web', async () => {
+    const { packBase } = await import('./pack-store');
+    expect(packBase()).toBe('./pack/');
+  });
+
+  it('takes the config’s host, slash or no slash, for a shell with no origin', async () => {
+    // A native shell is served from file://, where a relative path finds
+    // only what was baked into the bundle. The config can move this host
+    // later, which is what keeps a moved pack from stranding installed copies.
+    stashPack({ config: { basemaps: {}, rescues: null, eventsMirror: null, packHost: 'https://pack.example' } });
+    vi.resetModules();
+    const { packBase } = await import('./pack-store');
+    expect(packBase()).toBe('https://pack.example/');
+  });
+});

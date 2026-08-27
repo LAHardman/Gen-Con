@@ -33,6 +33,16 @@ describe('the guard', () => {
     ).toBe(true);
   });
 
+  it('tolerates a config written before a field existed, in both directions', () => {
+    // The additive contract, and it has to run both ways: an old copy must
+    // ignore a field it has never heard of, and a new copy must read a
+    // config written before that field was added — otherwise the first
+    // field ever added strands every pack already out there.
+    expect(isRuntimeConfig({ basemaps: {}, rescues: null })).toBe(true);
+    expect(isRuntimeConfig({})).toBe(true);
+    expect(isRuntimeConfig({ ...EMPTY, aFieldFromTheFuture: { nested: true } })).toBe(true);
+  });
+
   it('refuses a malformed config whole', () => {
     expect(isRuntimeConfig({ ...EMPTY, basemaps: { dark: { url: 42 } } })).toBe(false);
     expect(isRuntimeConfig({ ...EMPTY, rescues: [] })).toBe(false);
@@ -73,6 +83,15 @@ describe('applied to the real modules', () => {
     stashPack({ config: { ...EMPTY, eventsMirror: 'https://moved.example/events.json' } });
     const { EVENTS_MIRROR } = await import('../hooks/useEventFeed');
     expect(EVENTS_MIRROR).toBe('https://moved.example/events.json');
+  });
+
+  it('an older config keeps the compiled default for what it does not mention', async () => {
+    // Layered, not replaced: a config from before `packHost` existed must
+    // leave the compiled pack host standing rather than blanking it.
+    stashPack({ config: { basemaps: {}, rescues: null, eventsMirror: null } });
+    const { CONFIG } = await import('./config');
+    expect(CONFIG.packHost).toBe(null);
+    expect(CONFIG.basemaps).toEqual({});
   });
 
   it('a refused config changes nothing at all', async () => {

@@ -8,6 +8,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && node scripts/build-pack.mjs && vite build",
     "build:pack": "node scripts/build-pack.mjs",
+    "sync": "npm run build && cap sync",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -26,11 +29,17 @@
     "season:check": "vite-node scripts/season/check.ts"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.3",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/preferences": "^8.0.1",
     "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/leaflet": "^1.9.22",
