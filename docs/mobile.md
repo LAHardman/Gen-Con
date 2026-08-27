@@ -225,10 +225,20 @@ should be one button, not a day of re-learning provisioning.
 
 **What still forces a store release, honestly:** a Capacitor/OS major
 version bump, a new native plugin, a WebView API the code starts requiring,
-signing and policy churn. And Apple prunes apps that sit unupdated for years
-with low downloads, so "never" realistically means **an annual maintenance
-release**, built by the workflow above in minutes — versus the weekly/monthly
-releases the data pack makes unnecessary.
+signing and policy churn. Two of these have dates on them rather than
+maybes: **Google Play ratchets its required target API level every year**,
+and an app that stops meeting it first becomes invisible to new users on
+current Android and then can't be updated without the bump; and **the Apple
+Developer membership renews annually** — a lapse pulls the app from the
+store outright. Apple also prunes apps that sit unupdated for years with
+low downloads. So "never" realistically means **an annual maintenance
+release**, built by the workflow above in minutes — versus the
+weekly/monthly releases the data pack makes unnecessary. `season:check`
+carries a calendar probe for both dates, because the failure mode of an
+annual obligation is not difficulty, it is nobody remembering. The one
+unrecoverable secret is the **Android upload keystore** — Play can reset it,
+Apple certificates simply reissue, but the keystore lives in repository
+secrets *and* one offline copy, and `release.yml`'s docs say where.
 
 **The web app stays first-class:** it deploys exactly as now, gains the pack
 refresh (it already refreshes events via SW; now exhibitors and hotels
@@ -267,6 +277,38 @@ booth-agreement floor). What it probes:
 | One tile fetched per provider per style | a basemap dying | user reports |
 | Gen Con map tile pyramid version (`/maps/v9/`) probe | new floor plans published | nobody notices |
 | Pack manifest on the live host vs local build | a broken deploy | nobody notices |
+| Food tags in `exhibitors.ts` not filed in `food.ts` | a new cuisine with no filter chip | designed-in silence |
+| Age of each OSM-sourced table (`PULLED` in `eateries.ts`, and the like for lodging, pavements, addresses) | inventories nobody has re-run — no schedule runs these scripts today | nobody notices |
+| Age of hand-written facts: Block Party hours (`food.ts`, published per-year), parking ranges (`parking.ts`, forum-reported), `BLOCK_GROWTH` and the 2019-base estimates (`partners.ts`, `blocks.ts`), badge kinds (`badges.ts`) | last year's hours, a projection doing ever more work | the year tag on `Opening`, otherwise nothing |
+| Mirror worker `/health` | a KV snapshot going stale or the Worker gone | endpoint exists, nothing calls it |
+| Open `data/refresh-*` / rates pull requests older than N days | automation that ran and then waited forever | nobody notices |
+
+**The automation itself is a thing that breaks**, and it is currently the
+least-watched layer here. Four repairs, all cheap, all belonging to phase 4:
+
+- **GitHub disables scheduled workflows after 60 days without repository
+  activity** (public repos; a maintainer gets one email). In a quiet year —
+  exactly when the apps are leaning on CI hardest — the weekly schedule
+  refresh, the monthly exhibitors and the monthly rates all silently stop.
+  The device-direct fallback (§5) is the deep insurance, but the first line
+  is a keep-alive: `season:check`'s weekly run commits its own report file
+  when something changed, which is repository activity, which keeps the
+  clock wound. The pack-manifest-age probe in the *apps* is the independent
+  witness — staleness gets seen from the outside even if every workflow is
+  asleep.
+- **The refresh PRs wait on a human.** `refresh.yml` and `rates.yml` end at
+  a pull request, and a PR nobody merges is data that stalls silently. Where
+  the checks pass, enable auto-merge on the `data/refresh-*` branches (the
+  workflows already run `npm run check` and say when the data is the
+  interesting part — a failing check still holds the PR for a person, which
+  is the correct gate). The `season:check` probe on open-PR age is the
+  backstop.
+- **No dependabot.** Action pins (`actions/checkout@v4`,
+  `peter-evans/create-pull-request@v6`, Node 22) and npm dependencies rot
+  slowly and break loudly, always at a bad time. A `dependabot.yml` covering
+  `github-actions` and `npm` turns that into small monthly PRs.
+- **The mirror worker is unmonitored.** The deploy PUTs snapshots to it and
+  nothing ever reads `/health`; the probe above closes that.
 
 **`npm run season:booths` — the guided yearly read.** The genuinely manual
 fact is five sentences ("the wall between G and H falls between 2200 and
