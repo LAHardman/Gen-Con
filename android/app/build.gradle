@@ -16,10 +16,32 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Signing for the store, taken from the environment rather than from a
+    // file in the repository — the upload keystore is the one secret here
+    // that cannot be reissued if it leaks or is lost, so it lives in the
+    // release workflow's secrets and one offline copy, and nowhere else.
+    //
+    // Absent, this block simply does not apply and `assembleRelease` builds
+    // an unsigned bundle, which is what a local build and a `upload: false`
+    // CI run both want. See .github/workflows/release.yml.
+    signingConfigs {
+        release {
+            if (System.getenv("GENCON_KEYSTORE_PASSWORD")) {
+                storeFile file("upload.keystore")
+                storePassword System.getenv("GENCON_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("GENCON_KEY_ALIAS")
+                keyPassword System.getenv("GENCON_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (System.getenv("GENCON_KEYSTORE_PASSWORD")) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

@@ -269,6 +269,21 @@ retires a server dependency rather than adding one.
 
 ## 6. The Capacitor shells
 
+*Status: built. `ios/` and `android/` are committed Capacitor projects;
+`npm run sync` builds `dist/` and copies it into both, pack and schedule
+included, so a first launch works with no network. `src/platform/` holds
+the whole difference between web and native — `http` (native requests have
+no CORS, which is what lets a phone import Gen Con's catalogue itself),
+`storage` (a file the system will not evict, rather than a cache it may),
+and `isNative()`, which almost nothing asks. The device importer shares one
+implementation with the build script: `src/lib/import-events.ts`, which Node
+strips the types from and Vite compiles, so both callers really do run the
+same lines rather than two importers that agree until they quietly don't.
+`release.yml` builds both apps on a manual run, artifacts-only until upload
+is switched on. What this environment cannot do is compile them — there is
+no Android SDK and no Mac here — so the projects are verified as far as
+sync, and the first CI run with `upload: false` is what proves the rest.*
+
 One codebase, three outputs. `dist/` is already self-contained with relative
 paths — the README notes it was built for exactly this.
 

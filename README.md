@@ -140,10 +140,51 @@ want to see it on a real device.
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
 | `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
+| `npm run sync` | Builds and copies the result into the iOS and Android shells |
+| `npm run open:android` / `open:ios` | Opens the native project in Android Studio or Xcode |
 
 `dist/` is fully self-contained and uses relative paths, so it also works
-dropped on any static host, or bundled into a native shell with Capacitor if it
-ever needs app-store distribution.
+dropped on any static host — and that is exactly how the store apps are built.
+
+### The store apps
+
+`ios/` and `android/` are [Capacitor](https://capacitorjs.com) shells around
+the same `dist/`: one codebase, three outputs, no second implementation of
+anything. `npm run sync` builds and copies it in; `npm run open:android` and
+`npm run open:ios` open the native projects. Building an actual binary needs
+the platform's own toolchain — Android Studio, or Xcode on a Mac — and
+`.github/workflows/release.yml` does both in CI, on a manual run, so the
+release that should be rare is still cheap when an OS deprecation forces one.
+Run it once with **upload off**: it builds both apps and hands them back as
+artifacts without touching either store, which is how you find out the
+signing material is right without publishing anything.
+
+**What a shell adds is deliberately small.** Everything visible — the map,
+the search, the router, the schedule, the hotels — is the same code the
+website runs. Three things genuinely differ, and each lives behind
+`src/platform/` and nowhere else:
+
+- **Native requests have no CORS.** gencon.com sends no
+  `Access-Control-Allow-Origin`, which is why a browser can never read it and
+  why the schedule is imported by a build machine. A native request leaves
+  from native code, where that does not apply — so an installed app can page
+  Gen Con's own catalogue itself. That is the insurance behind *this
+  repository going quiet for a year*, and it is the last thing tried, not the
+  first: one published file against about 1,100 polite requests. The rule for
+  when it may run at all is `shouldDeviceImport`, and it is tested case by
+  case, because both wrong answers are invisible from here — too eager is a
+  swarm on somebody else's server, too shy is insurance that never fires.
+- **Storage the system does not evict.** A browser may reclaim an origin's
+  caches under disk pressure. An installed copy's last good data must outlive
+  a low-disk morning, so on native it is a file.
+- **Signing in gets simpler, not harder.** The Cloudflare Worker exists only
+  because of three browser walls (CORS, `HttpOnly`, `SameSite`). A native
+  shell has none of them, so it can sign in directly and the Worker stays a
+  web-only concern.
+
+A first launch works with **no network at all** — the schedule and the data
+pack are both bundled — which is more than the website's first visit can
+promise.
 
 ### Tests
 

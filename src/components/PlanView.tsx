@@ -89,6 +89,14 @@ interface Props {
    * rather than in a header suffix.
    */
   feedVintage: number | null;
+  /**
+   * Import the catalogue from Gen Con on this device, where that is
+   * possible at all — undefined in a browser, which cannot read gencon.com.
+   * Offered beside the notice that the schedule is old, because that is
+   * where somebody is already asking the question it answers.
+   */
+  onImport?: () => void;
+  importing?: boolean;
   /** Open a session in full, which is where adding actually happens. */
   onOpenEvent: (hit: SessionHit) => void;
   /** Open something already on the schedule — where removing it happens. */
@@ -124,6 +132,8 @@ export function PlanView({
   offsetMinutes,
   nowMs,
   feedVintage,
+  onImport,
+  importing,
   onOpenEvent,
   onOpenEntry,
 }: Props) {
@@ -160,6 +170,14 @@ export function PlanView({
         <p className="plan__vintage">
           These sessions are from the {feedVintage} catalogue — the newest this copy has. A newer
           year replaces it automatically whenever one can be fetched.
+          {onImport && (
+            <>
+              {' '}
+              <button type="button" className="plan__import" onClick={onImport} disabled={importing}>
+                {importing ? 'Importing…' : 'Import from Gen Con now'}
+              </button>
+            </>
+          )}
         </p>
       )}
       <PlanSearch

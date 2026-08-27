@@ -4632,3 +4632,22 @@ body {
   font-style: italic;
   font-weight: 400;
 }
+
+/* Asking for the direct import, beside the notice that says why you might.
+   A link rather than a button proper: it sits inside a sentence, and it is
+   the sentence that explains it. */
+.plan__import {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.plan__import:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  text-decoration: none;
+}
