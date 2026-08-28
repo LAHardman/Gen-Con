@@ -20,7 +20,7 @@ import { VENUE_HALLS } from '../data/venue-plan';
 import { BASEMAPS, BASEMAP_RESCUES, nextRescue, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import type { Pin } from '../data/offsite';
-import { PLACED_BOOTHS } from '../data/booth-place';
+import { PLACED_BOOTHS, boothAt } from '../data/booth-place';
 import { TRADE_FLOOR, TRADE_FLOOR_NAME, TRADE_HALLS } from '../data/exhibit-floor';
 import { PITCHES } from '../data/block-party';
 import { standing, type Exhibitor } from '../data/exhibitors';
@@ -35,7 +35,12 @@ interface Props {
   onOpenRoom: (room: Room) => void;
   /** A stand on the trade floor, opened by the number printed on it. */
   onOpenStand: (at: { exhibitors: Exhibitor[]; booth: string; hall: Room | undefined }) => void;
-  focusRequest: { room: Room; token: number } | null;
+  /**
+   * Where to take the map. `booth` narrows it from the room to one stand,
+   * which is what an exhibit hall needs: the hall is four hundred metres of
+   * floor and the booth number is the address that floor actually uses.
+   */
+  focusRequest: { room: Room; booth?: string; token: number } | null;
   basemapId: BasemapId;
   /** Rooms with at least one event, for the "has events" map badge. */
   eventCounts: Map<string, number>;
@@ -183,6 +188,9 @@ export function MapView({
   route,
   deviceFix,
 }: Props) {
+  /** The stand to mark, if the map was sent to one. Read by the booth layer. */
+  const focusedBooth = focusRequest?.booth ?? null;
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -563,13 +571,19 @@ export function MapView({
          * number is for, and the one the map could not answer before.
          */
         const at = standing('Exhibit Hall', stand.booth);
+        // The stand somebody searched for. Marked rather than merely centred:
+        // at this zoom a dozen squares are on screen and "the middle one" is
+        // not an answer anybody can act on.
+        const sought = stand.booth === focusedBooth;
         const outline = L.rectangle(
           [
             [stand.lat - dLat, stand.lng - dLng],
             [stand.lat + dLat, stand.lng + dLng],
           ],
           {
-            className: `map__booth${at.length ? ' map__booth--taken' : ''}`,
+            className:
+              `map__booth${at.length ? ' map__booth--taken' : ''}` +
+              (sought ? ' map__booth--sought' : ''),
             interactive: at.length > 0,
             bubblingMouseEvents: false,
             weight: 1,
@@ -595,6 +609,10 @@ export function MapView({
           });
         }
         outline.addTo(map);
+        // Its tooltip opened without being asked, so the name is on the map
+        // rather than one tap away: "show me where they are" is answered by
+        // seeing which square is theirs.
+        if (sought && at.length) outline.openTooltip();
         layers.push(outline);
         if (!named) continue;
         const label = L.marker([stand.lat, stand.lng], {
@@ -612,7 +630,7 @@ export function MapView({
       map.off('zoomend moveend', draw);
       for (const layer of layers) layer.remove();
     };
-  }, [openVenueId, levels]);
+  }, [openVenueId, levels, focusedBooth]);
 
   /* ------------------------------------------- the Block Party's own pitches */
   /*
@@ -984,6 +1002,28 @@ export function MapView({
     const map = mapRef.current;
     const room = focusRequest?.room;
     if (!map || !room) return;
+
+    /*
+     * A named stand is flown to as itself, not as the hall around it.
+     *
+     * `maxZoom` has to clear `BOOTH_MIN_ZOOM` or the stands are not drawn at
+     * all and the map arrives at an empty floor — the shape of the bug this
+     * fixes, one level down. The padding is small because the target is
+     * three metres across and the point is to be close to it.
+     */
+    const stand = boothAt(focusRequest?.booth);
+    if (stand) {
+      const dLat = stand.deep / 2 / METRES_PER_DEGREE_LAT;
+      const dLng = stand.wide / 2 / (METRES_PER_DEGREE_LAT * Math.cos((stand.lat * Math.PI) / 180));
+      map.flyToBounds(
+        L.latLngBounds(
+          [stand.lat - dLat, stand.lng - dLng],
+          [stand.lat + dLat, stand.lng + dLng],
+        ),
+        { padding: [40, 40], maxZoom: BOOTH_LABEL_ZOOM },
+      );
+      return;
+    }
     map.flyToBounds(toLatLngBounds(roomBounds(room)), { padding: [80, 80], maxZoom: 20 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusToken]);

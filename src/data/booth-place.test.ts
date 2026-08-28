@@ -252,3 +252,29 @@ describe('the shape of a real exhibit floor', () => {
     }
   });
 });
+
+describe('finding a stand by the number printed on it', () => {
+  it('answers with the stand, not the hall around it', async () => {
+    // The bug this closes: searching a vendor and asking to be shown on the
+    // map flew to Exhibit Hall H — four hundred metres of floor — because a
+    // hall id was the only address the map could be given.
+    const { boothAt } = await import('./booth-place');
+    const stand = boothAt('1637');
+    expect(stand).toBeDefined();
+    expect(stand!.hall).toBe('hall-h');
+    // A footprint, so the map can fly to the stand's own bounds rather than
+    // guessing a radius around a point.
+    expect(stand!.wide).toBeGreaterThan(0);
+    expect(stand!.deep).toBeGreaterThan(0);
+  });
+
+  it('answers nothing for a booth it has never placed', async () => {
+    // 573 stands are numbered and not all of them are on the read map, so
+    // "no placement" is an ordinary answer: the caller falls back to the
+    // hall, which is where this started and is still better than nothing.
+    const { boothAt } = await import('./booth-place');
+    expect(boothAt('999999')).toBeUndefined();
+    expect(boothAt(undefined)).toBeUndefined();
+    expect(boothAt('')).toBeUndefined();
+  });
+});

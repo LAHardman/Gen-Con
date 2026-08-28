@@ -1110,6 +1110,17 @@ body {
   stroke: rgba(232, 84, 63, 0.95);
 }
 
+/* The stand somebody searched for.
+   Brighter and heavier than a taken booth rather than a different colour: it
+   is the same kind of thing, just the one that was asked for, and at this
+   zoom a dozen squares are on screen. The stroke does the work — a fill
+   alone reads as "occupied" at a glance, which every neighbour also is. */
+.map__booth--sought {
+  fill: rgba(232, 84, 63, 0.42);
+  stroke: rgba(255, 214, 102, 0.95);
+  stroke-width: 3;
+}
+
 /* Who is in it, on hover, without having to open anything. */
 .map__booth-who {
   max-width: 15rem;

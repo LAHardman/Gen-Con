@@ -641,3 +641,16 @@ export const STANDS_IN: Readonly<Record<string, number>> = PLACED_BOOTHS.reduce<
   tally[stand.hall] = (tally[stand.hall] ?? 0) + 1;
   return tally;
 }, {});
+
+/**
+ * Where a booth number stands, by the number printed on it.
+ *
+ * The number is the only address anybody on that floor has — it is on the
+ * stand, in the programme and on the signs, and the hall letter is on none
+ * of them — so this is what lets the map answer "show me where they are"
+ * with the stand rather than with four hundred metres of hall.
+ */
+const BY_NUMBER = new Map(PLACED_BOOTHS.map((stand) => [stand.booth, stand]));
+
+export const boothAt = (booth: string | undefined): PlacedBooth | undefined =>
+  booth ? BY_NUMBER.get(booth) : undefined;

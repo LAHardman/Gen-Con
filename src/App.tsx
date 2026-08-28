@@ -16,6 +16,7 @@ import type { Pin } from './data/offsite';
 import type { Exhibitor } from './data/exhibitors';
 import { NavPanel } from './components/NavPanel';
 import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
+import { boothAt } from './data/booth-place';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
 import { useDeviceImport } from './hooks/useDeviceImport';
@@ -66,7 +67,13 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [openRoom, setOpenRoom] = useState<Room | null>(null);
-  const [focusRequest, setFocusRequest] = useState<{ room: Room; token: number } | null>(null);
+  // `booth` narrows the focus from the room to one stand inside it — see
+  // `handleShowPlannedRoom`.
+  const [focusRequest, setFocusRequest] = useState<{
+    room: Room;
+    booth?: string;
+    token: number;
+  } | null>(null);
   const [basemapId, setBasemapId] = useState<BasemapId>('dark');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showAmenities, setShowAmenities] = useState(true);
@@ -416,15 +423,28 @@ export default function App() {
    * because somebody following a plan into a room wants that room's other
    * events as much as its outline.
    */
+  /**
+   * Take the map to a room — or, where one is named, to a stand inside it.
+   *
+   * An exhibit hall is four hundred metres of floor and flying to it says
+   * only which building. A booth number is the address that floor actually
+   * uses, so when there is one the map goes to the stand and says which it
+   * is. The room is still opened underneath, because the stands are only
+   * drawn while their hall is the open building on its own level.
+   *
+   * `openRoom` is deliberately not set for a stand: the room panel would
+   * cover the very thing the map has just flown to.
+   */
   const handleShowPlannedRoom = useCallback(
-    (roomId: string) => {
+    (roomId: string, booth?: string) => {
       const room = ROOMS_BY_ID[roomId];
       if (!room) return;
+      const stand = boothAt(booth);
       setTab('map');
       setSelectedRoomId(room.id);
       showRoom(room);
-      setFocusRequest({ room, token: Date.now() });
-      setOpenRoom(room);
+      setFocusRequest({ room, booth: stand ? booth : undefined, token: Date.now() });
+      setOpenRoom(stand ? null : room);
     },
     [showRoom],
   );
@@ -636,9 +656,9 @@ export default function App() {
           feedDays={index?.days ?? []}
           offsetMinutes={offsetMinutes}
           onClose={() => setOpenDetail(null)}
-          onShowOnMap={(roomId) => {
+          onShowOnMap={(roomId, booth) => {
             setOpenDetail(null);
-            handleShowPlannedRoom(roomId);
+            handleShowPlannedRoom(roomId, booth);
           }}
           onNavigate={(room, pin) => {
             setOpenDetail(null);

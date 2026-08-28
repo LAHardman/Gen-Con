@@ -72,8 +72,14 @@ interface Props {
   /** The convention's own offset, so a typed clock means the clock there. */
   offsetMinutes: number | null;
   onClose: () => void;
-  /** Take the map to where this is. Only offered when it is in a room. */
-  onShowOnMap: (roomId: string) => void;
+  /**
+   * Take the map to where this is. Only offered when it is in a room.
+   *
+   * A stand passes its booth number as well, because the room it is in is
+   * an exhibit hall the size of a street: flying to the hall answers "which
+   * building" when the question was "which stand".
+   */
+  onShowOnMap: (roomId: string, booth?: string) => void;
   /** Open directions with this as the destination. */
   onNavigate: (room: Room | undefined, pin: Pin | undefined) => void;
 }
@@ -451,7 +457,7 @@ export function EventDialog({
               // The primary action of a panel opened *from* the schedule is the
               // map: you already know when it is — you put it there.
               className={`button${planned || (vendor && !canPlace) ? ' button--primary' : ''}`}
-              onClick={() => onShowOnMap(room.id)}
+              onClick={() => onShowOnMap(room.id, vendor?.booth)}
             >
               Show on map
             </button>

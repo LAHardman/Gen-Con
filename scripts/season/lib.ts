@@ -336,6 +336,20 @@ export interface Deadline {
   note?: string;
 }
 
+/**
+ * A `due` value as a date, or null if it is not one.
+ *
+ * `2027-07-22` is read at noon UTC so a timezone cannot slide it a day, and
+ * anything else is handed to the platform's own parser — because the person
+ * filling this in is reading a renewal date off a web page, and "July 22,
+ * 2027" is what they will naturally type. Demanding one format of a human
+ * to save three lines here is the wrong trade.
+ */
+export function parseDue(due: string): Date | null {
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(due) ? Date.parse(`${due}T12:00:00Z`) : Date.parse(due);
+  return Number.isFinite(iso) ? new Date(iso) : null;
+}
+
 export function readDeadline(deadline: Deadline, now: Date): ProbeResult {
   const file = 'scripts/season/store-dates.json';
   if (!deadline.due) {
@@ -348,7 +362,17 @@ export function readDeadline(deadline: Deadline, now: Date): ProbeResult {
       ],
     };
   }
-  const due = new Date(`${deadline.due}T12:00:00Z`);
+  const due = parseDue(deadline.due);
+  if (!due) {
+    return {
+      status: 'fail',
+      summary: `${deadline.what}: "${deadline.due}" is not a date this can read`,
+      instructions: [
+        `Put a readable date in \`${file}\` — \`"2027-07-22"\` is the tidiest form, and anything a date parser knows works too.`,
+        'It must be in quotes: JSON has no bare dates, and an unquoted one makes the whole file unreadable rather than just that row.',
+      ],
+    };
+  }
   const days = daysBetween(now, due);
   const renew = [
     `When it is dealt with, move \`due\` forward a year in \`${file}\` — the probe goes quiet on its own.`,
