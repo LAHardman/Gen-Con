@@ -245,8 +245,27 @@ body {
  * Picked against the campus view rather than from the arithmetic, because how
  * dark the tileset draws depends on the zoom.
  */
+/*
+ * A small lift on the dark tiles, and a cautionary tale about the size of it.
+ *
+ * This said `brightness(2.6)` for a long time, and it was right when it was
+ * written: CARTO's dark basemap was very nearly black and its streets sat a
+ * few percent off their own background, so without a big lift they vanished
+ * under everything this app draws on top.
+ *
+ * CARTO was replaced by Esri, whose dark canvas is a proper mid-dark grey —
+ * mean luminance 77 of 255, with its roads up at 158. Multiplied by 2.6 that
+ * becomes a mean of 198, which is lighter than mid-grey: the filter was
+ * turning the dark basemap into a light one, and the reported symptom was
+ * exactly that, "dark mode just looks like light mode".
+ *
+ * The lesson is that a filter is tuned to a *tileset*, not to a taste, so it
+ * belongs in the same decision as the provider. This one is measured against
+ * Esri's: enough to separate the roads from their background, nowhere near
+ * enough to change which end of the scale the map sits at.
+ */
 .map__tiles--dark {
-  filter: brightness(2.6) contrast(1.05);
+  filter: brightness(1.15) contrast(1.3);
 }
 
 /* Venue and room geometry ------------------------------------------------ */
@@ -376,13 +395,33 @@ body {
   stroke-linecap: butt;
 }
 
+/*
+ * The tunnel, which is not a quieter kind of skywalk.
+ *
+ * There is exactly one, it runs under the street between the convention
+ * centre and Lucas Oil Stadium, and in August it is how a great many people
+ * get between the two without going outside. It was drawn in a pale
+ * blue-grey a shade off the map's other lines while the eleven skywalks were
+ * bright yellow — so the single most useful covered route on the campus was
+ * the least visible thing representing one, and was reported as unclear.
+ *
+ * It reads as its own kind now: cyan rather than yellow, because below the
+ * street is a different fact from above it, and at the same weight as a
+ * skywalk because it matters at least as much. The legend names the two
+ * separately for the same reason.
+ */
 .map__link--tunnel {
-  stroke: #9fb4d8;
-  stroke-opacity: 0.3;
+  stroke: #6fd3ff;
+  stroke-opacity: 0.4;
 }
 
 .map__link-core.map__link--tunnel {
-  stroke-opacity: 0.8;
+  stroke: #6fd3ff;
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+  /* A longer dash than a skywalk's, so the two differ by shape as well as by
+     colour — which is what makes them tell apart for a colour-blind reader. */
+  stroke-dasharray: 9 4;
 }
 
 .leaflet-tooltip.map__link-tip {
@@ -1369,6 +1408,16 @@ body {
   border: 1.5px dashed #8f9ac2;
   border-radius: 2px;
   background: rgba(143, 154, 194, 0.22);
+}
+
+.legend__tunnel-mark {
+  width: 16px;
+  height: 5px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  background:
+    repeating-linear-gradient(to right, #6fd3ff 0 9px, transparent 9px 13px),
+    rgba(111, 211, 255, 0.35);
 }
 
 .legend__link-mark {
