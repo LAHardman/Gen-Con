@@ -14,6 +14,7 @@ import {
   minutesOf,
   missingFields,
   parseHourProse,
+  parseDue,
   readDeadline,
   similarity,
   closest,
@@ -136,5 +137,29 @@ describe('week stamp', () => {
   it('is stable within a week, so a re-run changes nothing', () => {
     expect(weekStamp(new Date('2026-08-24T00:00:00Z'))).toBe(weekStamp(new Date('2026-08-30T23:59:59Z')));
     expect(weekStamp(new Date('2026-08-27T12:00:00Z'))).toMatch(/^2026-W\d{2}$/);
+  });
+});
+
+describe('the deadlines file', () => {
+  // It is edited by hand, in a browser, months apart — and it broke exactly
+  // that way once: two dates written as prose and unquoted, which is not a
+  // bad row but an unparseable *file*. The season check would have said so,
+  // a week later, in an issue. This says so in the same minute.
+  const file = 'scripts/season/store-dates.json';
+
+  it('parses, and every date in it can be read', async () => {
+    const { readFileSync } = await import('node:fs');
+    const held = JSON.parse(readFileSync(file, 'utf8'));
+    expect(Array.isArray(held.deadlines)).toBe(true);
+    expect(held.deadlines.length).toBeGreaterThan(0);
+    for (const row of held.deadlines) {
+      expect(typeof row.what, JSON.stringify(row)).toBe('string');
+      expect(row.note?.length ?? 0).toBeGreaterThan(20);
+      // Null is a real answer — "not filled in yet" — and anything else has
+      // to be a date, or the probe reports a deadline it cannot act on.
+      if (row.due !== null) {
+        expect(parseDue(row.due), `"${row.due}" is not a readable date`).not.toBeNull();
+      }
+    }
   });
 });
