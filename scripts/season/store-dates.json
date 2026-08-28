@@ -15,7 +15,7 @@
     },
     {
       "what": "Google Play target API level review",
-      "due": null,
+      "due": August 31 2026,
       "note": "Google ratchets the required target API level yearly, with deadlines usually at the end of August — https://developer.android.com/google/play/requirements/target-sdk says the current one. Falling behind first hides the app from new users on current Android. The fix is the annual maintenance release: bump targetSdkVersion, build, submit."
     },
     {
