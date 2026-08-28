@@ -60,7 +60,17 @@ export function Legend({ showAmenities, onToggleAmenities }: Props) {
           </li>
           <li className="legend__link">
             <span className="legend__link-mark" aria-hidden="true" />
-            Skywalk or tunnel
+            Skywalk — over the street
+          </li>
+          {/*
+            * Named apart from the skywalks. There is one tunnel, it joins the
+            * convention centre to Lucas Oil Stadium, and lumping it in with
+            * eleven bridges under one word hid the one route most likely to
+            * be wanted in an Indianapolis August.
+            */}
+          <li className="legend__link">
+            <span className="legend__tunnel-mark" aria-hidden="true" />
+            Tunnel — under it, to Lucas Oil
           </li>
           <li className="legend__amenities">
             <label>

@@ -20,9 +20,9 @@ const X = 533;
 const Y = 777;
 
 /**
- * Where to look when a configured style dies: Esri's plainest canvas first
- * (labels baked in — the split-layer trick is lost but the map survives),
- * then OSM's own raster as the last resort everybody serves.
+ * Where to look when the configured style dies. All three styles are one
+ * OpenStreetMap raster now, so a substitute has to be a different provider
+ * entirely — Esri's canvas, which is where they used to live.
  *
  * NOTE THE BLIND SPOT THIS PROBE HAS. It asks for a status and a content
  * type, which is all a HEAD gives you — and on 2026-08-28 CARTO began
@@ -34,14 +34,14 @@ const Y = 777;
  */
 const SUBSTITUTES: ReadonlyArray<{ name: string; url: string; note: string }> = [
   {
-    name: 'Esri light canvas, labels baked in',
+    name: 'Esri light canvas',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-    note: 'numbered {z}/{y}/{x}, which is not Leaflet\'s order; names baked in',
+    note: 'numbered {z}/{y}/{x}, not Leaflet\'s order; names baked in; NOTHING PAST ZOOM 16 — deeper tiles are a "Map data not yet available" placeholder, which is why the app left it',
   },
   {
-    name: 'OpenStreetMap standard',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    note: 'no {s} subdomains, names baked in — and check the tile usage policy before shipping it as a default',
+    name: 'Esri dark canvas',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    note: 'same shape and the same zoom-16 ceiling as the light one',
   },
 ];
 

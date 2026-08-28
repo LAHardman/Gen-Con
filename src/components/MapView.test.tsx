@@ -35,7 +35,7 @@ import {
   type LabelSizer,
 } from './MapView';
 import { routeBetween } from '../data/navigation';
-import { BASEMAPS } from '../data/basemaps';
+import { BASEMAPS, BASEMAP_IDS } from '../data/basemaps';
 import { ROOMS_BY_ID, defaultLevel, roomBounds, type Room } from '../data/venues';
 
 afterEach(cleanup);
@@ -113,17 +113,32 @@ describe('what is on the map', () => {
   });
 
   it('switches the basemap under everything else', () => {
-    // Against the table rather than against a vendor's URL. Naming the
-    // provider here is what made this fail the day one was replaced, which
-    // told us nothing about the map and cost a run to find out.
+    /*
+     * What carries the style changed, and this test with it. The three used
+     * to be three tilesets, so a switch was visible as a different host. They
+     * are now one OpenStreetMap raster filtered three ways — because Esri's
+     * canvas had no tiles past zoom 16, which is below where this app is
+     * read — so the thing that changes is the class the filter hangs off.
+     *
+     * Asserted against the table rather than a vendor's name either way.
+     * Naming a provider in here is what made it fail the day one was
+     * replaced, which told us nothing about the map.
+     */
     const { rerender } = setup();
+    const layer = () => document.querySelector('.leaflet-tile-pane .leaflet-layer');
     const tile = () => (document.querySelector('.leaflet-tile-pane img') as HTMLImageElement).src;
     const host = (template: string) => new URL(template.replace('{s}', 'a')).hostname;
+
+    expect(layer()?.className).toContain('map__tiles--dark');
     expect(tile()).toContain(host(BASEMAPS.dark.url));
+
     rerender({ basemapId: 'streets' });
+    expect(layer()?.className).toContain('map__tiles--streets');
     expect(tile()).toContain(host(BASEMAPS.streets.url));
-    // And the two really are different tilesets, or the assertion is empty.
-    expect(BASEMAPS.dark.url).not.toBe(BASEMAPS.streets.url);
+
+    // Every style is a real, distinct entry even where they share a tileset.
+    expect(new Set(BASEMAP_IDS).size).toBe(BASEMAP_IDS.length);
+    for (const id of BASEMAP_IDS) expect(BASEMAPS[id].url).toMatch(/^https:\/\//);
   });
 });
 

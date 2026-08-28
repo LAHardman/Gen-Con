@@ -245,9 +245,47 @@ body {
  * Picked against the campus view rather than from the arithmetic, because how
  * dark the tileset draws depends on the zoom.
  */
+/*
+ * ONE TILESET, THREE LOOKS — and a cautionary tale about the size of a filter.
+ *
+ * All three styles draw the same OpenStreetMap raster (see `basemaps.ts` for
+ * why), so what tells them apart is entirely here. That is also what makes
+ * the offline cache cover every style at once: one tile serves all three.
+ *
+ * The tale: this file once said `brightness(2.6)` on the dark tiles, and it
+ * was right when it was written — CARTO's dark basemap was very nearly black
+ * and its streets sat a few percent off their own background. The provider
+ * changed twice underneath it and the number stayed, until 2.6× a mid-dark
+ * tile was producing a *light* map and the bug was reported as "dark mode
+ * just looks like light mode". A filter is tuned to a tileset, not to a
+ * taste, so it belongs in the same decision as the tileset. These are
+ * measured against OSM's raster.
+ */
+
+/*
+ * Dark: inverted, then the hue put back. Inverting alone turns OSM's warm
+ * roads a cold blue and its parks magenta; the 180° rotation returns every
+ * hue to roughly where it started, which is the standard way to darken a
+ * light basemap without redrawing it. The desaturation takes the brown cast
+ * off the arterials that survives the round trip.
+ */
 .map__tiles--dark {
-  filter: brightness(2.6) contrast(1.05);
+  filter: invert(1) hue-rotate(180deg) saturate(0.35) brightness(0.8) contrast(1.2);
 }
+
+/*
+ * Light: the same tiles with most of the colour taken out, so it reads as a
+ * canvas to draw on rather than as a second map competing with the floor
+ * plans. Left at full saturation it would simply be Streets again.
+ */
+.map__tiles--light {
+  filter: saturate(0.25) brightness(1.05);
+}
+
+/*
+ * Streets: no filter at all. It is the one style that is meant to look like
+ * somebody else's map, and the colour is the point of it.
+ */
 
 /* Venue and room geometry ------------------------------------------------ */
 
@@ -376,13 +414,33 @@ body {
   stroke-linecap: butt;
 }
 
+/*
+ * The tunnel, which is not a quieter kind of skywalk.
+ *
+ * There is exactly one, it runs under the street between the convention
+ * centre and Lucas Oil Stadium, and in August it is how a great many people
+ * get between the two without going outside. It was drawn in a pale
+ * blue-grey a shade off the map's other lines while the eleven skywalks were
+ * bright yellow — so the single most useful covered route on the campus was
+ * the least visible thing representing one, and was reported as unclear.
+ *
+ * It reads as its own kind now: cyan rather than yellow, because below the
+ * street is a different fact from above it, and at the same weight as a
+ * skywalk because it matters at least as much. The legend names the two
+ * separately for the same reason.
+ */
 .map__link--tunnel {
-  stroke: #9fb4d8;
-  stroke-opacity: 0.3;
+  stroke: #6fd3ff;
+  stroke-opacity: 0.4;
 }
 
 .map__link-core.map__link--tunnel {
-  stroke-opacity: 0.8;
+  stroke: #6fd3ff;
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+  /* A longer dash than a skywalk's, so the two differ by shape as well as by
+     colour — which is what makes them tell apart for a colour-blind reader. */
+  stroke-dasharray: 9 4;
 }
 
 .leaflet-tooltip.map__link-tip {
@@ -1369,6 +1427,16 @@ body {
   border: 1.5px dashed #8f9ac2;
   border-radius: 2px;
   background: rgba(143, 154, 194, 0.22);
+}
+
+.legend__tunnel-mark {
+  width: 16px;
+  height: 5px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  background:
+    repeating-linear-gradient(to right, #6fd3ff 0 9px, transparent 9px 13px),
+    rgba(111, 211, 255, 0.35);
 }
 
 .legend__link-mark {

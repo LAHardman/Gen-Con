@@ -61,39 +61,80 @@ const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas';
 /** Esri numbers its tiles {z}/{y}/{x}, which is not Leaflet's default order. */
 const esri = (service: string) => `${ESRI}/${service}/MapServer/tile/{z}/{y}/{x}`;
 
+/**
+ * One tileset, three treatments — and the reason it is one tileset.
+ *
+ * The three styles used to be three different services. CARTO's, until it
+ * began watermarking every tile; then Esri's canvas, which is key-free and
+ * came in a base and a labels half, so street names could be lifted above
+ * the floor plans. That split was worth having and is now given up, for a
+ * reason that only shows at the zoom the app is actually used at.
+ *
+ * ESRI'S CANVAS STOPS AT ZOOM 16. Every deeper tile is a placeholder image
+ * reading "Map data not yet available" — checked at 17, 18, 19 and 20, on
+ * both the dark and the light service. `maxNativeZoom: 16` kept those off
+ * the screen, so what you got instead was a zoom-16 tile blown up eight
+ * times: a grey smear with no building edges in it and a street name the
+ * height of a block. That is where this app spends its time. You open a
+ * building at zoom 19.
+ *
+ * It also made the app look wrong in a way that was not its fault. The
+ * venue outlines here are OpenStreetMap's own footprints, surveyed and
+ * exact; drawn over a smeared upscale whose buildings are blobs, they read
+ * as not lining up with the map underneath, and that is what was reported.
+ *
+ * OpenStreetMap's raster has real data to zoom 19, and — the part that
+ * settles it — the buildings on it are the same data these outlines come
+ * from. They line up by construction rather than by luck.
+ *
+ * WHAT IT COSTS, stated plainly. OSM bakes its labels into the tile, so
+ * there is no separate writing layer to draw over the rooms any more, and
+ * `labelsUrl` is null throughout. That trick is missed. It was also already
+ * lost in practice: the labels half stopped at zoom 16 with the base half,
+ * so above that it was an upscale being drawn over a floor plan.
+ *
+ * The styles are therefore one tileset filtered three ways, in
+ * `styles.css` against `map__tiles--<id>`: dark is inverted, light is
+ * desaturated, streets is left alone. Which means a tile fetched for one
+ * style is the same tile for all three — the offline cache now covers every
+ * style at once instead of a third of each.
+ */
+const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+/**
+ * How deep OpenStreetMap's raster really goes. Above this Leaflet upscales
+ * rather than asking for a tile that is not there — and unlike the canvas
+ * this app left behind, that only starts one step past the deepest zoom
+ * anybody reads a floor plan at.
+ */
+const OSM_MAX_NATIVE = 19;
+
 export type BasemapId = 'dark' | 'light' | 'streets';
 
 const COMPILED: Record<BasemapId, Basemap> = {
   dark: {
     id: 'dark',
     label: 'Dark',
-    url: esri('World_Dark_Gray_Base'),
-    labelsUrl: esri('World_Dark_Gray_Reference'),
-    attribution: ESRI_ATTRIBUTION,
-    maxNativeZoom: 16,
+    url: OSM,
+    labelsUrl: null,
+    attribution: OSM_ATTRIBUTION,
+    maxNativeZoom: OSM_MAX_NATIVE,
   },
   light: {
     id: 'light',
     label: 'Light',
-    url: esri('World_Light_Gray_Base'),
-    labelsUrl: esri('World_Light_Gray_Reference'),
-    attribution: ESRI_ATTRIBUTION,
-    maxNativeZoom: 16,
+    url: OSM,
+    labelsUrl: null,
+    attribution: OSM_ATTRIBUTION,
+    maxNativeZoom: OSM_MAX_NATIVE,
   },
-  /*
-   * OpenStreetMap's own raster, which bakes its names into the tile — so its
-   * street names cannot be lifted above the buildings the way the two canvas
-   * styles' can. It is here anyway, and it is the most colourful of the
-   * three: it is also the one tileset in this file least likely ever to be
-   * taken away, which after CARTO is worth something.
-   */
   streets: {
     id: 'streets',
     label: 'Streets',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    url: OSM,
     labelsUrl: null,
     attribution: OSM_ATTRIBUTION,
-    maxNativeZoom: 19,
+    maxNativeZoom: OSM_MAX_NATIVE,
   },
 };
 
@@ -139,25 +180,23 @@ export interface RescueBasemap {
 }
 
 const COMPILED_RESCUES: readonly RescueBasemap[] = [
-  // The same provider's plainest style first: a style can be retired on its
-  // own, and if that is all that happened the map barely changes.
+  // Esri's canvas, which is where this app's styles used to live. It is
+  // shallow — nothing past zoom 16 — but a shallow map is an enormous
+  // improvement on no map, and this rung only ever runs when OpenStreetMap
+  // itself has stopped answering.
   {
-    id: 'rescue-esri',
-    url: `${ESRI}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    id: 'rescue-esri-light',
+    url: esri('World_Light_Gray_Base'),
     labelsUrl: null,
     attribution: ESRI_ATTRIBUTION,
     maxNativeZoom: 16,
   },
-  // Then somebody else entirely, because what usually goes is a whole
-  // provider rather than one style — which is exactly how CARTO went. This
-  // is the last rung on purpose: OpenStreetMap's own raster is the tileset
-  // here least likely ever to be taken away.
   {
-    id: 'rescue-osm',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    id: 'rescue-esri-dark',
+    url: esri('World_Dark_Gray_Base'),
     labelsUrl: null,
-    attribution: OSM_ATTRIBUTION,
-    maxNativeZoom: 19,
+    attribution: ESRI_ATTRIBUTION,
+    maxNativeZoom: 16,
   },
 ];
 

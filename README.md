@@ -307,41 +307,53 @@ script reads and writes on import and could not otherwise be asked.
 ## The map
 
 The basemap is real: live tiles of downtown Indianapolis, with real streets and
-buildings, rendered through [Leaflet](https://leafletjs.com/). Three key-free
-tilesets are wired up (Esri's dark and light canvas, and OpenStreetMap's own
-raster) and switchable from the header. Each carries the attribution its terms
-require — Leaflet renders it in the corner, and it must not be removed.
+buildings, rendered through [Leaflet](https://leafletjs.com/). All three styles
+draw **one** key-free tileset — OpenStreetMap's own raster — filtered three
+ways: Dark is inverted, Light is desaturated, Streets is left alone. The switch
+is in the header, and in the menu drawer at phone widths where the header has no
+room for it. The attribution OSM's terms require is rendered in the corner by
+Leaflet and must not be removed.
 
-**CARTO used to be all three of those and is not any more.** On 2026-08-28
-every CARTO basemap style began coming back with "API KEY REQUIRED" written
-across the map — as a normal 200, a valid PNG, the right content type, and the
-watermark composited into the tile itself. Nothing a status check can see: the
-season probe went on reporting every tileset healthy while the map read as
-vandalised to anybody looking at it. Since no automated check here can read a
-watermark, the guard is a rule rather than a picture — `basemaps.test.ts`
-forbids a `cartocdn` URL anywhere in the styles or the rescue ladder, so the
-swap cannot be undone by accident.
+**It took two provider changes to get here, and both are worth knowing.**
+CARTO was all three styles until every one of them began coming back with "API
+KEY REQUIRED" composited into the tile — a normal 200, a valid PNG, the right
+content type, and unusable. Nothing a status check can see, so the guard is a
+rule rather than a picture: `basemaps.test.ts` forbids a `cartocdn` URL
+anywhere.
 
-**The street names are drawn on top of the buildings, not under them.** The two
-canvas tilesets are taken in two halves — the map without its writing, and the
-writing on its own — and the second is drawn above everything the app puts on
-the map. It has to be: the rooms and floor plans are opaque enough to bury a
-street name, and once you have zoomed into a building the streets around it are
-exactly what you need to leave it by. Taking the split tileset rather than
-adding names over a map that already has them is also what keeps every name
-drawn once. Where a provider bakes its names in there is no second half, and
-the app simply draws no label layer.
+Esri's canvas replaced it and lasted a fortnight, for a reason that only shows
+at the zoom the app is actually used at: **it has no tiles past zoom 16.**
+Deeper requests return a placeholder reading "Map data not yet available", so
+Leaflet upscaled a zoom-16 tile instead — and opening a building flies to zoom
+19. That is a grey smear with no building edges in it. The venue outlines here
+are OpenStreetMap's own footprints, surveyed and exact; drawn over a smear
+whose buildings are blobs, they read as not lining up with the map underneath,
+and that is exactly how it was reported.
+
+OSM's raster has real data to zoom 19, and its buildings are the same data
+these outlines come from — so they line up by construction rather than by
+luck. `basemaps.test.ts` now holds that every style serves native tiles at the
+zoom a building opens to, because a basemap that stops above that is not a
+styling choice; it is the map going blurry where the app is read.
+
+**The street names used to be drawn on top of the buildings, and are not any
+more.** Two of the styles were once taken in halves — the map without its
+writing, and the writing on its own — so the names could sit above the floor
+plans, which are opaque enough to bury one. OSM bakes its labels into the
+tile, so that half no longer exists and `labelsUrl` is null throughout. The
+trick is missed and was worth having. It was also already lost in practice:
+the labels layer stopped at zoom 16 with the base layer, so above that it was
+an upscale being drawn over a floor plan.
 
 They arrive at zoom 17, not before. Over the whole campus a full set of street
 names is a screenful of type telling you what you already know — that this is
 downtown Indianapolis — and it buries the buildings, which at that zoom are the
 only thing there is to pick.
 
-The third option is OpenStreetMap's own raster, which bakes its names into the
-tile — so its street names cannot be lifted clear of the buildings the way the
-canvas styles' can. It is the most colourful of the three, and it is also the
-one tileset here least likely ever to be taken away, which after CARTO is worth
-something.
+Because the three styles share a tileset, a tile fetched for one is the same
+tile for all three — so the offline cache now covers every style at once
+instead of a third of each, which in a hall with no signal is the difference
+between having a map and having the one you happened to be using.
 
 **And the lines are drawn to be followed.** A dark tileset puts its streets a
 few percent off its own background, which vanishes under a map with this much
