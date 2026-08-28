@@ -133,6 +133,60 @@ export function roomFitsLabel(map: LabelSizer, room: Room) {
  * the room you have tapped names itself however small it is, because you have
  * tapped it and being told what it is, is the answer.
  */
+/* ------------------------------------------------------ labels that collide */
+
+/** One label's claim on the screen, for `packLabels`. */
+export interface LabelBox {
+  id: string;
+  /** Higher wins a collision. The open building outranks everything. */
+  priority: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Which labels are drawn when they land on top of one another.
+ *
+ * Room names have had a rule for this since they were written — a room names
+ * itself only when it is big enough on screen to hold the name. Building
+ * names had none at all: sixteen permanent tooltips, added once and never
+ * asked about again. On a phone ten of the sixteen overlapped at the zoom the
+ * app opens at, which is the first thing anybody sees.
+ *
+ * The rule is the ordinary one for a crowded map. Take the labels in order of
+ * priority, keep each one that lands clear of everything kept so far, and drop
+ * the rest. Dropping is right rather than nudging: a name shifted off its own
+ * building to make room is a name pointing at the wrong thing, and at this
+ * density there is nowhere to shift it to. What is dropped comes back the
+ * moment you zoom in far enough for it to fit.
+ *
+ * Pure, and separate from the effect that applies it, for the same reason
+ * `roomShowsLabel` is: a test container has no size, so the effect cannot be
+ * asked anything. Here the boxes are given.
+ */
+export function packLabels(boxes: readonly LabelBox[]): Set<string> {
+  const shown: LabelBox[] = [];
+  const keep = new Set<string>();
+  // A stable order: priority first, then id, so the same view always drops the
+  // same labels rather than flickering between two equally good answers.
+  const order = [...boxes].sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
+  for (const box of order) {
+    const clashes = shown.some(
+      (other) =>
+        box.left < other.left + other.width &&
+        other.left < box.left + box.width &&
+        box.top < other.top + other.height &&
+        other.top < box.top + box.height,
+    );
+    if (clashes) continue;
+    shown.push(box);
+    keep.add(box.id);
+  }
+  return keep;
+}
+
 export function roomShowsLabel(
   map: LabelSizer,
   room: Room,
@@ -212,6 +266,17 @@ export function MapView({
   /** The six trade halls drawn as one, so it can be shown and hidden as one. */
   const tradeFloorRef = useRef<L.Polygon | null>(null);
   const venueLayersRef = useRef(new Map<string, L.Path>());
+  /**
+   * Each building's name, with where it points and how big it is.
+   *
+   * The size is measured once and kept: the text never changes, so its box
+   * never changes, and re-measuring every one of them on every zoom would
+   * mean showing them all first to read their widths — which is the flicker
+   * the whole thing exists to avoid.
+   */
+  const venueLabelsRef = useRef(
+    new Map<string, { label: L.Tooltip; at: L.LatLngExpression; priority: number; size?: { w: number; h: number } }>(),
+  );
 
   // Latest callbacks, so the one-time map setup never captures a stale closure.
   // `picking` rides along for the same reason: the click handlers are bound
@@ -849,6 +914,20 @@ export function MapView({
         .setContent(venue.shortName ?? venue.name);
       label.addTo(map);
       layers.push(label);
+      /*
+       * Priority when two names land on each other: the bigger building wins.
+       * Not an arbitrary tie-break — a name is a landmark, and the landmark
+       * worth keeping on a crowded screen is the one you can actually see out
+       * of a window. The convention centre and the stadium hold their names
+       * down to the whole-campus view; the Escape Room gives its up until you
+       * are close enough for it to matter.
+       */
+      const metres = Math.abs(venue.grid.width * venue.grid.height);
+      venueLabelsRef.current.set(venue.id, {
+        label,
+        at: [nw.lat, (nw.lng + se.lng) / 2],
+        priority: metres,
+      });
     }
 
     // Rooms take their real outline from the venue's floor plan where there is
@@ -975,6 +1054,7 @@ export function MapView({
       for (const layer of layers) layer.remove();
       roomLayersRef.current.clear();
       venueLayersRef.current.clear();
+      venueLabelsRef.current.clear();
     };
   }, []);
 
@@ -1054,6 +1134,88 @@ export function MapView({
             opacity: 1,
           },
         );
+      }
+
+      /*
+       * Finally, the names that landed on each other.
+       *
+       * Everything above decides whether a name is worth drawing at all — a
+       * room big enough to hold it, a floor being shown. What none of it
+       * knew is whether two of them occupy the same pixels, and they often
+       * did: sixteen permanent building names with no rule at all, and room
+       * names that fit their own room while sitting on the neighbour's.
+       *
+       * Both are tooltips on one screen, so they are packed together in one
+       * pass rather than each fighting its own half. Measured off the page
+       * rather than computed from the anchor, because a computed box was
+       * out by the tooltip's own padding and offset — a few pixels, which is
+       * the entire margin a near miss is decided by.
+       */
+      const boxes: LabelBox[] = [];
+      const elements = new Map<string, HTMLElement>();
+      const claim = (id: string, element: HTMLElement | undefined, priority: number) => {
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        if (rect.width === 0) return;
+        elements.set(id, element);
+        boxes.push({ id, priority, left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+      };
+
+      /*
+       * Four tiers, because a square metre of ballroom and a square metre of
+       * hotel are not the same claim on the reader's attention. Within a tier,
+       * the bigger thing wins — the landmark you can see out of a window, the
+       * hall you can find from across it.
+       */
+      const TIER = 1e9;
+      for (const [id, entry] of venueLabelsRef.current) {
+        const element = entry.label.getElement() ?? undefined;
+        /*
+         * A closed building writes its name inside itself when the name fits.
+         *
+         * The name used to sit above the top edge always, to keep it off the
+         * rooms — but a closed building has no rooms drawn, and downtown is
+         * dense enough that a name floating above a small building lands
+         * squarely on its neighbour. "Circle Centre" printed over the Hyatt
+         * is not a smaller problem than two names overlapping; it is a name
+         * pointing at the wrong building.
+         *
+         * Inside, there is no ambiguity at all. Above is still right for a
+         * building too small to hold its name, and for the open one, whose
+         * rooms are drawn and are what the space is for.
+         */
+        if (element) {
+          const [nw, se] = venueBounds(VENUES_BY_ID[id]);
+          const a = map.latLngToContainerPoint([nw.lat, nw.lng]);
+          const b = map.latLngToContainerPoint([se.lat, se.lng]);
+          const rect = element.getBoundingClientRect();
+          const fits =
+            id !== openVenueId &&
+            rect.width > 0 &&
+            Math.abs(b.x - a.x) > rect.width + 10 &&
+            Math.abs(b.y - a.y) > rect.height + 10;
+          const wanted: L.LatLngExpression = fits
+            ? [(nw.lat + se.lat) / 2, (nw.lng + se.lng) / 2]
+            : entry.at;
+          const now = entry.label.getLatLng();
+          if (!now || now.lat !== (wanted as number[])[0] || now.lng !== (wanted as number[])[1]) {
+            entry.label.setLatLng(wanted);
+          }
+        }
+        claim(`venue:${id}`, element, (id === openVenueId ? 2 : 0) * TIER + entry.priority);
+      }
+      for (const room of ROOMS) {
+        const tooltip = roomLayersRef.current.get(room.id)?.getTooltip();
+        const [nw, se] = roomBounds(room);
+        const size = Math.abs((se.lat - nw.lat) * (se.lng - nw.lng)) * 1e10;
+        claim(`room:${room.id}`, tooltip?.getElement() ?? undefined,
+          (room.id === selectedRoomId ? 3 : 1) * TIER + size);
+      }
+      claim('room:trade-floor', floor?.getTooltip()?.getElement() ?? undefined, 1 * TIER + 1e8);
+
+      const keep = packLabels(boxes);
+      for (const [id, element] of elements) {
+        element.classList.toggle('map__label--crowded', !keep.has(id));
       }
     };
 

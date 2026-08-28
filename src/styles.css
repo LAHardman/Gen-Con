@@ -451,6 +451,22 @@ body {
   pointer-events: none;
 }
 
+/*
+ * A name that has nowhere to go — a building's or a room's.
+ *
+ * Hidden rather than moved: a name nudged off the thing it names points at
+ * the wrong thing, and at the density of a downtown campus there is nowhere to
+ * nudge it to. It comes back as soon as you zoom in enough for it to fit.
+ *
+ * `visibility` rather than `display`, and this is load-bearing: the packer
+ * measures these boxes off the page every time the zoom changes, and a
+ * `display: none` element measures zero. Hidden this way it still knows where
+ * it would be, so it can be let back in the moment there is room.
+ */
+.map__label--crowded {
+  visibility: hidden;
+}
+
 .leaflet-tooltip.map__room-label::before,
 .leaflet-tooltip.map__venue-label::before {
   display: none;

@@ -26,6 +26,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MapView,
   ROOM_FILL_OPACITY,
+  packLabels,
   ROOM_LABEL_MIN_ZOOM,
   levelOf,
   roomFitsLabel,
@@ -182,6 +183,64 @@ describe('telling a measured room from a placed one', () => {
   it('draws no corridor for a building nobody has opened', () => {
     setup();
     expect(corridors()).toHaveLength(0);
+  });
+});
+
+describe('names that land on each other', () => {
+  /*
+   * Building names had no rule at all: sixteen permanent tooltips, added once
+   * and never asked about again. On a phone, ten of the sixteen overlapped on
+   * the first screen of the app — which is the first thing anybody sees. Room
+   * names had half a rule, one that asked whether a name fitted its own room
+   * and never whether it landed on the neighbour's.
+   *
+   * `packLabels` is that rule for both, and it is pure so it can be asked
+   * directly: a test container has no size, so the effect that applies it
+   * cannot be.
+   */
+  const box = (id: string, priority: number, left: number, top: number) => ({
+    id,
+    priority,
+    left,
+    top,
+    width: 100,
+    height: 20,
+  });
+
+  it('keeps the higher claim and drops what lands on it', () => {
+    const keep = packLabels([box('small', 1, 0, 0), box('big', 9, 10, 5)]);
+    expect([...keep]).toEqual(['big']);
+  });
+
+  it('keeps both when they clear each other', () => {
+    const keep = packLabels([box('a', 1, 0, 0), box('b', 9, 200, 0)]);
+    expect(keep.size).toBe(2);
+  });
+
+  it('lets a third label through the gap two others left', () => {
+    // Dropping is not cascading: a label that clears everything *kept* is
+    // kept, whatever was dropped nearby.
+    const keep = packLabels([box('a', 9, 0, 0), box('b', 5, 50, 0), box('c', 1, 200, 0)]);
+    expect([...keep].sort()).toEqual(['a', 'c']);
+  });
+
+  it('decides the same way every time, so a view does not flicker', () => {
+    // Equal priority is a real case — two hotels the same size — and an
+    // unstable tie-break would swap which one is named on every zoom.
+    const ties = [box('zulu', 5, 0, 0), box('alpha', 5, 10, 0)];
+    expect([...packLabels(ties)]).toEqual(['alpha']);
+    expect([...packLabels([...ties].reverse())]).toEqual(['alpha']);
+  });
+
+  it('touching edges is not a collision', () => {
+    // Exactly adjacent boxes read as two words with no gap, which is legible.
+    // Treating that as a clash would drop a name for nothing.
+    const keep = packLabels([box('a', 9, 0, 0), box('b', 1, 100, 0)]);
+    expect(keep.size).toBe(2);
+  });
+
+  it('has nothing to say about an empty screen', () => {
+    expect(packLabels([]).size).toBe(0);
   });
 });
 
