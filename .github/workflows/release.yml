@@ -247,9 +247,12 @@ jobs:
           ## What it is
 
           The same app as the website, wrapped in a native shell. The schedule
-          and all fifteen data tables are inside the download, so it works with
-          no network from the first launch — and it refreshes them from the
+          and every data table are inside the download, so it works with no
+          network from the first launch — and it refreshes them from the
           published pack on its own after that, without needing a new build.
+          The count is deliberately not written here: it has changed twice
+          already, and a release note that quietly goes stale is worse than
+          one that never claimed a number.
 
           A debug build: debuggable and unminified, otherwise identical.
           NOTE
