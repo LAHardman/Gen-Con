@@ -169,6 +169,18 @@ function planLevelOf(venueId: string, levels: Record<string, string>) {
   return showing && sheets.includes(showing) ? showing : sheets[0];
 }
 
+/**
+ * How strongly a room is filled — and the top of the floor plan's ranking.
+ *
+ * Named because the rest of that ranking lives in the stylesheet, and for a
+ * long time the two disagreed: the building's fabric was drawn at 0.55 and
+ * its restrooms at 0.7, over rooms at this. The least important thing on the
+ * floor was the most prominent one, which is what "random overlapping boxes"
+ * turned out to mean. `MapView.test.tsx` now reads the CSS and holds
+ * everything else below this number.
+ */
+export const ROOM_FILL_OPACITY = 0.38;
+
 export function MapView({
   selectedRoomId,
   onSelectRoom,
@@ -834,7 +846,7 @@ export function MapView({
         // them rather than a single block with a line in it.
         color: '#141822',
         fillColor: style.fill,
-        fillOpacity: 0.38,
+        fillOpacity: ROOM_FILL_OPACITY,
         weight: 2.5,
       };
       /*
@@ -917,7 +929,7 @@ export function MapView({
         className: 'map__floor',
         color: '#141822',
         fillColor: style.fill,
-        fillOpacity: 0.38,
+        fillOpacity: ROOM_FILL_OPACITY,
         weight: 2.5,
       });
       floor.on('click', (event) => {
@@ -983,7 +995,7 @@ export function MapView({
         const anyHall = ROOMS_BY_ID['hall-i'];
         const shown = anyHall ? roomState(anyHall) === 'shown' : false;
         floor.unbindTooltip();
-        floor.setStyle({ opacity: shown ? 1 : 0, fillOpacity: shown ? 0.38 : 0 });
+        floor.setStyle({ opacity: shown ? 1 : 0, fillOpacity: shown ? ROOM_FILL_OPACITY : 0 });
         if (shown && zoom >= ROOM_LABEL_MIN_ZOOM) {
           floor.bindTooltip(`<span class="map__room-name">${TRADE_FLOOR_NAME}</span>`, {
             permanent: true,

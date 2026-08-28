@@ -543,8 +543,24 @@ export default function App() {
         </AppMenu>
 
         <div className="app__brand">
+          {/*
+            * A twenty-sided die, which is what the 20 was always meant to be.
+            *
+            * It used to be the bare characters "20" in an accent-coloured
+            * rounded square — which is precisely how this app draws a *count*:
+            * events in a room, entries on a plan, items in the menu. So the
+            * logo read as a tally of something, and the first question anybody
+            * asked about it was what it was counting. Drawing the die makes it
+            * a mark rather than a number; the hexagon and the top face are all
+            * it takes, and the numeral rides inside where it does on the real
+            * thing.
+            */}
           <span className="app__logo" aria-hidden="true">
-            20
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M12 1.6 21.2 6.9v10.2L12 22.4 2.8 17.1V6.9Z" className="app__logo-body" />
+              <path d="M12 5.4 18.1 16H5.9Z" className="app__logo-face" />
+            </svg>
+            <span className="app__logo-pips">20</span>
           </span>
           <div>
             <h1>Gen Con Trip</h1>

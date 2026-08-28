@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MapView,
+  ROOM_FILL_OPACITY,
   ROOM_LABEL_MIN_ZOOM,
   levelOf,
   roomFitsLabel,
@@ -181,6 +182,59 @@ describe('telling a measured room from a placed one', () => {
   it('draws no corridor for a building nobody has opened', () => {
     setup();
     expect(corridors()).toHaveLength(0);
+  });
+});
+
+describe('what the floor plan puts in front', () => {
+  /*
+   * A ranking, held as a rule, because it inverted once and shipped.
+   *
+   * The parts of a plan that are not rooms and not corridors — service cores,
+   * restrooms, lettered space no room claims — are context. They were drawn
+   * at 0.55, and the restrooms at 0.7, while an actual room was drawn at
+   * 0.38. So one screen of the convention centre came out as eighteen
+   * background boxes around four rooms, and it was reported twice as "random
+   * overlapping boxes". It was not the rooms overlapping; it was the
+   * wallpaper shouting over them.
+   *
+   * Read out of the stylesheet, which is where the fault was. jsdom loads no
+   * CSS, so a rendered assertion could not see this at all — and the numbers
+   * being plausible on their own is exactly why only their *order* catches it.
+   */
+  const fillOpacity = async (selector: string) => {
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/styles.css', 'utf8');
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // `\s*\{` is what keeps `.map__plan` from matching `.map__plan--service`:
+    // a longer class name is followed by more name, never by its brace.
+    const block = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
+    if (!block) throw new Error(`${selector} is not in styles.css`);
+    const found = /fill-opacity:\s*([\d.]+)/.exec(block);
+    if (!found) throw new Error(`${selector} sets no fill-opacity`);
+    return Number(found[1]);
+  };
+
+  it('draws a room more strongly than the building around it', async () => {
+    const room = ROOM_FILL_OPACITY;
+    const fabric = await fillOpacity('.map__plan');
+    const service = await fillOpacity('.map__plan--service');
+    const restroom = await fillOpacity('.map__plan--restroom');
+    for (const [name, value] of [
+      ['plan fabric', fabric],
+      ['service cores', service],
+      ['restrooms', restroom],
+    ] as const) {
+      expect(value, `${name} is drawn at least as strongly as a room`).toBeLessThan(room);
+    }
+  });
+
+  it('keeps the corridor the most prominent thing that is not a room', async () => {
+    // It is what the reader navigates by, so it outranks the rest of the
+    // fabric — while still sitting under the rooms it runs between.
+    const corridor = await fillOpacity('.map__plan--circulation');
+    expect(corridor).toBeGreaterThan(await fillOpacity('.map__plan'));
+    expect(corridor).toBeGreaterThan(await fillOpacity('.map__plan--service'));
+    expect(corridor).toBeLessThan(ROOM_FILL_OPACITY);
   });
 });
 

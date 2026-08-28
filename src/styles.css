@@ -72,18 +72,46 @@ body {
   margin-right: auto;
 }
 
+/*
+ * The die. Its parts are stacked rather than side by side, so the numeral
+ * sits on the face the way it does on a real one.
+ */
 .app__logo {
+  position: relative;
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
-  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.app__logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.app__logo-body {
+  fill: var(--accent);
+}
+
+/* The top face, picked out by a lighter edge rather than a second fill. */
+.app__logo-face {
+  fill: none;
+  stroke: #fff5ee;
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.app__logo-pips {
+  position: absolute;
+  /* Low on the face, which is where a d20 carries its number. */
+  transform: translateY(1px);
   color: #fff5ee;
   font-family: Georgia, 'Times New Roman', serif;
   font-weight: 700;
-  font-size: 16px;
-  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .app__header h1 {
@@ -258,11 +286,33 @@ body {
  * areas told apart by tint rather than by the plan's own hues. Everything here
  * is background; the rooms the app knows about are drawn over it in colour.
  */
+/*
+ * THE FABRIC, AND THE RANKING IT HAS TO KEEP.
+ *
+ * These are the parts of a floor plan that are not rooms and not corridors:
+ * service cores, restrooms, and any lettered space no room claims. They are
+ * context. For a long time they were drawn at 0.55 — and the restrooms at
+ * 0.7 — while an actual room was drawn at 0.38, so the least important
+ * thing on the floor was the most prominent, and a screen of the convention
+ * centre came out as eighteen background boxes around four rooms. That was
+ * reported twice as "random overlapping boxes", and it was not the rooms
+ * overlapping: it was the wallpaper shouting over them.
+ *
+ * So there is an order now, and everything here is written to keep it:
+ *
+ *   corridor   the thing you navigate by      0.34 + the brightest edge
+ *   room       the thing you are going to     0.38, in its own colour
+ *   fabric     the rest of the building       0.16, muted, no edge to speak of
+ *
+ * Anything added here belongs at the bottom of that list unless there is an
+ * argument for moving it.
+ */
 .map__plan {
   stroke: #5d6688;
-  stroke-width: 1.2;
+  stroke-width: 1;
+  stroke-opacity: 0.35;
   fill: #2a3048;
-  fill-opacity: 0.55;
+  fill-opacity: 0.16;
 }
 
 /*
@@ -293,16 +343,23 @@ body {
   stroke-linejoin: round;
 }
 
+/* Lift shafts, plant, back of house. Nobody is going here. */
 .map__plan--service {
   fill: #262b40;
-  fill-opacity: 0.5;
-  stroke-opacity: 0.5;
+  fill-opacity: 0.14;
+  stroke-opacity: 0.25;
 }
 
+/*
+ * Restrooms: a shade above the rest of the fabric, because people do look for
+ * them — and still well under a room, because the WC marker is what actually
+ * finds one and this is only the block it sits on.
+ */
 .map__plan--restroom {
   fill: #4a3f5c;
-  fill-opacity: 0.7;
+  fill-opacity: 0.22;
   stroke: #6b5c82;
+  stroke-opacity: 0.4;
 }
 
 /* Moveable airwalls: where a hall divides, drawn as the dashed line it is. */
