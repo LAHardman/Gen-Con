@@ -173,6 +173,28 @@ jobs:
           path: android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
 
+      # An installable APK, which the bundle above is not.
+      #
+      # An .aab is an upload format: Google splits it into per-device APKs at
+      # download time, and a phone cannot open one. So a build nobody can try
+      # is the default outcome of a release workflow, which is the wrong way
+      # round while the app is still being looked at rather than shipped.
+      #
+      # Debug rather than release, because Android refuses to install an
+      # unsigned APK and the debug build is signed with the throwaway key
+      # every SDK generates. It is the same web bundle, the same pack and the
+      # same native shell; what differs is that it is debuggable and not
+      # minified. For putting the app on your own phone, that is the build.
+      - name: Build an APK you can install
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
       - name: Send to the Play internal track
         if: ${{ inputs.upload && env.HAVE_PLAY == 'true' }}
         uses: r0adkll/upload-google-play@v1
