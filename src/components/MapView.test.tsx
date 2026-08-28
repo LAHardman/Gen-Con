@@ -25,6 +25,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MapView,
+  ROOM_FILL_OPACITY,
+  packLabels,
   ROOM_LABEL_MIN_ZOOM,
   levelOf,
   roomFitsLabel,
@@ -181,6 +183,121 @@ describe('telling a measured room from a placed one', () => {
   it('draws no corridor for a building nobody has opened', () => {
     setup();
     expect(corridors()).toHaveLength(0);
+  });
+});
+
+describe('names that land on each other', () => {
+  /*
+   * Building names had no rule at all: sixteen permanent tooltips, added once
+   * and never asked about again. On a phone, ten of the sixteen overlapped on
+   * the first screen of the app — which is the first thing anybody sees. Room
+   * names had half a rule, one that asked whether a name fitted its own room
+   * and never whether it landed on the neighbour's.
+   *
+   * `packLabels` is that rule for both, and it is pure so it can be asked
+   * directly: a test container has no size, so the effect that applies it
+   * cannot be.
+   */
+  const box = (id: string, priority: number, left: number, top: number) => ({
+    id,
+    priority,
+    left,
+    top,
+    width: 100,
+    height: 20,
+  });
+
+  it('keeps the higher claim and drops what lands on it', () => {
+    const keep = packLabels([box('small', 1, 0, 0), box('big', 9, 10, 5)]);
+    expect([...keep]).toEqual(['big']);
+  });
+
+  it('keeps both when they clear each other', () => {
+    const keep = packLabels([box('a', 1, 0, 0), box('b', 9, 200, 0)]);
+    expect(keep.size).toBe(2);
+  });
+
+  it('lets a third label through the gap two others left', () => {
+    // Dropping is not cascading: a label that clears everything *kept* is
+    // kept, whatever was dropped nearby.
+    const keep = packLabels([box('a', 9, 0, 0), box('b', 5, 50, 0), box('c', 1, 200, 0)]);
+    expect([...keep].sort()).toEqual(['a', 'c']);
+  });
+
+  it('decides the same way every time, so a view does not flicker', () => {
+    // Equal priority is a real case — two hotels the same size — and an
+    // unstable tie-break would swap which one is named on every zoom.
+    const ties = [box('zulu', 5, 0, 0), box('alpha', 5, 10, 0)];
+    expect([...packLabels(ties)]).toEqual(['alpha']);
+    expect([...packLabels([...ties].reverse())]).toEqual(['alpha']);
+  });
+
+  it('touching edges is not a collision', () => {
+    // Exactly adjacent boxes read as two words with no gap, which is legible.
+    // Treating that as a clash would drop a name for nothing.
+    const keep = packLabels([box('a', 9, 0, 0), box('b', 1, 100, 0)]);
+    expect(keep.size).toBe(2);
+  });
+
+  it('has nothing to say about an empty screen', () => {
+    expect(packLabels([]).size).toBe(0);
+  });
+});
+
+describe('how much of a floor gets drawn', () => {
+  /*
+   * The regression this holds was reported three times before it was
+   * understood, and each report said the same thing: overlapping rectangles.
+   *
+   * Counting every shape on one screen of ICC Level 1 explained it. Twenty-
+   * nine shapes, of which four were rooms. The rest were the plan's own
+   * scenery — service cores, restroom blocks, lettered space with no room
+   * behind it — plus the other floors, drawn faint on the argument that they
+   * showed the building had more than one storey. Those four faint shapes
+   * alone collided with twenty-six others.
+   *
+   * None of it was wrong, exactly. It was just everything at once, and a
+   * floor plan that draws everything is not a floor plan. What is left is
+   * what the reader can act on: the rooms, the corridor between them, and the
+   * airwall lines that say where a hall divides.
+   */
+  const drawn = (selector: string) => document.querySelectorAll(`path.${selector}`).length;
+
+  it('draws the corridor and the airwalls, and none of the plan\'s scenery', () => {
+    setup({ openVenueId: 'icc', levels: { icc: 'Level 1' } });
+    expect(drawn('map__plan--circulation'), 'the corridor is the whole point').toBeGreaterThan(0);
+    // A service core is somewhere nobody is going; a restroom block is
+    // already answered by the WC marker sitting on it, which can be switched
+    // off; a lettered space with no room behind it is a box you cannot open.
+    expect(drawn('map__plan--service')).toBe(0);
+    expect(drawn('map__plan--restroom')).toBe(0);
+    expect(drawn('map__plan--room')).toBe(0);
+  });
+
+  it('draws one storey, not the stack', () => {
+    setup({ openVenueId: 'icc', levels: { icc: 'Level 1' } });
+    const shown = [...document.querySelectorAll('path.map__room:not(.map__room--closed)')];
+    expect(shown.length).toBeGreaterThan(0);
+    for (const el of shown) {
+      const room = ROOMS_BY_ID[el.getAttribute('data-room') ?? ''];
+      expect(room?.level, `${el.getAttribute('data-room')} is not on Level 1`).toBe('Level 1');
+    }
+    // And the floor control is what says there is another one — in words, on
+    // the right, without drawing a second plan over the first.
+    expect(drawn('map__room--other-floor')).toBe(0);
+  });
+
+  it('keeps the corridor under the rooms it runs between', async () => {
+    // The one piece of the old ranking still worth asserting: the corridor is
+    // the most prominent thing that is not a room, and still less prominent
+    // than a room. Read out of the stylesheet, since jsdom loads no CSS and a
+    // rendered assertion cannot see it.
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/styles.css', 'utf8');
+    const block = /\.map__plan--circulation\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const corridor = Number(/fill-opacity:\s*([\d.]+)/.exec(block)?.[1]);
+    expect(corridor).toBeGreaterThan(0);
+    expect(corridor).toBeLessThan(ROOM_FILL_OPACITY);
   });
 });
 
