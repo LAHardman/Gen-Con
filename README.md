@@ -93,7 +93,9 @@ visit it is for.
 again.** Stale-but-labelled beats blank: an old schedule still draws, with
 the header and the schedule page saying which year it is; the key dates are
 derived from the convention's own rule, so they answer for any year without
-ever being fetched; and if a basemap provider retires a tileset out from
+ever being fetched; badge prices keep the year they were published for and
+are shown with it, because a price a few dollars out beats an empty column
+and beats implying it is current; and if a basemap provider retires a tileset out from
 under a frozen copy, the map walks down a built-in rescue ladder — ending on
 OpenStreetMap's own raster, a different host entirely — rather than drawing
 rooms on a void. The retreat refuses to trigger offline or after any tile
@@ -139,7 +141,7 @@ want to see it on a real device.
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
-| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
+| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines, badge and parking prices — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
 | `npm run sync` | Builds and copies the result into the iOS and Android shells |
 | `npm run open:android` / `open:ios` | Opens the native project in Android Studio or Xcode |
 
@@ -2177,6 +2179,9 @@ src/
     vendors.ts       What a stand is, where it is and what it sells
     plan.ts          The four days, stops, travel, lanes and the shared axis
     key-dates.ts     Badges, housing and tickets — the rule and its provenance
+    badges.ts        Which days a badge lets somebody in, derived from the rule
+    badge-prices.ts  Gen Con's rate card, with the year it was published for
+    parking.ts       Gen Con's official lots and the downtown garages, priced apart
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
     walkable.ts      The floor you can stand on, as a grid, and A* over it

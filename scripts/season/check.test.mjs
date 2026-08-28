@@ -22,7 +22,8 @@ import {
 } from './lib';
 import { splitHourProse } from './probes/blockparty-hours';
 import { guessFacet } from './probes/food-tags';
-import { dollarFigures } from './probes/parking';
+import { dollarFigures, eventOptions, linksIn, lotPrices } from './probes/parking';
+import { asCentsLines, parseBadgeTable, splitBadgePrices } from './probes/badge-prices';
 
 describe('hour prose', () => {
   it('reads the food trucks line exactly as food.ts holds it', () => {
@@ -161,5 +162,129 @@ describe('the deadlines file', () => {
         expect(parseDue(row.due), `"${row.due}" is not a readable date`).not.toBeNull();
       }
     }
+  });
+});
+
+describe('the badge rate card', () => {
+  /**
+   * The page as it actually stands, trimmed to the part that matters.
+   *
+   * Gen Con leaves last cycle's table on the page inside an HTML comment
+   * while the new one is written, and closes that comment with `--!>` rather
+   * than `-->` — a typo a browser forgives and a naive regex does not. Both
+   * are in this fixture because both have to be survived: the malformed
+   * close, and the prose below it that carries dollar figures of its own.
+   */
+  const PAGE = `
+<h2>Gen Con Returns: August 5-8, 2027<br>Indianapolis</h2>
+<!--
+<table>
+  <tr><td><strong>Badge Type</strong></td><td><strong>Price</strong></td></tr>
+  <tr><td>4-Day</td><td>$164</td></tr>
+  <tr><td>Thursday</td><td>$83</td></tr>
+  <tr><td>Friday</td><td>$83</td></tr>
+  <tr><td>Saturday</td><td>$112</td></tr>
+  <tr><td>Sunday</td><td>$41</td></tr>
+  <tr><td>Trade Day</td><td>$302</td></tr>
+</table>
+--!>
+<p>Marion County imposes a 10% admissions tax for all badge types.</p>
+<p>This delivery option provides fast shipping for $16 and includes tracking.</p>
+`;
+
+  it('reads a table that is live on the page', () => {
+    expect(parseBadgeTable('<td>4-Day</td><td>$164</td><td>Sunday</td><td>$41</td>')).toEqual({
+      'four-day': 16_400,
+      sunday: 4_100,
+    });
+  });
+
+  it('finds nothing live while the card sits in a comment, and says what is in it', () => {
+    // The failure this exists to stop: reading six real-looking prices out
+    // of a comment and shipping them as next year\'s. A wrong number nobody
+    // doubts is worse than no number at all.
+    const { live, commented } = splitBadgePrices(PAGE);
+    expect(live).toEqual({});
+    expect(commented).toEqual({
+      'four-day': 16_400,
+      thursday: 8_300,
+      friday: 8_300,
+      saturday: 11_200,
+      sunday: 4_100,
+      'trade-day': 30_200,
+    });
+  });
+
+  it('does not mistake the prose underneath for a badge price', () => {
+    // "$16" for postage and "10%" for the tax are both on that page, below
+    // the table, and neither is a badge.
+    const { live } = splitBadgePrices('<p>Thursday is busy.</p><p>shipping for $16</p>');
+    expect(live).toEqual({});
+  });
+
+  it('takes a price only when it directly follows the badge name', () => {
+    // A row whose price cell is empty must not borrow the next row\'s.
+    expect(parseBadgeTable('<td>Friday</td><td></td><td>Saturday</td><td>$112</td>')).toEqual({
+      saturday: 11_200,
+    });
+  });
+
+  it('emits the exact lines badge-prices.ts is written in', () => {
+    expect(asCentsLines({ 'four-day': 16_400, sunday: 4_100 }, 2027)).toEqual([
+      'const COMPILED_YEAR = 2027;',
+      'const COMPILED_CENTS: Record<BadgeKind, number | null> = {',
+      "  'four-day': 16_400,",
+      '  sunday: 4_100,',
+      '  none: null,',
+      '};',
+    ]);
+  });
+});
+
+describe('official parking', () => {
+  it('takes the booking link out of Gen Con\'s own article, so the partner can change', () => {
+    // The article is the authority on who runs Gen Con's parking. Hard-coding
+    // iPark would make a change of partner invisible instead of a finding.
+    const body =
+      '<p>iPark is the official parking partner.</p>' +
+      '<p><a href="https://www.ipco.services/payments/events?e=ABC123">iPark</a></p>' +
+      '<ul><li><a href="https://downtownindy.org/explore/parking">Downtown Indy</a></li></ul>';
+    expect(linksIn(body)).toEqual([
+      'https://www.ipco.services/payments/events?e=ABC123',
+      'https://downtownindy.org/explore/parking',
+    ]);
+  });
+
+  it('reads iPark\'s event list, which is how it knows booking is open', () => {
+    const html =
+      '<select><option selected value="">--Select Event--</option>' +
+      '<option value="2DE6E2506393393D3EFFCCCDD7E4126D">Bruno Mars 2026</option>' +
+      '<option value="3FD52BB6ACAF2D2ACB3532DE1ADDF9C2">Gen Con 2027</option></select>';
+    expect(eventOptions(html)).toEqual([
+      { id: '2DE6E2506393393D3EFFCCCDD7E4126D', name: 'Bruno Mars 2026' },
+      { id: '3FD52BB6ACAF2D2ACB3532DE1ADDF9C2', name: 'Gen Con 2027' },
+    ]);
+    // The empty "--Select Event--" option carries no id and is not an event.
+    expect(eventOptions(html).some((one) => one.name.startsWith('--'))).toBe(false);
+  });
+
+  it('prices the lots and leaves the marketing copy alone', () => {
+    /*
+     * The page repeats "$40.00" in its own sales patter further down, and a
+     * price picked up from there would be attributed to a lot that never
+     * charged it. A lot is a name with a bracketed location on the end.
+     */
+    const html =
+      '<div>Gen Con 2027 (701 Kentucky)</div><div>$40.00</div>' +
+      '<div>Gen Con 2027 (Merrill)</div><div>$60.00</div>' +
+      '<p>Reserve your parking spot today</p><p>$40.00</p>';
+    expect(lotPrices(html)).toEqual([
+      { lot: 'Gen Con 2027 (701 Kentucky)', cents: 4_000 },
+      { lot: 'Gen Con 2027 (Merrill)', cents: 6_000 },
+    ]);
+  });
+
+  it('finds no price at all when the event is not listed, which is most of the year', () => {
+    expect(lotPrices('<p>--Select Event--</p><p>Bruno Mars 2026</p>')).toEqual([]);
   });
 });

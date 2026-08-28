@@ -58,6 +58,19 @@ const MODULE_TABLES = {
   addresses: ['ADDRESSES'],
   footprints: ['VENUE_FOOTPRINTS'],
   booths: ['HALL_DIVIDES', 'ACROSS_THE_AISLES'],
+  // Not a generated literal like the rest — six numbers off a web page — but
+  // here for the same reason and more urgently: badge and parking prices are
+  // the figures that change every year, on pages anybody can read, and a
+  // phone that can no longer be updated through a store can still take them
+  // from a pack refresh.
+  'badge-prices': [
+    'BADGE_CENTS',
+    'BADGE_PRICE_YEAR',
+    'BADGE_PRICES_CHECKED',
+    'ADMISSIONS_TAX',
+    'SHIPPING_CENTS',
+  ],
+  parking: ['GARAGES', 'CHECKED'],
 };
 
 /**

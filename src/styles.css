@@ -4169,7 +4169,8 @@ body {
   grid-template-columns: minmax(0, 1fr) auto auto;
   grid-template-areas:
     'name total drop'
-    'badge badge badge';
+    'badge badge badge'
+    'price price price';
   gap: 6px 10px;
   align-items: center;
   padding: 8px 10px;
@@ -4180,8 +4181,8 @@ body {
 
 @media (min-width: 40rem) {
   .budget__person {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas: 'name badge total drop';
+    grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas: 'name badge price total drop';
   }
 }
 
@@ -4210,6 +4211,21 @@ body {
   gap: 6px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/*
+ * What that badge costs, beside the badge rather than in the total.
+ *
+ * It is deliberately not added to anything until somebody presses the button:
+ * a price that appeared in the total the moment a badge was picked would be
+ * a line nobody typed and nobody could find to delete.
+ */
+.budget__badge-price {
+  grid-area: price;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .budget__person-total {
@@ -4529,6 +4545,26 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.4;
+}
+
+/*
+ * Gen Con's own, marked apart from the merely near. The distinction is the
+ * one thing this list could not say before: a rate card and a forum report
+ * look identical once they are both printed as dollars.
+ */
+.budget__official {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 46%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.budget__garage[disabled] {
+  opacity: 0.7;
+  cursor: default;
 }
 
 .budget__skywalk {

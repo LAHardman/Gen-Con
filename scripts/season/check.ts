@@ -33,6 +33,7 @@ import { probe as campusTiles } from './probes/campus-tiles';
 import { probe as blockRates } from './probes/block-rates';
 import { probe as blockPartyHours } from './probes/blockparty-hours';
 import { probe as parking } from './probes/parking';
+import { probe as badgePrices } from './probes/badge-prices';
 import { probe as osmAge } from './probes/osm-age';
 import { probe as foodTags } from './probes/food-tags';
 import { probe as mirror } from './probes/mirror';
@@ -46,6 +47,7 @@ const PROBES: Probe[] = [
   foodTags,
   osmAge,
   parking,
+  badgePrices,
   feedFields,
   dates,
   blockRates,
