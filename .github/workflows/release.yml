@@ -85,6 +85,30 @@ jobs:
           # read the pack baked into the bundle and never see a newer one.
           VITE_PACK_HOST: ${{ vars.PACK_HOST }}
 
+      # Say out loud what the apps will look for, because the alternative is
+      # finding out from an installed copy that never refreshes. An unset or
+      # mis-set PACK_HOST is not an error — the app falls back to the pack
+      # baked into the bundle and simply never sees a newer one — which is
+      # exactly the kind of quiet nothing that goes unnoticed for a year.
+      - name: Say where the apps will look for their data
+        run: |
+          host='${{ vars.PACK_HOST }}'
+          if [ -z "$host" ]; then
+            echo "::warning::PACK_HOST is not set. These apps will read only the pack baked into the bundle and will never pick up a newer one. Set it under Settings > Secrets and variables > Actions > Variables."
+            exit 0
+          fi
+          echo "PACK_HOST = $host"
+          case "$host" in
+            */pack|*/pack/) ;;
+            *) echo "::warning::PACK_HOST does not end in /pack. It names the directory holding manifest.json, not the site root, so the apps will fetch $host/manifest.json and find nothing." ;;
+          esac
+          if grep -rqF "$host" dist/assets/*.js; then
+            echo "Confirmed: the pack host is compiled into the bundle."
+          else
+            echo "::error::PACK_HOST is set but is not in the built bundle. The build did not pick it up."
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: web-bundle
@@ -175,16 +199,23 @@ jobs:
           name: web-bundle
           path: dist
 
+      # No `pod install`: Capacitor 8 wires its plugins through Swift Package
+      # Manager (`ios/App/CapApp-SPM`), so there is no Podfile and no separate
+      # .xcworkspace — xcodebuild resolves the packages itself against the
+      # .xcodeproj.
       - name: Put the bundle in the shell
-        run: |
-          npx cap sync ios
-          cd ios/App && pod install
+        run: npx cap sync ios
 
+      # By sed rather than by `agvtool`, which wants the project to use Apple
+      # Generic versioning — Capacitor's template sets no VERSIONING_SYSTEM at
+      # all, so agvtool has nothing to edit. These two build settings are what
+      # Info.plist actually interpolates, and editing them is the same move the
+      # Android job makes on build.gradle.
       - name: Set the version
-        working-directory: ios/App
         run: |
-          agvtool new-marketing-version "${{ inputs.version }}"
-          agvtool new-version -all "${{ github.run_number }}"
+          sed -i '' "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = ${{ inputs.version }};/g" ios/App/App.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = ${{ github.run_number }};/g" ios/App/App.xcodeproj/project.pbxproj
+          grep -o 'MARKETING_VERSION = [^;]*;' ios/App/App.xcodeproj/project.pbxproj | head -1
 
       # Without signing material this still proves the project compiles,
       # which is most of what a first run is for.
@@ -192,9 +223,10 @@ jobs:
         if: ${{ !inputs.upload }}
         working-directory: ios/App
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App \
+          xcodebuild -project App.xcodeproj -scheme App \
             -configuration Release -sdk iphoneos \
-            CODE_SIGNING_ALLOWED=NO build
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 
       - name: Archive and send to TestFlight
         if: ${{ inputs.upload }}
@@ -222,8 +254,9 @@ jobs:
           echo "$PROFILE" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/app.mobileprovision
 
           cd ios/App
-          xcodebuild -workspace App.xcworkspace -scheme App \
-            -configuration Release -archivePath build/App.xcarchive archive
+          xcodebuild -project App.xcodeproj -scheme App \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive archive
           xcodebuild -exportArchive -archivePath build/App.xcarchive \
             -exportPath build -exportOptionsPlist ../ExportOptions.plist
 

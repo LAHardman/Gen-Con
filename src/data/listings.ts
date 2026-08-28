@@ -1,4 +1,6 @@
-/**
+
+
+import { fromPack } from './pack-runtime';/**
  * Somewhere to sleep that nobody surveyed. GENERATED — do not edit.
  *
  * Run 'node scripts/fetch-rates.mjs' to rebuild this.
@@ -37,11 +39,26 @@ export interface Listing {
 }
 
 /** When these were gathered. */
-export const FOUND = '2026-08-14';
+const COMPILED_FOUND = '2026-08-14';
 
 /** Nearest first. */
-export const LISTINGS: ReadonlyArray<Listing> = [
+const COMPILED_LISTINGS: ReadonlyArray<Listing> = [
   { id: 'serp:intercontinental-indianapolis-by-ihg', name: "InterContinental Indianapolis by IHG", kind: 'hotel', metres: 711, ring: 'walk', lat: 39.768394, lng: -86.159313, nightly: 479, city: "Indianapolis" },
   { id: 'serp:mcouat-place-6b-designer-loft', name: "McOuat Place 6B Designer Loft", kind: 'rental', metres: 817, ring: 'walk', lat: 39.76722, lng: -86.157494, nightly: 228, city: "Indianapolis" },
   { id: 'serp:cozysuites-spacious-1br', name: "CozySuites Spacious 1BR", kind: 'rental', metres: 1601, ring: 'drive', lat: 39.76746, lng: -86.148262, nightly: 124, city: "Indianapolis" },
 ];
+
+/**
+ * The pack's copy of this table where one is held, else what was built.
+ *
+ * Laid over per constant, so a refresh can carry one of these and
+ * leave the rest alone, and a key that arrives the wrong shape leaves
+ * the compiled value standing. See `fromPack`.
+ */
+const PACKED = fromPack('listings', {
+  LISTINGS: COMPILED_LISTINGS,
+  FOUND: COMPILED_FOUND,
+});
+
+export const LISTINGS = PACKED.LISTINGS;
+export const FOUND = PACKED.FOUND;

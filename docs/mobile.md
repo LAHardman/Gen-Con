@@ -94,9 +94,28 @@ dist/pack/
   config.json          basemaps, mirror URLs, source endpoints — §4
 ```
 
+That list is now what is actually published, with `plan-geometry.json`
+alongside `venue-plan.json`. Floor plans, booth grids, the hotel list,
+pavements, addresses and the hall divides all reach installed copies
+without a store release.
+
 `events.json` stays where and what it is — it is already a runtime feed with
 its own loader, cache story and mirror; wrapping it in the pack would only
 add a layer to the file that already works.
+
+*Status: complete — fifteen tables, 619 KB. The schedule stays outside it,
+as designed. Two shapes of source: `config`, `exhibitors` and `partners`
+are JSON in the repository, written directly by the generators that
+refresh them on a schedule; the other twelve stay big compiled literals
+and the build lifts a copy of their constants into the pack, which
+`fromPack` lays back over at runtime, per constant. That split is
+deliberate — rewriting twelve generators would have risked properties
+each of them holds (byte-stability, refusal-to-write, fit reporting) for
+no gain, since those tables are regenerated wholesale rather than diffed.
+Verified: every table round-trips through JSON unchanged, an override
+replaces one constant without disturbing its neighbours, a wrong-shaped
+one leaves the compiled value standing, and derivations recompute from
+the overlay. Original status follows.*
 
 *Status: the pack exists. `scripts/build-pack.mjs` assembles `public/pack/`
 (manifest with per-table hashes; published with every deploy at
