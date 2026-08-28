@@ -35,7 +35,10 @@ const TABLES: Record<string, string[]> = {
   booths: ['HALL_DIVIDES', 'ACROSS_THE_AISLES'],
 };
 
-const load = (name: string) => import(`./${name}.ts`);
+// `@vite-ignore`: the variable import is resolved at run time by the test
+// runner; without the marker Vite 8 tries to pre-glob `./${name}.ts` at
+// transform time and warns that it cannot.
+const load = (name: string) => import(/* @vite-ignore */ `./${name}.ts`);
 
 afterEach(() => {
   stashPack({});

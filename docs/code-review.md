@@ -19,9 +19,10 @@ silent.
 
 > **Addressed.** Vitest is wired up as described below — `npm test`,
 > `npm run test:watch`, `npm run check` — reading the app's own `vite.config.ts`
-> so there is one build configuration. Vitest is pinned to the major that shares
-> the app's Vite 5; the next major brings its own Vite 8, which would mean tests
-> and builds running through two different bundlers. What is *tested* so far is
+> so there is one build configuration. Vitest's major is kept in step with the
+> app's Vite major (Vite 8 / Vitest 4 as of this writing) so tests and builds
+> run through one bundler, and dependabot groups those majors into one PR
+> because neither can move without the other. What is *tested* so far is
 > only the directions feature and the geometry under it (§1.2–§1.5 remain).
 
 ```

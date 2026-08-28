@@ -6,8 +6,8 @@
   "description": "Trip planner for the Gen Con convention: real map of the venues with the event schedule attached to rooms.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite-node scripts/build-pack.mjs && vite build",
-    "build:pack": "vite-node scripts/build-pack.mjs",
+    "build": "tsc --noEmit && tsx scripts/build-pack.mjs && vite build",
+    "build:pack": "tsx scripts/build-pack.mjs",
     "sync": "npm run build && cap sync",
     "open:android": "cap open android",
     "open:ios": "cap open ios",
@@ -20,14 +20,14 @@
     "check:geometry": "node scripts/check-geometry.mjs",
     "plans:venues": "node scripts/venue-plans.mjs",
     "plans:campus": "node scripts/gencon-tiles.mjs",
-    "fetch:events": "vite-node scripts/fetch-events.mjs",
+    "fetch:events": "tsx scripts/fetch-events.mjs",
     "fetch:pavements": "node scripts/fetch-pavements.mjs",
     "fetch:exhibitors": "node scripts/fetch-exhibitors.mjs",
     "data:distances": "node scripts/build-distances.mjs",
     "events:sample": "node scripts/make-sample-events.mjs",
     "build:pages": "npm run fetch:events && npm run build",
     "fetch:eateries": "node scripts/fetch-eateries.mjs",
-    "season:check": "vite-node scripts/season/check.ts"
+    "season:check": "tsx scripts/season/check.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
@@ -36,8 +36,8 @@
     "@capacitor/ios": "^8.5.0",
     "@capacitor/preferences": "^8.0.1",
     "leaflet": "^1.9.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
@@ -45,13 +45,14 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/leaflet": "^1.9.22",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
     "jsdom": "^30.0.1",
     "node-html-parser": "^9.0.1",
+    "tsx": "^4.23.12",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11",
-    "vitest": "^3.2.7"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   }
 }

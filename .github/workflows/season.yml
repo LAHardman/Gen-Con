@@ -65,7 +65,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           SEASON_SITE: ${{ vars.SEASON_SITE }}
           VITE_EVENTS_MIRROR: ${{ vars.VITE_EVENTS_MIRROR }}
-        run: npx vite-node scripts/season/check.ts --json > /tmp/season.json
+        run: npx tsx scripts/season/check.ts --json > /tmp/season.json
 
       - name: Commit the report
         run: |

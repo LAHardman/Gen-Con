@@ -53,19 +53,28 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          if (id.includes('node_modules/leaflet')) return 'leaflet';
-          if (id.includes('node_modules/react')) return 'react';
-          if (/src\/data\/(route|pavements|walkable|vertical)\.ts/.test(id)) return 'routing';
-          if (/src\/data\/(venue-plan|plan-geometry)\.ts/.test(id)) return 'plans';
-          if (/src\/data\/exhibitors\.(ts|json)/.test(id)) return 'exhibitors';
-          // 839 street addresses, and 80 KB of them. They are what makes an
-          // event at a steakhouse walkable, and nothing on the first screen
-          // needs one — so they load beside the campus rather than in front
-          // of it.
-          if (/src\/data\/addresses\.ts/.test(id)) return 'addresses';
-          if (/src\/data\/venues\.ts/.test(id)) return 'venues';
-          return undefined;
+        // Rolldown's native form of the split (Vite 8 bundles with rolldown;
+        // its `manualChunks` compatibility shim let `venues.ts` ride along
+        // inside the routing chunk instead of keeping its own). By default a
+        // group here claims a matching module *and everything it imports*,
+        // which is the opposite of what this split wants — `route.ts` imports
+        // every data table — so dependency capture is off and each group
+        // takes exactly the modules its test names, as `manualChunks` did.
+        advancedChunks: {
+          includeDependenciesRecursively: false,
+          groups: [
+            { name: 'leaflet', test: /node_modules\/leaflet/ },
+            { name: 'react', test: /node_modules\/react/ },
+            { name: 'venues', test: /src\/data\/venues\.ts/ },
+            { name: 'plans', test: /src\/data\/(venue-plan|plan-geometry)\.ts/ },
+            { name: 'exhibitors', test: /src\/data\/exhibitors\.(ts|json)/ },
+            // 839 street addresses, and 80 KB of them. They are what makes an
+            // event at a steakhouse walkable, and nothing on the first screen
+            // needs one — so they load beside the campus rather than in front
+            // of it.
+            { name: 'addresses', test: /src\/data\/addresses\.ts/ },
+            { name: 'routing', test: /src\/data\/(route|pavements|walkable|vertical)\.ts/ },
+          ],
         },
       },
     },

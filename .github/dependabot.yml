@@ -20,5 +20,18 @@ updates:
       interval: monthly
     open-pull-requests-limit: 5
     groups:
+      # The build tools and React each move as one coupled set: vitest majors
+      # track vite majors, @vitejs/plugin-react peers on a vite major, and
+      # react-dom peers on react to the exact version. A solo major bump of
+      # any one of them cannot pass `npm ci` — that is exactly what happened
+      # when vite 8, vitest 4, plugin-react 6 and react-dom 19 arrived as
+      # four separate PRs and every one failed on peer dependencies. Grouped,
+      # the set upgrades together or not at all.
+      vite:
+        patterns: ['vite', 'vitest', '@vitejs/*', 'tsx']
+        update-types: [major]
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+        update-types: [major]
       minor-and-patch:
         update-types: [minor, patch]

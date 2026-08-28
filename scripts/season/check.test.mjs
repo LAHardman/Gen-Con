@@ -314,3 +314,41 @@ describe('official parking', () => {
     expect(lotPrices('<p>--Select Event--</p><p>Bruno Mars 2026</p>')).toEqual([]);
   });
 });
+
+describe('the basemap probe over the real table', () => {
+  /*
+   * The probe's helpers are pure, but the crash that got past them was in
+   * the walk itself: every basemap now bakes its names into the tile, so
+   * `labelsUrl` is null throughout — and a probe that instantiates the
+   * labels half regardless calls `.replace` on null before any network is
+   * touched. Running the real table against a stubbed network is the only
+   * test that sees that, because a hand-written table would be written with
+   * the URLs the probe expects.
+   */
+  it('asks for one tile per configured URL and skips the halves that are null', async () => {
+    const { probe } = await import('./probes/basemaps');
+    const asked = [];
+    const result = await probe.run({
+      fix: false,
+      now: new Date(),
+      root: process.cwd(),
+      text: async () => {
+        throw new Error('the probe has no business fetching pages');
+      },
+      json: async () => {
+        throw new Error('the probe has no business fetching JSON');
+      },
+      head: async (url) => {
+        asked.push(url);
+        return { status: 200, contentType: 'image/png' };
+      },
+    });
+    expect(result.status).toBe('ok');
+    // Every URL asked for is a template instantiated — no `{z}` left in,
+    // and never the word "null" standing where a template should have been.
+    expect(asked.length).toBeGreaterThan(0);
+    for (const url of asked) {
+      expect(url).not.toMatch(/\{[szxyr]\}|null/);
+    }
+  });
+});

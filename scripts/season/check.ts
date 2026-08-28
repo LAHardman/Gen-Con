@@ -15,7 +15,7 @@
  * from disabling the scheduled workflows, and opens an issue carrying the
  * attention sections when anything is not `ok`.
  *
- * Run through vite-node so the probes can import the app's own tables —
+ * Run through tsx so the probes can import the app's own tables —
  * the check reads the same `FOOD_TAGS` and `BLOCK_YEAR` the app ships,
  * rather than a second copy that can drift.
  */

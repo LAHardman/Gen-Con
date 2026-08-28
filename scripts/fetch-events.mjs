@@ -182,13 +182,13 @@ async function main() {
 // Run, unconditionally.
 //
 // There used to be a guard here — "only when invoked directly, not when
-// imported for its `shape`" — and it could not survive the move to
-// `vite-node`, which strips the script path out of `process.argv`
-// altogether. A guard that silently answers false is the worst shape a bug
-// can take: this fetched the whole catalogue and then exited 0 having
-// written nothing. The mapping is tested where it now lives,
-// `src/lib/import-events.ts`, so nothing needs to import this file any more
-// and there is nothing left to guard against.
+// imported for its `shape`" — and it could not survive the move to a TS
+// runner (vite-node then, tsx now): whether the script path survives in
+// `process.argv` depends on the runner. A guard that silently answers false
+// is the worst shape a bug can take: this fetched the whole catalogue and
+// then exited 0 having written nothing. The mapping is tested where it now
+// lives, `src/lib/import-events.ts`, so nothing needs to import this file
+// any more and there is nothing left to guard against.
 main().catch((error) => {
   console.error(error.message);
   process.exitCode = 1;

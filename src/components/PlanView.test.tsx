@@ -35,17 +35,17 @@ const session = (over: Partial<ConEvent> & { id: string; start: string }): ConEv
 
 /** A plan holding exactly these, with the calls recorded. */
 function planOf(entries: PlanEntry[]): Plan & {
-  toggle: ReturnType<typeof vi.fn>;
-  add: ReturnType<typeof vi.fn>;
+  toggle: ReturnType<typeof vi.fn<Plan['toggle']>>;
+  add: ReturnType<typeof vi.fn<Plan['add']>>;
 } {
-  const toggle = vi.fn();
+  const toggle = vi.fn<Plan['toggle']>();
   return {
     entries,
     planned: (id: string) => entries.some((held) => held.id === id),
-    add: vi.fn(),
-    remove: vi.fn(),
+    add: vi.fn<Plan['add']>(),
+    remove: vi.fn<Plan['remove']>(),
     toggle,
-    describe: vi.fn(),
+    describe: vi.fn<Plan['describe']>(),
   };
 }
 

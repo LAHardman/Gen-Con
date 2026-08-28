@@ -66,6 +66,9 @@ export const probe: Probe = {
         ['map', basemap.url],
         ['labels', basemap.labelsUrl],
       ] as const) {
+        // A provider that bakes its names into the tile has no labels half
+        // to probe — `labelsUrl` is null, not a URL that might have died.
+        if (template === null) continue;
         const url = tileUrl(template);
         try {
           const { status, contentType } = await ctx.head(url);
