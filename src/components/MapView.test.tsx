@@ -185,55 +185,59 @@ describe('telling a measured room from a placed one', () => {
   });
 });
 
-describe('what the floor plan puts in front', () => {
+describe('how much of a floor gets drawn', () => {
   /*
-   * A ranking, held as a rule, because it inverted once and shipped.
+   * The regression this holds was reported three times before it was
+   * understood, and each report said the same thing: overlapping rectangles.
    *
-   * The parts of a plan that are not rooms and not corridors — service cores,
-   * restrooms, lettered space no room claims — are context. They were drawn
-   * at 0.55, and the restrooms at 0.7, while an actual room was drawn at
-   * 0.38. So one screen of the convention centre came out as eighteen
-   * background boxes around four rooms, and it was reported twice as "random
-   * overlapping boxes". It was not the rooms overlapping; it was the
-   * wallpaper shouting over them.
+   * Counting every shape on one screen of ICC Level 1 explained it. Twenty-
+   * nine shapes, of which four were rooms. The rest were the plan's own
+   * scenery — service cores, restroom blocks, lettered space with no room
+   * behind it — plus the other floors, drawn faint on the argument that they
+   * showed the building had more than one storey. Those four faint shapes
+   * alone collided with twenty-six others.
    *
-   * Read out of the stylesheet, which is where the fault was. jsdom loads no
-   * CSS, so a rendered assertion could not see this at all — and the numbers
-   * being plausible on their own is exactly why only their *order* catches it.
+   * None of it was wrong, exactly. It was just everything at once, and a
+   * floor plan that draws everything is not a floor plan. What is left is
+   * what the reader can act on: the rooms, the corridor between them, and the
+   * airwall lines that say where a hall divides.
    */
-  const fillOpacity = async (selector: string) => {
-    const { readFileSync } = await import('node:fs');
-    const css = readFileSync('src/styles.css', 'utf8');
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // `\s*\{` is what keeps `.map__plan` from matching `.map__plan--service`:
-    // a longer class name is followed by more name, never by its brace.
-    const block = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css)?.[1];
-    if (!block) throw new Error(`${selector} is not in styles.css`);
-    const found = /fill-opacity:\s*([\d.]+)/.exec(block);
-    if (!found) throw new Error(`${selector} sets no fill-opacity`);
-    return Number(found[1]);
-  };
+  const drawn = (selector: string) => document.querySelectorAll(`path.${selector}`).length;
 
-  it('draws a room more strongly than the building around it', async () => {
-    const room = ROOM_FILL_OPACITY;
-    const fabric = await fillOpacity('.map__plan');
-    const service = await fillOpacity('.map__plan--service');
-    const restroom = await fillOpacity('.map__plan--restroom');
-    for (const [name, value] of [
-      ['plan fabric', fabric],
-      ['service cores', service],
-      ['restrooms', restroom],
-    ] as const) {
-      expect(value, `${name} is drawn at least as strongly as a room`).toBeLessThan(room);
-    }
+  it('draws the corridor and the airwalls, and none of the plan\'s scenery', () => {
+    setup({ openVenueId: 'icc', levels: { icc: 'Level 1' } });
+    expect(drawn('map__plan--circulation'), 'the corridor is the whole point').toBeGreaterThan(0);
+    // A service core is somewhere nobody is going; a restroom block is
+    // already answered by the WC marker sitting on it, which can be switched
+    // off; a lettered space with no room behind it is a box you cannot open.
+    expect(drawn('map__plan--service')).toBe(0);
+    expect(drawn('map__plan--restroom')).toBe(0);
+    expect(drawn('map__plan--room')).toBe(0);
   });
 
-  it('keeps the corridor the most prominent thing that is not a room', async () => {
-    // It is what the reader navigates by, so it outranks the rest of the
-    // fabric — while still sitting under the rooms it runs between.
-    const corridor = await fillOpacity('.map__plan--circulation');
-    expect(corridor).toBeGreaterThan(await fillOpacity('.map__plan'));
-    expect(corridor).toBeGreaterThan(await fillOpacity('.map__plan--service'));
+  it('draws one storey, not the stack', () => {
+    setup({ openVenueId: 'icc', levels: { icc: 'Level 1' } });
+    const shown = [...document.querySelectorAll('path.map__room:not(.map__room--closed)')];
+    expect(shown.length).toBeGreaterThan(0);
+    for (const el of shown) {
+      const room = ROOMS_BY_ID[el.getAttribute('data-room') ?? ''];
+      expect(room?.level, `${el.getAttribute('data-room')} is not on Level 1`).toBe('Level 1');
+    }
+    // And the floor control is what says there is another one — in words, on
+    // the right, without drawing a second plan over the first.
+    expect(drawn('map__room--other-floor')).toBe(0);
+  });
+
+  it('keeps the corridor under the rooms it runs between', async () => {
+    // The one piece of the old ranking still worth asserting: the corridor is
+    // the most prominent thing that is not a room, and still less prominent
+    // than a room. Read out of the stylesheet, since jsdom loads no CSS and a
+    // rendered assertion cannot see it.
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/styles.css', 'utf8');
+    const block = /\.map__plan--circulation\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const corridor = Number(/fill-opacity:\s*([\d.]+)/.exec(block)?.[1]);
+    expect(corridor).toBeGreaterThan(0);
     expect(corridor).toBeLessThan(ROOM_FILL_OPACITY);
   });
 });

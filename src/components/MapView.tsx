@@ -444,6 +444,25 @@ export function MapView({
       if (!level) continue;
 
       for (const shape of planDetail(venue.id, level)) {
+        /*
+         * MOST OF THE PLAN IS NOT DRAWN, AND THAT IS THE POINT.
+         *
+         * `planDetail` hands back everything the sheet has that no room
+         * claims: service cores, restroom blocks, and lettered space with no
+         * room behind it. Drawing all of it put 21 shapes on a screen that
+         * had four rooms on it, and the reader's word for that was "random
+         * overlapping rectangles" — three times, which is three times more
+         * than a map should need.
+         *
+         * They were scenery. A service core is somewhere nobody is going; a
+         * restroom block is already answered, better, by the WC marker that
+         * sits on it and can be switched off; a lettered space with no room
+         * behind it is a box you cannot open. What actually makes a floor
+         * legible is the corridor and the rooms along it, so that is what is
+         * left — plus the airwall lines, which are a line rather than a box
+         * and say where a hall divides.
+         */
+        if (shape.kind !== 'circulation' && shape.kind !== 'divider') continue;
         const points = toLatLngs(shape.ring);
         const options = {
           className: `map__plan map__plan--${shape.kind}`,
@@ -967,10 +986,16 @@ export function MapView({
    * the campus at none of them are legible anyway. So a closed building draws
    * none of its rooms.
    *
-   * Within the open one, a flat map still stacks the floors: rooms 201-212 sit
-   * directly over 101-117, because that is where they are. Only the floor it is
-   * showing is drawn properly; the rest are ghosts, faint enough not to read as
-   * rooms, present enough to say there is more here than one storey.
+   * AND ONLY ONE FLOOR OF IT, which is the other half of the same idea and
+   * took two goes to get right. A flat map stacks the storeys: rooms 201-212
+   * sit directly over 101-117, because that is where they are. The other
+   * floors used to be drawn as faint ghosts, on the argument that they said
+   * "there is more here than one storey" — but four of them collided with
+   * twenty-six other shapes on a single screen of Level 1, and a second floor
+   * plan laid over the one you asked for is not a hint, it is the thing that
+   * makes a plan unreadable. The floor switcher on the right already lists
+   * every storey, in words, which is a better way to say it than by drawing
+   * one on top of another. So a floor you are not on is not drawn.
    */
   const roomState = (room: Room) => {
     if (room.venueId !== openVenueId) return 'closed';
@@ -1046,8 +1071,9 @@ export function MapView({
       const state = room ? roomState(room) : 'closed';
       const element = layer.getElement();
       element?.classList.toggle('map__room--selected', roomId === selectedRoomId);
-      element?.classList.toggle('map__room--other-floor', state === 'ghost');
-      element?.classList.toggle('map__room--closed', state === 'closed');
+      // A floor you are not on is hidden outright, the same as a building you
+      // have not opened — see the note on `roomState`.
+      element?.classList.toggle('map__room--closed', state !== 'shown');
     }
     for (const [venueId, layer] of venueLayersRef.current) {
       layer.getElement()?.classList.toggle('map__venue--open', venueId === openVenueId);

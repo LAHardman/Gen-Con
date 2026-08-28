@@ -298,14 +298,15 @@ body {
  * reported twice as "random overlapping boxes", and it was not the rooms
  * overlapping: it was the wallpaper shouting over them.
  *
- * So there is an order now, and everything here is written to keep it:
+ * The answer was not to tune it down but to stop drawing it. `MapView` now
+ * takes only the corridor and the airwall lines out of a plan; the service
+ * cores, the restroom blocks and the unclaimed lettered spaces are dropped
+ * before they reach the map, and the rules that styled them went with them.
+ * What is left is one order, and it is short:
  *
- *   corridor   the thing you navigate by      0.34 + the brightest edge
  *   room       the thing you are going to     0.38, in its own colour
- *   fabric     the rest of the building       0.16, muted, no edge to speak of
- *
- * Anything added here belongs at the bottom of that list unless there is an
- * argument for moving it.
+ *   corridor   the thing you navigate by      0.34 + the brightest edge
+ *   airwall    where a hall divides           a dashed line, no fill
  */
 .map__plan {
   stroke: #5d6688;
@@ -341,25 +342,6 @@ body {
   stroke-width: 1.8;
   stroke-opacity: 0.9;
   stroke-linejoin: round;
-}
-
-/* Lift shafts, plant, back of house. Nobody is going here. */
-.map__plan--service {
-  fill: #262b40;
-  fill-opacity: 0.14;
-  stroke-opacity: 0.25;
-}
-
-/*
- * Restrooms: a shade above the rest of the fabric, because people do look for
- * them — and still well under a room, because the WC marker is what actually
- * finds one and this is only the block it sits on.
- */
-.map__plan--restroom {
-  fill: #4a3f5c;
-  fill-opacity: 0.22;
-  stroke: #6b5c82;
-  stroke-opacity: 0.4;
 }
 
 /* Moveable airwalls: where a hall divides, drawn as the dashed line it is. */
@@ -951,26 +933,16 @@ body {
   }
 }
 
-/* Rooms on another floor of the building you have selected in. They stay on the
-   map so the building doesn't appear to empty out, but drop back far enough to
-   read as "not this floor" and stop swallowing clicks meant for the floor plan
-   underneath. */
-.map__room--other-floor {
-  /*
-   * Outline only. Filled at 12% these still read as rooms — a building full
-   * of pale boxes stacked over the floor you are actually on, which is most
-   * of what made the inside of one hard to parse. A thin edge says "there is
-   * another storey here" without drawing a second floor plan on top of the
-   * first.
-   */
-  fill-opacity: 0 !important;
-  stroke: #6f7ba6 !important;
-  stroke-opacity: 0.3 !important;
-  stroke-width: 1 !important;
-  stroke-dasharray: 3 5;
-  pointer-events: none;
-}
-
+/*
+ * A floor you are not standing on is not drawn, and neither is a building you
+ * have not opened.
+ *
+ * The other floors used to be here, faint, on the argument that they showed
+ * there was more to the building than one storey. Counted on one screen of
+ * the convention centre, those four faint shapes collided with twenty-six
+ * others: a second floor plan over the one you asked for. The floor switcher
+ * says the same thing in words, on the right, without drawing anything.
+ */
 /* A building that isn't open draws no rooms at all. */
 .map__room--closed {
   display: none;
