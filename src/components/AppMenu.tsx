@@ -30,7 +30,7 @@
  * past leaves the keyboard somewhere the eye has no way to follow.
  */
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 export interface MenuPage<T extends string> {
   id: T;
@@ -47,9 +47,31 @@ interface Props<T extends string> {
   open: boolean;
   onToggle: (open: boolean) => void;
   onChoose: (page: T) => void;
+  /**
+   * Settings that belong to the page you are on, under the list of pages.
+   *
+   * This exists because of one bug worth remembering. The header drops the
+   * basemap switch below 560px — there is no room for it beside the search
+   * box — and for a while that was the entire story: on a phone the map had
+   * three styles and no way to reach two of them. A control that is hidden
+   * rather than moved is a control that does not exist.
+   *
+   * The drawer is where it goes, because it is already the place a phone
+   * keeps everything that will not fit: full height, its own scrim, its own
+   * way out. What goes in it is the caller's to decide, since the menu has no
+   * business knowing what a basemap is.
+   */
+  children?: ReactNode;
 }
 
-export function AppMenu<T extends string>({ pages, current, open, onToggle, onChoose }: Props<T>) {
+export function AppMenu<T extends string>({
+  pages,
+  current,
+  open,
+  onToggle,
+  onChoose,
+  children,
+}: Props<T>) {
   const id = useId();
   const titleId = `${id}-title`;
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -172,6 +194,8 @@ export function AppMenu<T extends string>({ pages, current, open, onToggle, onCh
                 </button>
               ))}
             </div>
+
+            {children && <div className="menu__extra">{children}</div>}
           </div>
         </>
       )}

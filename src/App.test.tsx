@@ -111,6 +111,42 @@ describe('finding the other pages', () => {
     // And the button follows it, for anybody who cannot see the header.
     expect(menu().getAttribute('aria-label')).toBe('Menu — Key dates');
   });
+
+  it('carries the map style, which the header drops on a phone', () => {
+    /*
+     * The bug: below 560px the header hides the basemap switch, and for a
+     * while that was the whole of it — a phone had three map styles and one
+     * way to reach them. A control that is hidden rather than moved is a
+     * control that does not exist, so the drawer carries the same switch.
+     *
+     * Asserted on the DOM rather than at a viewport, because jsdom applies no
+     * stylesheet: the media query cannot be exercised here, but the thing it
+     * used to leave with nowhere to go can be.
+     */
+    render(<App />);
+    fireEvent.click(menu());
+    const drawer = document.querySelector('.menu__extra') as HTMLElement;
+    const inDrawer = within(drawer).getByRole('group', { name: 'Basemap style' });
+    expect(inDrawer).toBeTruthy();
+
+    // It is the real control, not a decoration: pressing a style takes.
+    const streets = within(inDrawer).getByRole('button', { name: 'Streets' });
+    expect(streets.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(streets);
+    expect(
+      within(document.querySelector('.menu__extra') as HTMLElement)
+        .getByRole('button', { name: 'Streets' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('offers the map style only on the page it changes anything on', () => {
+    render(<App />);
+    fireEvent.click(menu());
+    fireEvent.click(screen.getByRole('menuitem', { name: /Budget/ }));
+    fireEvent.click(menu());
+    expect(document.querySelector('.menu__extra')).toBeNull();
+  });
 });
 
 describe('going to a room', () => {

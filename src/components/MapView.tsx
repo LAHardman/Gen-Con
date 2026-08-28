@@ -248,6 +248,33 @@ export function MapView({
       detailPane.style.pointerEvents = 'none';
     }
 
+    /*
+     * The corridors, which go ABOVE the rooms rather than under them.
+     *
+     * This is the one piece of z-order that is an argument rather than a
+     * convention. Most rooms in the hotels have no traced outline — Gen Con's
+     * plans give up their hallways by colour but not always their rooms — so
+     * those rooms are drawn as rectangles from the venue's schematic grid,
+     * which is an approximation placed near where the room is rather than a
+     * tracing of where it is. Under the old order those approximate boxes
+     * were painted over the real corridor, and the result was what it looks
+     * like: a building full of overlapping boxes with the hallway lost
+     * somewhere beneath them.
+     *
+     * So the rule is that measured geometry outranks estimated geometry. The
+     * corridor is traced off the building's own plan and the box beside it is
+     * a guess, and where the two disagree the reader should see the corridor.
+     * It sits above the overlays (400) and below the skywalks (450), and it
+     * takes no clicks — a hallway is something to look at, not something to
+     * open.
+     */
+    map.createPane('circulation');
+    const circulationPane = map.getPane('circulation');
+    if (circulationPane) {
+      circulationPane.style.zIndex = '425';
+      circulationPane.style.pointerEvents = 'none';
+    }
+
     // The skywalks cross over the streets and over the rooms either side of
     // them, so they are drawn over both — above the overlays (400), below the
     // markers (600).
@@ -408,7 +435,10 @@ export function MapView({
         const points = toLatLngs(shape.ring);
         const options = {
           className: `map__plan map__plan--${shape.kind}`,
-          pane: 'plan-detail',
+          // Circulation rides above the rooms; the rest of the fabric —
+          // service cores, restrooms, airwall lines — stays underneath them,
+          // where it is background rather than the thing being read.
+          pane: shape.kind === 'circulation' ? 'circulation' : 'plan-detail',
           interactive: false,
         };
           // An airwall is a line across a hall, not an enclosure.
@@ -428,7 +458,7 @@ export function MapView({
     for (const rings of halls) {
       const layer = L.polygon(rings.map((ring) => toLatLngs(ring)), {
         className: 'map__plan map__plan--circulation',
-        pane: 'plan-detail',
+        pane: 'circulation',
         interactive: false,
       });
       layer.addTo(map);
@@ -830,6 +860,18 @@ export function MapView({
         shape.fillOpacity = 0;
       }
       const drawn = roomShapes(room);
+      /*
+       * A room with no traced outline is drawn as a rectangle from the venue's
+       * schematic grid, and that rectangle is an approximation: it says which
+       * building and floor the room is on and roughly whereabouts, not what
+       * shape it is or exactly where its walls fall. Drawn identically to a
+       * traced room it claims a precision it does not have — and next to a
+       * corridor that *is* traced, the two disagree visibly and the reader has
+       * no way to know which to believe. So it is marked, and the style draws
+       * it as a sketch: see `.map__room--approx`.
+       */
+      const approximate = drawn.length === 0 && !room.fillsVenue;
+      if (approximate) shape.className = `${shape.className} map__room--approx`;
       const shapeLayer =
         drawn.length > 0
           ? L.polygon(drawn.map((ring) => [toLatLngs(ring)]), shape)
@@ -853,6 +895,11 @@ export function MapView({
       shapeLayer.on('dblclick', (event) => L.DomEvent.stopPropagation(event));
 
       shapeLayer.addTo(map);
+      // The room's id on its own shape. Leaflet draws anonymous paths, so
+      // without this nothing on the page says which room you are looking at —
+      // which makes the map hard to inspect in a browser and impossible to
+      // assert on precisely.
+      shapeLayer.getElement()?.setAttribute('data-room', room.id);
       layers.push(shapeLayer);
       roomLayersRef.current.set(room.id, shapeLayer);
     }

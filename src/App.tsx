@@ -62,6 +62,39 @@ const PAGES: ReadonlyArray<MenuPage<Page>> = [
   { id: 'account', label: 'Gen Con account', detail: 'Sign in to read your own details' },
 ];
 
+/**
+ * The three map styles, as one control rendered in two places.
+ *
+ * The header carries it where there is width for it, and the menu drawer
+ * carries it where there is not — a phone. One component rather than two
+ * copies of the markup, because the bug this fixes was exactly the kind that
+ * a second copy invites: the header's was hidden below 560px and nothing took
+ * its place, so on a phone the map had three styles and offered one.
+ */
+function BasemapSwitch({
+  chosen,
+  onChoose,
+}: {
+  chosen: BasemapId;
+  onChoose: (id: BasemapId) => void;
+}) {
+  return (
+    <div className="app__basemaps" role="group" aria-label="Basemap style">
+      {BASEMAP_IDS.map((id) => (
+        <button
+          key={id}
+          type="button"
+          className={`app__basemap${id === chosen ? ' app__basemap--active' : ''}`}
+          aria-pressed={id === chosen}
+          onClick={() => onChoose(id)}
+        >
+          {BASEMAPS[id].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState<Page>('map');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -497,7 +530,17 @@ export default function App() {
           open={menuOpen}
           onToggle={setMenuOpen}
           onChoose={setTab}
-        />
+        >
+          {/* The same switch as the header's, for the phone widths where the
+              header has no room for it. Only on the map, because that is the
+              only page it changes anything on. */}
+          {tab === 'map' && (
+            <>
+              <span className="menu__extra-title">Map style</span>
+              <BasemapSwitch chosen={basemapId} onChoose={chooseBasemap} />
+            </>
+          )}
+        </AppMenu>
 
         <div className="app__brand">
           <span className="app__logo" aria-hidden="true">
@@ -538,19 +581,7 @@ export default function App() {
         )}
 
         <div className="app__tools">
-          <div className="app__basemaps" role="group" aria-label="Basemap style">
-            {BASEMAP_IDS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={`app__basemap${id === basemapId ? ' app__basemap--active' : ''}`}
-                aria-pressed={id === basemapId}
-                onClick={() => chooseBasemap(id)}
-              >
-                {BASEMAPS[id].label}
-              </button>
-            ))}
-          </div>
+          <BasemapSwitch chosen={basemapId} onChoose={chooseBasemap} />
           {selectedRoom && (
             <button
               type="button"
