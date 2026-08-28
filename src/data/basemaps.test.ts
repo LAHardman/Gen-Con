@@ -92,6 +92,41 @@ describe('every tile host the worker must know about', () => {
   });
 });
 
+describe('serving real tiles at the zoom the app is read at', () => {
+  it('draws every style natively at the zoom a building opens to', () => {
+    /*
+     * The defect this holds shipped and was reported as "the building
+     * outlines don't line up with the map's outlines of what is there".
+     *
+     * Esri's canvas — which all three styles used — has no tiles past zoom
+     * 16. Every deeper request comes back as a placeholder reading "Map data
+     * not yet available", so `maxNativeZoom: 16` was set and Leaflet upscaled
+     * instead. Opening a building flies to zoom 19, which meant a zoom-16
+     * tile blown up eight times: a grey smear with no building edges in it.
+     * The app's own outlines are surveyed and exact, so drawn over that they
+     * looked wrong, and the map was the thing that was wrong.
+     *
+     * A basemap that stops above this number is not a styling choice, it is
+     * the map going blurry exactly where the app is used.
+     */
+    const OPENS_TO = 19;
+    for (const basemap of Object.values(BASEMAPS)) {
+      expect(
+        basemap.maxNativeZoom,
+        `${basemap.id} upscales at the zoom a building opens to`,
+      ).toBeGreaterThanOrEqual(OPENS_TO);
+    }
+  });
+
+  it('lets a rescue be shallow, because a shallow map beats none', () => {
+    // The ladder only runs when the real provider has stopped answering, and
+    // there the bar is "any map at all" rather than a sharp one.
+    for (const rescue of BASEMAP_RESCUES) {
+      expect(rescue.maxNativeZoom).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('the rescues themselves', () => {
   it('are real tile templates with their attribution attached', () => {
     for (const rescue of BASEMAP_RESCUES) {

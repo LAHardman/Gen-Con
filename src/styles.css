@@ -246,27 +246,46 @@ body {
  * dark the tileset draws depends on the zoom.
  */
 /*
- * A small lift on the dark tiles, and a cautionary tale about the size of it.
+ * ONE TILESET, THREE LOOKS — and a cautionary tale about the size of a filter.
  *
- * This said `brightness(2.6)` for a long time, and it was right when it was
- * written: CARTO's dark basemap was very nearly black and its streets sat a
- * few percent off their own background, so without a big lift they vanished
- * under everything this app draws on top.
+ * All three styles draw the same OpenStreetMap raster (see `basemaps.ts` for
+ * why), so what tells them apart is entirely here. That is also what makes
+ * the offline cache cover every style at once: one tile serves all three.
  *
- * CARTO was replaced by Esri, whose dark canvas is a proper mid-dark grey —
- * mean luminance 77 of 255, with its roads up at 158. Multiplied by 2.6 that
- * becomes a mean of 198, which is lighter than mid-grey: the filter was
- * turning the dark basemap into a light one, and the reported symptom was
- * exactly that, "dark mode just looks like light mode".
- *
- * The lesson is that a filter is tuned to a *tileset*, not to a taste, so it
- * belongs in the same decision as the provider. This one is measured against
- * Esri's: enough to separate the roads from their background, nowhere near
- * enough to change which end of the scale the map sits at.
+ * The tale: this file once said `brightness(2.6)` on the dark tiles, and it
+ * was right when it was written — CARTO's dark basemap was very nearly black
+ * and its streets sat a few percent off their own background. The provider
+ * changed twice underneath it and the number stayed, until 2.6× a mid-dark
+ * tile was producing a *light* map and the bug was reported as "dark mode
+ * just looks like light mode". A filter is tuned to a tileset, not to a
+ * taste, so it belongs in the same decision as the tileset. These are
+ * measured against OSM's raster.
+ */
+
+/*
+ * Dark: inverted, then the hue put back. Inverting alone turns OSM's warm
+ * roads a cold blue and its parks magenta; the 180° rotation returns every
+ * hue to roughly where it started, which is the standard way to darken a
+ * light basemap without redrawing it. The desaturation takes the brown cast
+ * off the arterials that survives the round trip.
  */
 .map__tiles--dark {
-  filter: brightness(1.15) contrast(1.3);
+  filter: invert(1) hue-rotate(180deg) saturate(0.35) brightness(0.8) contrast(1.2);
 }
+
+/*
+ * Light: the same tiles with most of the colour taken out, so it reads as a
+ * canvas to draw on rather than as a second map competing with the floor
+ * plans. Left at full saturation it would simply be Streets again.
+ */
+.map__tiles--light {
+  filter: saturate(0.25) brightness(1.05);
+}
+
+/*
+ * Streets: no filter at all. It is the one style that is meant to look like
+ * somebody else's map, and the colour is the point of it.
+ */
 
 /* Venue and room geometry ------------------------------------------------ */
 

@@ -59,12 +59,14 @@ describe('applied to the real modules', () => {
     });
     const { BASEMAPS } = await import('./basemaps');
     expect(BASEMAPS.dark.url).toBe('https://new-host/{z}/{x}/{y}.png');
-    // Only the named field moves. Asserted against the other entries rather
-    // than against a provider's name, so replacing a tile vendor does not
-    // fail a test about the override mechanism.
+    // Only the named field moves. Asserted against the entry's other fields
+    // and its neighbours rather than against a provider's name, so replacing
+    // a tile vendor does not fail a test about the override mechanism — and
+    // `labelsUrl` is deliberately not one of the things checked for a URL,
+    // because a provider that bakes its names into the tile has none.
     expect(BASEMAPS.dark.labelsUrl).not.toBe('https://new-host/{z}/{x}/{y}.png');
-    expect(BASEMAPS.dark.labelsUrl).toMatch(/^https:\/\//);
     expect(BASEMAPS.dark.attribution.length).toBeGreaterThan(10);
+    expect(BASEMAPS.dark.maxNativeZoom).toBeGreaterThan(0);
     expect(BASEMAPS.light.url).toMatch(/^https:\/\//);
     expect(BASEMAPS.light.url).not.toContain('new-host');
   });
