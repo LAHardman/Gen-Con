@@ -33,6 +33,7 @@ import {
   type LabelSizer,
 } from './MapView';
 import { routeBetween } from '../data/navigation';
+import { BASEMAPS } from '../data/basemaps';
 import { ROOMS_BY_ID, defaultLevel, roomBounds, type Room } from '../data/venues';
 
 afterEach(cleanup);
@@ -110,11 +111,17 @@ describe('what is on the map', () => {
   });
 
   it('switches the basemap under everything else', () => {
+    // Against the table rather than against a vendor's URL. Naming the
+    // provider here is what made this fail the day one was replaced, which
+    // told us nothing about the map and cost a run to find out.
     const { rerender } = setup();
     const tile = () => (document.querySelector('.leaflet-tile-pane img') as HTMLImageElement).src;
-    expect(tile()).toContain('dark');
+    const host = (template: string) => new URL(template.replace('{s}', 'a')).hostname;
+    expect(tile()).toContain(host(BASEMAPS.dark.url));
     rerender({ basemapId: 'streets' });
-    expect(tile()).toContain('voyager');
+    expect(tile()).toContain(host(BASEMAPS.streets.url));
+    // And the two really are different tilesets, or the assertion is empty.
+    expect(BASEMAPS.dark.url).not.toBe(BASEMAPS.streets.url);
   });
 });
 

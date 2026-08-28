@@ -20,30 +20,28 @@ const X = 533;
 const Y = 777;
 
 /**
- * Where to look when a configured style dies: the same CARTO family first
+ * Where to look when a configured style dies: Esri's plainest canvas first
  * (labels baked in — the split-layer trick is lost but the map survives),
  * then OSM's own raster as the last resort everybody serves.
+ *
+ * NOTE THE BLIND SPOT THIS PROBE HAS. It asks for a status and a content
+ * type, which is all a HEAD gives you — and on 2026-08-28 CARTO began
+ * serving every style as a normal 200 image PNG with "API KEY REQUIRED"
+ * composited into the map. This probe called that healthy, correctly and
+ * uselessly. A watermark is only visible to somebody looking at the tile,
+ * so `basemaps.test.ts` carries the rule that keeps CARTO out; if a
+ * provider ever does this again, expect to find it by eye first.
  */
 const SUBSTITUTES: ReadonlyArray<{ name: string; url: string; note: string }> = [
   {
-    name: 'CARTO dark, labels baked in',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    note: 'street names can no longer be lifted above the floor plans',
-  },
-  {
-    name: 'CARTO light, labels baked in',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    note: 'street names can no longer be lifted above the floor plans',
-  },
-  {
-    name: 'CARTO voyager, labels baked in',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    note: 'street names can no longer be lifted above the floor plans',
+    name: 'Esri light canvas, labels baked in',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    note: 'numbered {z}/{y}/{x}, which is not Leaflet\'s order; names baked in',
   },
   {
     name: 'OpenStreetMap standard',
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    note: 'no {s} subdomains, no {r} retina, names baked in — and check the tile usage policy before shipping it as a default',
+    note: 'no {s} subdomains, names baked in — and check the tile usage policy before shipping it as a default',
   },
 ];
 

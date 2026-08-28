@@ -21,7 +21,8 @@ import { packTable } from './pack-runtime';
 
 export interface BasemapOverride {
   url?: string;
-  labelsUrl?: string;
+  /** Null where the provider bakes its names in and there is no second half. */
+  labelsUrl?: string | null;
   attribution?: string;
   maxNativeZoom?: number;
   subdomains?: string;
@@ -88,7 +89,7 @@ export function isRuntimeConfig(candidate: unknown): candidate is Partial<Runtim
   for (const override of Object.values(config.basemaps)) {
     if (!override || typeof override !== 'object') return false;
     const entry = override as BasemapOverride;
-    if (!optionalString(entry.url) || !optionalString(entry.labelsUrl)) return false;
+    if (!optionalString(entry.url) || !nullableString(entry.labelsUrl)) return false;
     if (!optionalString(entry.attribution) || !optionalString(entry.subdomains)) return false;
     if (!optionalNumber(entry.maxNativeZoom)) return false;
   }

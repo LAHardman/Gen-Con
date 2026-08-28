@@ -186,7 +186,7 @@ compiled value as fallback:
 
 | Constant | Today | Why it must be data |
 | --- | --- | --- |
-| Basemap tile URLs | Hard-coded in `basemaps.ts` | CARTO retiring a tileset otherwise kills the basemap on every installed app; as config it's a one-line pack change. Ship *ordered lists* of providers per style, tried in turn |
+| Basemap tile URLs | Hard-coded in `basemaps.ts`, overridable from pack config | A provider retiring or gating a tileset otherwise kills the basemap on every installed app; as config it's a one-line pack change. This is no longer hypothetical: CARTO began watermarking every style "API KEY REQUIRED" on 2026-08-28 and the styles moved to Esri and OSM. Ordered lists of providers per style, tried in turn |
 | Events mirror URL | `VITE_EVENTS_MIRROR`, baked at build | A dead mirror should be replaceable without a release |
 | Gen Con endpoints & paging shape | Constants in `fetch-events.mjs` | If `/api/event_search` moves, installed apps follow via config while the code's default keeps working for fresh builds |
 | Pace limits for on-device refresh | — | If device-direct traffic ever needs throttling *fleet-wide*, the knob has to be server-side-ish; config is the closest thing this has |
@@ -327,7 +327,7 @@ paths — the README notes it was built for exactly this.
 - Icons and splash from the existing `public/icon.svg` via
   `@capacitor/assets`.
 - Store metadata, screenshots, privacy declarations (this app phones
-  gencon.com, CARTO, and its own static host; collects nothing) live in
+  gencon.com, the map tile providers, and its own static host; collects nothing) live in
   `fastlane/` in-repo, so the store listing is versioned like everything
   else.
 
@@ -369,7 +369,7 @@ no-install answer for "put it on somebody else's phone."
 | Schedule freshness | SW stale-while-revalidate from deploy | pack check + device-direct fallback | native survives dead hosting |
 | Exhibitors / hotels / plans freshness | pack check (new — today waits on a deploy) | pack check | none |
 | Gen Con login | Cloudflare Worker | through a configured host, or absent and said so | **the one real gap** — see below |
-| Map tiles | CARTO + cache | CARTO + cache | none; provider list is config (§4) |
+| Map tiles | Esri/OSM + cache | Esri/OSM + cache | none; provider list is config (§4) |
 | Install & updates | link, A2HS; deploy updates code | stores; pack updates data, store updates code | the point of the plan |
 
 ## 8. The season roll-over: tooling for what stays manual

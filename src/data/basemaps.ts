@@ -6,12 +6,18 @@
  * carries the attribution its terms require — Leaflet renders it in the corner,
  * and it must not be removed.
  *
- * Each comes in two halves: the map without its writing, and the writing on its
- * own. The app draws the first under everything and the second over everything,
- * because the rooms and floor plans are opaque enough to bury a street name, and
- * a convention map you can't read the streets off is no help getting from one
- * building to another. Taking the split tileset rather than adding names over a
- * map that already has them is also what keeps every name drawn exactly once.
+ * Two of the three come in halves: the map without its writing, and the
+ * writing on its own. The app draws the first under everything and the second
+ * over everything, because the rooms and floor plans are opaque enough to bury
+ * a street name, and a convention map you can't read the streets off is no help
+ * getting from one building to another. Taking a split tileset rather than
+ * adding names over a map that already has them is also what keeps every name
+ * drawn exactly once. Where a provider bakes its names in, `labelsUrl` is null
+ * and the map simply draws no second layer.
+ *
+ * WHICHEVER PROVIDER IS HERE, `public/sw.js` HAS TO KNOW ITS HOST, or the
+ * tiles stop being cached and the map stops working offline — silently, and
+ * only in the place it matters. `basemaps.test.ts` holds the two together.
  */
 
 import { CONFIG } from './config';
@@ -21,8 +27,12 @@ export interface Basemap {
   label: string;
   /** The map with no writing on it. */
   url: string;
-  /** The same tileset's writing alone, transparent everywhere else. */
-  labelsUrl: string;
+  /**
+   * The same tileset's writing alone, transparent everywhere else — or null
+   * where the provider bakes its names into the map and there is no second
+   * half to draw on top.
+   */
+  labelsUrl: string | null;
   attribution: string;
   /** Highest zoom the provider actually serves; beyond it tiles are upscaled. */
   maxNativeZoom: number;
@@ -32,7 +42,24 @@ export interface Basemap {
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION}, &copy; <a href="https://carto.com/attributions">CARTO</a>`;
+/**
+ * Esri's own credit line for the canvas basemaps, which their terms require.
+ *
+ * CARTO's tiles used to be here and are not any more: on 2026-08-28 every
+ * CARTO basemap style began coming back with "API KEY REQUIRED" written
+ * across it — as a normal 200, a valid PNG, the right content type, and the
+ * watermark composited into the map itself. Nothing a status check can see;
+ * the map simply reads as vandalised to anybody looking at it. Esri's
+ * canvas layers are the replacement because they are key-free *and* split
+ * into a base and a reference layer, which is what lets street names draw
+ * over the floor plans instead of under them.
+ */
+const ESRI_ATTRIBUTION =
+  'Tiles &copy; <a href="https://www.esri.com/">Esri</a> — Esri, DeLorme, NAVTEQ';
+
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas';
+/** Esri numbers its tiles {z}/{y}/{x}, which is not Leaflet's default order. */
+const esri = (service: string) => `${ESRI}/${service}/MapServer/tile/{z}/{y}/{x}`;
 
 export type BasemapId = 'dark' | 'light' | 'streets';
 
@@ -40,29 +67,33 @@ const COMPILED: Record<BasemapId, Basemap> = {
   dark: {
     id: 'dark',
     label: 'Dark',
-    url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: CARTO_ATTRIBUTION,
-    maxNativeZoom: 20,
+    url: esri('World_Dark_Gray_Base'),
+    labelsUrl: esri('World_Dark_Gray_Reference'),
+    attribution: ESRI_ATTRIBUTION,
+    maxNativeZoom: 16,
   },
   light: {
     id: 'light',
     label: 'Light',
-    url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: CARTO_ATTRIBUTION,
-    maxNativeZoom: 20,
+    url: esri('World_Light_Gray_Base'),
+    labelsUrl: esri('World_Light_Gray_Reference'),
+    attribution: ESRI_ATTRIBUTION,
+    maxNativeZoom: 16,
   },
-  // This used to be OpenStreetMap's own raster, which bakes its names into the
-  // tile — so there is no way to lift them above the buildings, which is the
-  // whole point of the split. Same data, rendered by CARTO, in two halves.
+  /*
+   * OpenStreetMap's own raster, which bakes its names into the tile — so its
+   * street names cannot be lifted above the buildings the way the two canvas
+   * styles' can. It is here anyway, and it is the most colourful of the
+   * three: it is also the one tileset in this file least likely ever to be
+   * taken away, which after CARTO is worth something.
+   */
   streets: {
     id: 'streets',
     label: 'Streets',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: CARTO_ATTRIBUTION,
-    maxNativeZoom: 20,
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    labelsUrl: null,
+    attribution: OSM_ATTRIBUTION,
+    maxNativeZoom: 19,
   },
 };
 
@@ -108,13 +139,19 @@ export interface RescueBasemap {
 }
 
 const COMPILED_RESCUES: readonly RescueBasemap[] = [
+  // The same provider's plainest style first: a style can be retired on its
+  // own, and if that is all that happened the map barely changes.
   {
-    id: 'rescue-voyager',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    id: 'rescue-esri',
+    url: `${ESRI}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
     labelsUrl: null,
-    attribution: CARTO_ATTRIBUTION,
-    maxNativeZoom: 20,
+    attribution: ESRI_ATTRIBUTION,
+    maxNativeZoom: 16,
   },
+  // Then somebody else entirely, because what usually goes is a whole
+  // provider rather than one style — which is exactly how CARTO went. This
+  // is the last rung on purpose: OpenStreetMap's own raster is the tileset
+  // here least likely ever to be taken away.
   {
     id: 'rescue-osm',
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

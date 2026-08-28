@@ -74,7 +74,19 @@ const TILE_CACHE = `gencon-tiles-${VERSION}`;
 const TILE_LIMIT = 900;
 
 /** The hosts whose tiles are worth keeping. Everything else is passed through. */
-const TILE_HOSTS = ['basemaps.cartocdn.com'];
+const TILE_HOSTS = [
+  // Every host `basemaps.ts` can draw from, styles and rescues alike. This
+  // list is what makes the map work in a hall with no signal, and it is
+  // matched by hostname rather than by URL — so a style swap inside a
+  // provider needs nothing here, and a *provider* swap needs a line.
+  // `basemaps.test.ts` asserts the two files agree, because the failure is
+  // silent: the map looks perfect online and is blank the moment it isn't.
+  'server.arcgisonline.com',
+  'tile.openstreetmap.org',
+  // Kept for the copies that cached CARTO tiles while it was still the
+  // default, and for a config override that points back at it with a key.
+  'basemaps.cartocdn.com',
+];
 
 self.addEventListener('install', (event) => {
   // The shell, by the names that do not change. Everything else — the hashed
