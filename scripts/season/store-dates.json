@@ -1,27 +1,32 @@
 {
   "_readme": [
     "Deadlines the season check cannot discover for itself: they are facts about",
-    "accounts only their owner can see. Each entry is {what, due, note}, with due",
-    "as YYYY-MM-DD or null for 'not filled in yet' — null makes the check nag",
-    "gently until the real date is put in. When one is dealt with, move its due",
-    "forward a year; the probe goes quiet on its own. The check warns from 60",
-    "days out and fails once the date has passed."
+    "accounts only their owner can see. Each entry is {what, due, note}.",
+    "",
+    "`due` is a date in quotes \u2014 \"2027-07-22\" is the tidiest form, and anything",
+    "a date parser recognises works too, so \"July 22, 2027\" is fine. It must be",
+    "quoted: JSON has no bare dates, and an unquoted one makes the whole file",
+    "unreadable rather than just that row. `npm run check` catches that now.",
+    "",
+    "null means 'not filled in yet' and makes the check nag gently. When one is",
+    "dealt with, move its due forward a year and the probe goes quiet on its own.",
+    "The check warns from 60 days out and fails once the date has passed."
   ],
   "deadlines": [
     {
       "what": "Apple Developer membership renewal",
-      "due": July 22, 2027,
+      "due": "2027-07-22",
       "note": "The renewal date is on https://developer.apple.com/account under Membership details. A lapse removes the app from the App Store outright."
     },
     {
       "what": "Google Play target API level review",
-      "due": August 31 2026,
-      "note": "Google ratchets the required target API level yearly, with deadlines usually at the end of August — https://developer.android.com/google/play/requirements/target-sdk says the current one. Falling behind first hides the app from new users on current Android. The fix is the annual maintenance release: bump targetSdkVersion, build, submit."
+      "due": "2026-08-31",
+      "note": "Google ratchets the required target API level yearly, with deadlines usually at the end of August \u2014 https://developer.android.com/google/play/requirements/target-sdk says the current one. Falling behind first hides the app from new users on current Android. The fix is the annual maintenance release: bump targetSdkVersion, build, submit."
     },
     {
       "what": "Android upload keystore backup verified",
       "due": null,
-      "note": "Not a renewal — a yearly reminder to confirm the keystore still exists in both places it should (repository secrets and the offline copy). It is the one unrecoverable secret; set due to a convenient annual date."
+      "note": "Only applies once an upload keystore exists \u2014 it is generated when you first sign an Android release, not before, so leave this null until then. After that: a yearly reminder to confirm it is still in both places it should be (the ANDROID_KEYSTORE_BASE64 repository secret and an offline copy). It is the one secret here that cannot be reissued \u2014 Apple certificates reissue and Play can reset an upload key, but a lost keystore ends that app's update path for good."
     }
   ]
 }

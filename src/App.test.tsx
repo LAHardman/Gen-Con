@@ -140,6 +140,33 @@ describe('going to a room', () => {
   });
 });
 
+describe('showing a vendor on the map', () => {
+  /** Open a search result and press the "Show on map" in whatever it opened. */
+  function showOnMap(query: string) {
+    fireEvent.pointerDown(searchFor(query)[0]);
+    const panel = screen.getByRole('dialog');
+    fireEvent.click(within(panel).getByRole('button', { name: /show on map/i }));
+  }
+
+  it('goes to the stand and leaves the view of it clear', () => {
+    // The bug: this flew to Exhibit Hall H, four hundred metres of floor,
+    // because a hall id was the only address the map could be given. Now the
+    // booth is named — and the hall's own panel deliberately does *not* open
+    // over the top of the stand the map has just flown to.
+    render(<App />);
+    showOnMap('1985 Games');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('still opens the room when what was picked is a room', () => {
+    // The other half of the same decision: without a placed stand there is
+    // nothing finer to show, and the room panel is the answer.
+    render(<App />);
+    fireEvent.pointerDown(searchFor('sagamore ballroom')[0]);
+    expect(screen.getByRole('dialog').textContent).toContain('Sagamore');
+  });
+});
+
 describe('asking for directions', () => {
   /** Open a room's dialog and press its directions button. */
   function directionsTo(room: string) {
