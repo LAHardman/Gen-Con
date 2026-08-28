@@ -59,11 +59,14 @@ describe('applied to the real modules', () => {
     });
     const { BASEMAPS } = await import('./basemaps');
     expect(BASEMAPS.dark.url).toBe('https://new-host/{z}/{x}/{y}.png');
-    // Only the named field moves: labels, attribution and the other styles
-    // are exactly as compiled.
-    expect(BASEMAPS.dark.labelsUrl).toContain('cartocdn');
-    expect(BASEMAPS.dark.attribution).toContain('CARTO');
-    expect(BASEMAPS.light.url).toContain('cartocdn');
+    // Only the named field moves. Asserted against the other entries rather
+    // than against a provider's name, so replacing a tile vendor does not
+    // fail a test about the override mechanism.
+    expect(BASEMAPS.dark.labelsUrl).not.toBe('https://new-host/{z}/{x}/{y}.png');
+    expect(BASEMAPS.dark.labelsUrl).toMatch(/^https:\/\//);
+    expect(BASEMAPS.dark.attribution.length).toBeGreaterThan(10);
+    expect(BASEMAPS.light.url).toMatch(/^https:\/\//);
+    expect(BASEMAPS.light.url).not.toContain('new-host');
   });
 
   it('a replacement rescue ladder takes over whole', async () => {
@@ -97,7 +100,8 @@ describe('applied to the real modules', () => {
   it('a refused config changes nothing at all', async () => {
     stashPack({ config: { basemaps: { dark: { url: 42 } } } });
     const { BASEMAPS, BASEMAP_RESCUES } = await import('./basemaps');
-    expect(BASEMAPS.dark.url).toContain('cartocdn');
+    expect(BASEMAPS.dark.url).toMatch(/^https:\/\/.+\{z\}/);
+    expect(BASEMAPS.dark.url).not.toContain('42');
     expect(BASEMAP_RESCUES.length).toBeGreaterThan(1);
   });
 });

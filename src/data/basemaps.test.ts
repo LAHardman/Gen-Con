@@ -37,21 +37,81 @@ describe('when to abandon a tileset', () => {
   });
 });
 
+describe('every tile host the worker must know about', () => {
+  /**
+   * The coupling that broke once and would break silently again.
+   *
+   * `sw.js` caches tiles by hostname, and that cache is the whole reason the
+   * map works in a hall with no signal. Swap a provider here and forget that
+   * list, and the map is perfect online and blank offline — the one place
+   * nobody tests and the one place it matters.
+   */
+  const hosts = async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('public/sw.js', 'utf8');
+    const list = /const TILE_HOSTS = \[([\s\S]*?)\];/.exec(source)?.[1] ?? '';
+    // Comments first: an apostrophe in prose — "it isn't" — otherwise reads
+    // as a quote and swallows the hostnames between it and the next one.
+    const code = list.replace(/\/\/[^\n]*/g, '');
+    return [...code.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+
+  const hostOf = (template: string) => new URL(template.replace('{s}', 'a')).hostname;
+
+  it('covers every style the map can draw', async () => {
+    const known = await hosts();
+    for (const basemap of Object.values(BASEMAPS)) {
+      for (const url of [basemap.url, basemap.labelsUrl]) {
+        if (!url) continue;
+        expect(known.some((h) => hostOf(url).endsWith(h)), `${hostOf(url)} is not in sw.js TILE_HOSTS`).toBe(true);
+      }
+    }
+  });
+
+  it('covers every rung of the rescue ladder too', async () => {
+    // A retreat that lands on an uncached host would work online and undo
+    // the offline map, which is the situation the ladder exists for.
+    const known = await hosts();
+    for (const rescue of BASEMAP_RESCUES) {
+      expect(known.some((h) => hostOf(rescue.url).endsWith(h)), `${hostOf(rescue.url)} is not in sw.js TILE_HOSTS`).toBe(true);
+    }
+  });
+
+  it('asks for no CARTO tile, which now wants a key', async () => {
+    // On 2026-08-28 every CARTO basemap style began returning its map with
+    // "API KEY REQUIRED" written across it — a normal 200, a valid PNG, the
+    // right content type, and unusable. Nothing automated here can read a
+    // watermark, so the guard is the rule rather than the picture.
+    const drawn = [
+      ...Object.values(BASEMAPS).flatMap((b) => [b.url, b.labelsUrl]),
+      ...BASEMAP_RESCUES.map((r) => r.url),
+    ].filter(Boolean) as string[];
+    for (const url of drawn) {
+      expect(url, 'CARTO tiles need an API key and come back watermarked without one').not.toContain('cartocdn');
+    }
+  });
+});
+
 describe('the rescues themselves', () => {
   it('are real tile templates with their attribution attached', () => {
     for (const rescue of BASEMAP_RESCUES) {
-      expect(rescue.url).toMatch(/^https:\/\/.+\{z\}.+\{x\}.+\{y\}/);
-      expect(rescue.attribution).toContain('OpenStreetMap');
+      // All three placeholders, in whatever order the provider numbers them:
+      // Esri serves {z}/{y}/{x}, which is not Leaflet's default.
+      for (const token of ['{z}', '{x}', '{y}']) expect(rescue.url).toContain(token);
+      expect(rescue.url).toMatch(/^https:\/\//);
+      expect(rescue.attribution.length).toBeGreaterThan(10);
       // Every rescue bakes its names in; a labels layer would 404 for ever.
       expect(rescue.labelsUrl).toBeNull();
     }
   });
 
   it('ends somewhere other than the provider it is rescuing from', () => {
-    // If the whole of CARTO goes, every configured basemap goes with it — so
-    // the last rung must stand on a different host entirely.
+    // What usually goes is a whole provider rather than one style — which is
+    // exactly how CARTO went — and if that provider is the one serving the
+    // configured basemaps, every one of them goes at once. So the last rung
+    // must stand on a different host entirely.
     const last = BASEMAP_RESCUES[BASEMAP_RESCUES.length - 1];
-    const cartoHost = new URL(BASEMAPS.dark.url.replace('{s}', 'a')).hostname;
-    expect(new URL(last.url.replace('{s}', 'a')).hostname).not.toBe(cartoHost);
+    const defaultHost = new URL(BASEMAPS.dark.url.replace('{s}', 'a')).hostname;
+    expect(new URL(last.url.replace('{s}', 'a')).hostname).not.toBe(defaultHost);
   });
 });

@@ -93,7 +93,11 @@ visit it is for.
 again.** Stale-but-labelled beats blank: an old schedule still draws, with
 the header and the schedule page saying which year it is; the key dates are
 derived from the convention's own rule, so they answer for any year without
-ever being fetched; and if a basemap provider retires a tileset out from
+ever being fetched; badge prices and Gen Con's hotel block both keep the year
+they were published for and show an estimate beside it, carried forward at
+the rate that price has actually risen across the years on file — a figure a
+few dollars out beats an empty column, and printing the published price under
+the estimate keeps the fact and the guess apart; and if a basemap provider retires a tileset out from
 under a frozen copy, the map walks down a built-in rescue ladder — ending on
 OpenStreetMap's own raster, a different host entirely — rather than drawing
 rooms on a void. The retreat refuses to trigger offline or after any tile
@@ -139,7 +143,7 @@ want to see it on a real device.
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
-| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
+| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines, badge and parking prices — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
 | `npm run sync` | Builds and copies the result into the iOS and Android shells |
 | `npm run open:android` / `open:ios` | Opens the native project in Android Studio or Xcode |
 
@@ -304,27 +308,40 @@ script reads and writes on import and could not otherwise be asked.
 
 The basemap is real: live tiles of downtown Indianapolis, with real streets and
 buildings, rendered through [Leaflet](https://leafletjs.com/). Three key-free
-tilesets are wired up (CARTO dark, light and Voyager) and switchable from the
-header. Each carries the attribution its terms require — Leaflet renders it in
-the corner, and it must not be removed.
+tilesets are wired up (Esri's dark and light canvas, and OpenStreetMap's own
+raster) and switchable from the header. Each carries the attribution its terms
+require — Leaflet renders it in the corner, and it must not be removed.
 
-**The street names are drawn on top of the buildings, not under them.** Each
-tileset is taken in two halves — the map without its writing, and the writing on
-its own — and the second is drawn above everything the app puts on the map. It
-has to be: the rooms and floor plans are opaque enough to bury a street name,
-and once you have zoomed into a building the streets around it are exactly what
-you need to leave it by. Taking the split tileset rather than adding names over
-a map that already has them is also what keeps every name drawn once.
+**CARTO used to be all three of those and is not any more.** On 2026-08-28
+every CARTO basemap style began coming back with "API KEY REQUIRED" written
+across the map — as a normal 200, a valid PNG, the right content type, and the
+watermark composited into the tile itself. Nothing a status check can see: the
+season probe went on reporting every tileset healthy while the map read as
+vandalised to anybody looking at it. Since no automated check here can read a
+watermark, the guard is a rule rather than a picture — `basemaps.test.ts`
+forbids a `cartocdn` URL anywhere in the styles or the rescue ladder, so the
+swap cannot be undone by accident.
+
+**The street names are drawn on top of the buildings, not under them.** The two
+canvas tilesets are taken in two halves — the map without its writing, and the
+writing on its own — and the second is drawn above everything the app puts on
+the map. It has to be: the rooms and floor plans are opaque enough to bury a
+street name, and once you have zoomed into a building the streets around it are
+exactly what you need to leave it by. Taking the split tileset rather than
+adding names over a map that already has them is also what keeps every name
+drawn once. Where a provider bakes its names in there is no second half, and
+the app simply draws no label layer.
 
 They arrive at zoom 17, not before. Over the whole campus a full set of street
 names is a screenful of type telling you what you already know — that this is
 downtown Indianapolis — and it buries the buildings, which at that zoom are the
 only thing there is to pick.
 
-That is why the third option is CARTO's street rendering rather than
-OpenStreetMap's own raster, which it used to be: OSM's bakes its names into the
-tile, so there is no way to lift them clear of the buildings. Same data either
-way.
+The third option is OpenStreetMap's own raster, which bakes its names into the
+tile — so its street names cannot be lifted clear of the buildings the way the
+canvas styles' can. It is the most colourful of the three, and it is also the
+one tileset here least likely ever to be taken away, which after CARTO is worth
+something.
 
 **And the lines are drawn to be followed.** A dark tileset puts its streets a
 few percent off its own background, which vanishes under a map with this much
@@ -2164,6 +2181,9 @@ src/
     vendors.ts       What a stand is, where it is and what it sells
     plan.ts          The four days, stops, travel, lanes and the shared axis
     key-dates.ts     Badges, housing and tickets — the rule and its provenance
+    badges.ts        Which days a badge lets somebody in, derived from the rule
+    badge-prices.ts  Every published rate card, and the trend it estimates the next one from
+    parking.ts       Gen Con's official lots and the downtown garages, priced apart
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to
     walkable.ts      The floor you can stand on, as a grid, and A* over it

@@ -17,9 +17,11 @@
  * every Gen Con the API carries. Writing the 2027 dates in here as well would
  * be a second copy to get wrong in 2028.
  *
- * PRICES ARE NOT HERE. Gen Con sets badge prices per year, raises them at the
- * door, and publishes them behind a store that cannot be fetched. Somebody
- * types what they paid; this file only says which days it bought.
+ * PRICES ARE NOT HERE, BUT THEY ARE NOW SOMEWHERE. They live in
+ * `badge-prices.ts`, read off Gen Con's own rate card rather than typed —
+ * this file stays about which days a badge buys, which is the question the
+ * schedule actually asks of it. What something cost is still editable
+ * wherever it is entered; the published figure only seeds it.
  */
 
 import { conventionDaysOf, conventionWednesday } from './key-dates';

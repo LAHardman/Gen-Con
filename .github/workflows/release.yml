@@ -118,6 +118,10 @@ jobs:
   android:
     needs: web
     runs-on: ubuntu-latest
+    # Enough to publish a release and attach the APK to it. The workflow's
+    # own default is read-only; this is the one job that writes.
+    permissions:
+      contents: write
     # Asked here rather than in a step's `if:` — the `secrets` context is not
     # available there, so the condition would be silently false for ever.
     # `refresh.yml` carries the same note; it is an easy hour to lose.
@@ -172,6 +176,99 @@ jobs:
           name: android-bundle
           path: android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
+
+      # An installable APK, which the bundle above is not.
+      #
+      # An .aab is an upload format: Google splits it into per-device APKs at
+      # download time, and a phone cannot open one. So a build nobody can try
+      # is the default outcome of a release workflow, which is the wrong way
+      # round while the app is still being looked at rather than shipped.
+      #
+      # Debug rather than release, because Android refuses to install an
+      # unsigned APK and the debug build is signed with the throwaway key
+      # every SDK generates. It is the same web bundle, the same pack and the
+      # same native shell; what differs is that it is debuggable and not
+      # minified. For putting the app on your own phone, that is the build.
+      - name: Build an APK you can install
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+      # Somewhere a phone can actually reach.
+      #
+      # A workflow artifact is a zip behind a login: to try the app you have
+      # to be signed in to GitHub, download it on a computer, unzip it and
+      # move the APK across. A release asset is a plain URL that a phone
+      # opens directly, which is the whole difference between "there is a
+      # build" and "I can try the build".
+      #
+      # TEST BUILDS SHARE ONE ROLLING TAG, and the asset keeps one filename,
+      # so the download URL never changes. That is the point: a link — or a
+      # QR code made from it once — always fetches the newest build, instead
+      # of a new address to find every time. Store releases get their own
+      # versioned tag, because those are meant to be distinguishable for ever.
+      - name: Publish the APK where a phone can reach it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOAD: ${{ inputs.upload }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          apk=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
+          # One filename, so the URL is stable across builds.
+          cp "$apk" gen-con-trip.apk
+
+          if [ "$UPLOAD" = 'true' ]; then
+            TAG="v${VERSION}"
+            TITLE="Gen Con Trip ${VERSION}"
+            FLAGS=''
+          else
+            TAG='test'
+            TITLE='Gen Con Trip — latest test build'
+            FLAGS='--prerelease'
+          fi
+
+          NOTES=$(cat <<NOTE
+          **Version ${VERSION}, build ${GITHUB_RUN_NUMBER}** — from \`${GITHUB_SHA:0:8}\` on \`${GITHUB_REF_NAME}\`.
+
+          ## Install it
+
+          Open this page on the phone and tap **gen-con-trip.apk**. Android will
+          ask you to allow installing from wherever you opened it — that is the
+          ordinary sideload prompt. Play Protect will also warn that the
+          developer is unrecognised: this build is signed with the debug key
+          every Android SDK generates, not a registered one.
+
+          ## What it is
+
+          The same app as the website, wrapped in a native shell. The schedule
+          and every data table are inside the download, so it works with no
+          network from the first launch — and it refreshes them from the
+          published pack on its own after that, without needing a new build.
+          The count is deliberately not written here: it has changed twice
+          already, and a release note that quietly goes stale is worse than
+          one that never claimed a number.
+
+          A debug build: debuggable and unminified, otherwise identical.
+          NOTE
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create "$TAG" --title "$TITLE" --notes "$NOTES" $FLAGS
+          fi
+          # --clobber, because the rolling tag replaces its asset every build.
+          gh release upload "$TAG" gen-con-trip.apk --clobber
+
+          echo "Download: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/gen-con-trip.apk"
+          echo "### APK published" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/gen-con-trip.apk" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send to the Play internal track
         if: ${{ inputs.upload && env.HAVE_PLAY == 'true' }}

@@ -58,6 +58,17 @@ const MODULE_TABLES = {
   addresses: ['ADDRESSES'],
   footprints: ['VENUE_FOOTPRINTS'],
   booths: ['HALL_DIVIDES', 'ACROSS_THE_AISLES'],
+  // Not a generated literal like the rest — six numbers off a web page — but
+  // here for the same reason and more urgently: badge and parking prices are
+  // the figures that change every year, on pages anybody can read, and a
+  // phone that can no longer be updated through a store can still take them
+  // from a pack refresh.
+  // The *history* travels, not the latest card: the current price, the base
+  // year and the trend the app estimates next year's price with are all
+  // derived from it, so a pack carrying one more year moves all three at once
+  // and they cannot end up disagreeing.
+  'badge-prices': ['BADGE_HISTORY', 'BADGE_PRICES_CHECKED', 'ADMISSIONS_TAX', 'SHIPPING_CENTS'],
+  parking: ['GARAGES', 'CHECKED'],
 };
 
 /**

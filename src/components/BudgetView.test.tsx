@@ -299,18 +299,117 @@ describe('a priced session on the schedule', () => {
   });
 });
 
-describe('parking', () => {
-  it('says Gen Con neither sells nor prices it', () => {
+describe('what a badge costs', () => {
+  /** The badge select for somebody, by the label the page gives it. */
+  const setBadge = (name: string, label: string) =>
+    fireEvent.change(screen.getByLabelText(`Badge for ${name}`), { target: { value: label } });
+
+  it('shows the estimate and the published price it came from, not one or the other', () => {
     /*
-     * The provenance is the point. These are forum reports, not a rate card,
-     * and a page that printed one figure would be inventing a precision that
-     * does not exist.
+     * The planning year is 2027 and Gen Con has only announced through 2026,
+     * so both numbers are on screen: ≈$193.60 is what to budget, $180.40 in
+     * 2026 is the only part of it that is a fact. Showing just the estimate
+     * would launder a projection into a price; showing just the published
+     * one would be a year out and say nothing about it.
+     *
+     * $164 for a 4-day carried forward at 7.15% is $176, and Marion County's
+     * 10% on top of that is $193.60. The tax is stated under Gen Con's table
+     * rather than in it, so a page showing $176 would be showing a figure
+     * nobody is ever charged.
+     */
+    render(<Budget />);
+    addPerson('Anna');
+    setBadge('Anna', 'four-day');
+    const where = section('Who is going');
+    expect(where.textContent).toMatch(/≈\$193\.60/);
+    expect(where.textContent).toMatch(/\$180\.40 in 2026/);
+  });
+
+  it('prices nothing for somebody who has not bought one', () => {
+    // `none` is the absence of a badge, not a free one. Pricing it at $0.00
+    // would put a line in the total for a thing nobody owns.
+    render(<Budget />);
+    addPerson('Anna');
+    const where = section('Who is going');
+    expect(where.textContent).not.toMatch(/with tax/);
+    expect(within(where).getByRole('button', { name: /Nobody has a badge to price yet/ })).toBeTruthy();
+  });
+
+  it('adds a line per person, at their own badge, only when asked', () => {
+    render(<Budget />);
+    addPerson('Anna');
+    addPerson('Ben');
+    setBadge('Anna', 'four-day');
+    setBadge('Ben', 'thursday');
+    // Nothing is in the budget until the button is pressed: a price that
+    // appeared the moment a badge was picked would be a line nobody typed.
+    expect(lineTotals('Badges')).toEqual([]);
+    fireEvent.click(within(section('Who is going')).getByRole('button', { name: /Add 2 badges/ }));
+    // The 2027 estimates, taxed — each pinned to the person whose badge it is.
+    // A budget is a forecast, so it is seeded with what the trip will cost
+    // rather than with what last year's badge cost.
+    expect(lineTotals('Badges')).toEqual(['$193.60', '$96.80']);
+    expect(tableRow('Badges')).toEqual(['$193.60', '$96.80', '$290.40']);
+  });
+
+  it('says the estimate is one, and how it was arrived at', () => {
+    /*
+     * The whole point of keeping a price after it goes stale, and of saying
+     * where the newer number came from. Gen Con announces the next card
+     * months after the convention, so for most of the year the honest thing
+     * is the old figure plus this card's own measured trend — stated as a
+     * trend, with the rate quoted, so a reader can disbelieve it on purpose.
+     */
+    render(<Budget />);
+    const where = section('Who is going');
+    expect(where.textContent).toMatch(/has not announced 2027’s prices yet/);
+    expect(where.textContent).toMatch(/carried forward at the rate that badge has actually risen/);
+    expect(where.textContent).toMatch(/across 4 announced years \(about 7\.2% a year\)/);
+    expect(where.textContent).toMatch(/10% admissions tax/);
+    expect(where.textContent).toMatch(/type over it with what you actually paid/);
+  });
+
+  it('lets the seeded price be typed over, because the receipt is the truth', () => {
+    render(<Budget />);
+    addPerson('Anna');
+    setBadge('Anna', 'sunday');
+    fireEvent.click(within(section('Who is going')).getByRole('button', { name: /Add 1 badge/ }));
+    // $41 carried forward at 6.25% is $44, and the tax makes it $48.40.
+    const box = within(section('Badges')).getByDisplayValue('48.40');
+    fireEvent.change(box, { target: { value: '60' } });
+    expect(lineTotals('Badges')).toEqual(['$60.00']);
+  });
+});
+
+describe('parking', () => {
+  it('separates Gen Con\'s own from the garages that are merely near', () => {
+    /*
+     * The provenance is the point, and this page got it wrong for a year: it
+     * said Gen Con ran no car park and priced nothing, off a URL that had
+     * been retired. Gen Con has had an official partner since 2025, and a
+     * rate card and a forum report must not read the same once both are
+     * printed as dollars.
      */
     render(<Budget />);
     fireEvent.click(within(section('Getting there')).getByRole('button', { name: 'Add parking' }));
     const where = section('Getting there');
-    expect(where.textContent).toMatch(/Gen Con runs no car park and publishes no rates/);
+    expect(where.textContent).toMatch(/official parking partner since 2025/);
     expect(where.textContent).toMatch(/a range rather than a price/);
+    expect(within(where).getByText('Gen Con’s own')).toBeTruthy();
+  });
+
+  it('offers the official lots as a booking, not as a line priced at nothing', () => {
+    // iPark lists Gen Con only while reservations are open, so there is no
+    // figure for most of the year. Seeding a line at zero would read as free
+    // parking and quietly understate the trip.
+    render(<Budget />);
+    const where = section('Getting there');
+    fireEvent.click(within(where).getByRole('button', { name: 'Add parking' }));
+    const official = within(where).getByRole('link', { name: /iPark/ });
+    expect(official.getAttribute('href')).toMatch(/ipco\.services/);
+    expect(official.textContent).toMatch(/priced when booking opens/);
+    expect(official.textContent).toMatch(/free shuttle/);
+    expect(lineTotals('Getting there')).toEqual([]);
   });
 
   it('shows a range and how far the garage is from the hall', () => {

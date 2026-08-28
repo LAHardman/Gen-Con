@@ -27,6 +27,15 @@ import { useMemo, useState } from 'react';
 
 import { BADGE_KINDS, BADGE_NAMES, type BadgeKind } from '../data/badges';
 import {
+  ADMISSIONS_TAX,
+  BADGE_HISTORY,
+  BADGE_PRICE_YEAR,
+  SOURCE as BADGE_SOURCE,
+  badgeEstimateWithTax,
+  withTax,
+  type BadgeEstimate,
+} from '../data/badge-prices';
+import {
   budgetFor,
   CATEGORIES,
   CATEGORY_NAMES,
@@ -36,11 +45,18 @@ import {
   lineTotal,
   type Category,
   type Line,
+  type Person,
 } from '../data/budget';
 import { allLines, planLineId } from '../data/budget-lines';
 import { conflictsIn } from '../data/conflicts';
 import { planningYear } from '../data/key-dates';
-import { CHECKED, GARAGES, SOURCE as PARKING_SOURCE, typicalCents } from '../data/parking';
+import {
+  CHECKED,
+  GARAGES,
+  OFFICIAL_SOURCE,
+  REPORTED_SOURCE,
+  typicalCents,
+} from '../data/parking';
 import type { Bookings } from '../hooks/useBookings';
 import type { BudgetStore } from '../hooks/useBudget';
 import type { Plan } from '../hooks/usePlan';
@@ -149,6 +165,33 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
     [plan.entries, party, assigned, badges, year],
   );
 
+  /**
+   * Everybody whose badge has a published price — which is everybody who has
+   * chosen one, since `none` is the absence of a badge rather than a free one.
+   * Kept as a list rather than a count so the button can add the lines it
+   * counted, and cannot drift from them.
+   */
+  /**
+   * A representative projected estimate, for the note that explains the ≈.
+   *
+   * Taken from the four-day badge because it is the one everybody recognises
+   * and the one most people are buying; the growth rates across kinds sit
+   * within a point or so of each other, so quoting one is not misleading and
+   * quoting six would be unreadable.
+   */
+  const estimated = useMemo(() => {
+    const four = badgeEstimateWithTax('four-day', year);
+    return four?.projected ? four : null;
+  }, [year]);
+
+  const priceable = useMemo(
+    () =>
+      party
+        .map((person) => ({ person, price: badgeEstimateWithTax(budget.badgeOf(person.id), year) }))
+        .filter((one): one is { person: Person; price: BadgeEstimate } => one.price !== null),
+    [party, badges, budget, year],
+  );
+
   const [naming, setNaming] = useState('');
   /** The heading whose "add a cost" form is open, if any. */
   const [adding, setAdding] = useState<Category | null>(null);
@@ -214,6 +257,25 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
                     ))}
                   </select>
                 </label>
+                <span className="budget__badge-price">
+                  {(() => {
+                    const price = badgeEstimateWithTax(budget.badgeOf(person.id), year);
+                    if (price === null) return '';
+                    // Both figures, always, when one of them is a guess: the
+                    // estimate is what to budget and the published price is
+                    // the only part of it that is a fact.
+                    return price.projected ? (
+                      <>
+                        <span className="budget__estimate">≈{dollars(price.cents)}</span>
+                        <span className="budget__confirmed">
+                          {dollars(withTax(price.from.cents))} in {price.from.year}
+                        </span>
+                      </>
+                    ) : (
+                      `${dollars(price.cents)} with tax`
+                    );
+                  })()}
+                </span>
                 <span className="budget__person-total">{dollars(column?.total ?? 0)}</span>
                 <button
                   type="button"
@@ -245,10 +307,49 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
           </label>
           <button type="submit">Add</button>
         </form>
+        <button
+          type="button"
+          className="budget__open-add"
+          disabled={!priceable.length}
+          onClick={() => {
+            for (const { person, price } of priceable) {
+              budget.addLine({
+                category: 'badge',
+                label: `${BADGE_NAMES[budget.badgeOf(person.id)]} · ${person.name}`,
+                cents: price.cents,
+                times: 1,
+                who: [person.id],
+              });
+            }
+          }}
+        >
+          {priceable.length
+            ? `Add ${priceable.length} badge${priceable.length === 1 ? '' : 's'} to the budget`
+            : 'Nobody has a badge to price yet'}
+        </button>
         <p className="budget__note">
           A badge decides which days somebody can be in the hall, and that is checked against the
-          schedule below. Gen Con sells badges from a store this app cannot read, so what one cost
-          is a line you type under Badges.
+          schedule below. The prices are Gen Con&rsquo;s own, off its January announcements, with
+          Marion County&rsquo;s {Math.round(ADMISSIONS_TAX * 100)}% admissions tax added — the tax
+          is not in their table and is charged on every badge type.{' '}
+          {estimated ? (
+            <>
+              Gen Con has not announced {year}&rsquo;s prices yet, so the figure with a{' '}
+              <span className="budget__estimate">≈</span> is an estimate: {BADGE_PRICE_YEAR}
+              &rsquo;s published price carried forward at the rate that badge has actually risen
+              across {BADGE_HISTORY.length} announced years ({estimated.growth === null
+                ? ''
+                : `about ${(estimated.growth * 100).toFixed(1)}% a year`}
+              ). The published price it came from is printed under it, because that is the only
+              part of it that is a fact.{' '}
+            </>
+          ) : (
+            <>These are {BADGE_PRICE_YEAR}&rsquo;s published prices. </>
+          )}
+          Every line stays editable, so type over it with what you actually paid.{' '}
+          <a href={BADGE_SOURCE} target="_blank" rel="noreferrer noopener">
+            Gen Con&rsquo;s badge page ↗
+          </a>
         </p>
       </section>
 
@@ -612,12 +713,18 @@ function whenOf(entry: PlanEntry): string {
 }
 
 /**
- * Gen Con's parking, which Gen Con neither sells nor prices.
+ * Where to leave a car, at two levels of confidence.
  *
- * The rates are a range attendees report, not a rate card — see `parking.ts`
- * for what was looked for and what was found. So the control adds a line at the
- * middle of the range and the line is editable like any other, and the range it
- * came from is printed beside it rather than hidden behind a single figure.
+ * Gen Con's own partner is first and says so; the rest are downtown garages
+ * whose rates are a range attendees report rather than a rate card — see
+ * `parking.ts`. So the control adds a line at the middle of the range, the
+ * range it came from is printed beside it rather than hidden behind a single
+ * figure, and every line stays editable.
+ *
+ * A garage with no published price still gets a row. It is the official one,
+ * and knowing the option exists is most of what this list is for — pressing
+ * it opens the booking rather than adding a line, because seeding a line at
+ * zero would read as free parking and understate the trip.
  */
 function ParkingPicker({
   onPick,
@@ -643,37 +750,75 @@ function ParkingPicker({
         <input inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} />
       </label>
       <ul className="budget__garages">
-        {GARAGES.map((garage) => (
-          <li key={garage.id}>
-            <button
-              type="button"
-              className="budget__garage"
-              onClick={() => {
-                onPick(`Parking · ${garage.name}`, typicalCents(garage), nights);
-                setOpen(false);
-              }}
-            >
+        {GARAGES.map((garage) => {
+          const seed = typicalCents(garage);
+          const far =
+            garage.metres < 1000
+              ? `${garage.metres} m`
+              : `${(garage.metres / 1000).toFixed(1)} km`;
+          const body = (
+            <>
               <span className="budget__garage-name">
                 {garage.name}
+                {garage.official && <span className="budget__official">Gen Con’s own</span>}
                 {garage.skywalk && <span className="budget__skywalk">skywalk</span>}
+                {garage.shuttle && <span className="budget__skywalk">free shuttle</span>}
               </span>
               <span className="budget__garage-meta">
-                {dollars(garage.lowCents)}–{dollars(garage.highCents)} a day ·{' '}
-                {garage.metres < 1000
-                  ? `${garage.metres} m`
-                  : `${(garage.metres / 1000).toFixed(1)} km`}{' '}
-                from the ICC
+                {seed === null
+                  ? 'priced when booking opens'
+                  : garage.rate === 'published'
+                    ? `${dollars(seed)} a day`
+                    : `${dollars(garage.lowCents as number)}–${dollars(garage.highCents as number)} a day`}{' '}
+                · {far} from the ICC
               </span>
               <span className="budget__garage-note">{garage.note}</span>
-            </button>
-          </li>
-        ))}
+            </>
+          );
+          return (
+            <li key={garage.id}>
+              {seed === null && garage.reserveUrl ? (
+                // No price to seed a line with, so the row is the link rather
+                // than a button that would add nothing.
+                <a
+                  className="budget__garage"
+                  href={garage.reserveUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {body}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="budget__garage"
+                  disabled={seed === null}
+                  onClick={() => {
+                    if (seed === null) return;
+                    onPick(`Parking · ${garage.name}`, seed, nights);
+                    setOpen(false);
+                  }}
+                >
+                  {body}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <p className="budget__note">
-        Gen Con runs no car park and publishes no rates — its own parking page names neither a
-        garage nor a price. These are what attendees report on Gen Con’s forums, read {CHECKED}, and
-        they are a range rather than a price. A line is added at the middle of it and you can type
-        over it. <a href={PARKING_SOURCE} target="_blank" rel="noreferrer noopener">The forums ↗</a>
+        Gen Con has had an official parking partner since 2025 — iPark’s lots by Lucas Oil, with a
+        free shuttle to the hall — and it prices them per convention, so there is a figure here only
+        while booking is open.{' '}
+        <a href={OFFICIAL_SOURCE} target="_blank" rel="noreferrer noopener">
+          Gen Con on parking ↗
+        </a>{' '}
+        The rest are downtown garages, and their rates are what attendees report on Gen Con’s
+        forums, read {CHECKED} — a range rather than a price. A line is added at the middle of it
+        and you can type over it.{' '}
+        <a href={REPORTED_SOURCE} target="_blank" rel="noreferrer noopener">
+          The forums ↗
+        </a>
       </p>
       <button type="button" onClick={() => setOpen(false)}>
         Cancel
