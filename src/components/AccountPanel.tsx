@@ -21,6 +21,7 @@
  * works", which it does.
  */
 
+import { canSignIn } from '../hooks/useGenConAccount';
 import { useState } from 'react';
 
 import type { AuthState } from '../hooks/useGenConAccount';
@@ -71,6 +72,24 @@ export function AccountPanel({ state, onSignIn, onSignOut }: Props) {
         <p className="account__note">
           Signing out makes this app forget the session. Your Gen Con session stays open on their
           side until it times out — sign out on gencon.com too if you are on a shared computer.
+        </p>
+      </section>
+    );
+  }
+
+  // A shell with no sign-in host has no server to sign in through, and a
+  // form that cannot work is worse than an absent one — it looks like the
+  // password was wrong. See `accountBase`.
+  if (!canSignIn()) {
+    return (
+      <section className="account" aria-label="Gen Con account">
+        <p>
+          Signing in to Gen Con needs a small server, and this app does not carry one — a browser
+          cannot reach gencon.com directly, so the website does it through its own.
+        </p>
+        <p className="account__note">
+          Everything else here works without it: the map, the schedule, the hotels and the key dates
+          never ask who you are.
         </p>
       </section>
     );

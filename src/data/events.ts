@@ -156,6 +156,26 @@ export function expandFeed(raw: unknown): EventFeed {
   return { source: feed.source as EventFeed['source'], year: feed.year, events };
 }
 
+/**
+ * The convention year a feed belongs to.
+ *
+ * A copy of this app that stops being updated keeps its last schedule for
+ * ever, and showing it beats showing nothing — but only labelled, and the
+ * label needs the year. The importer stamps `year`; a feed old enough to
+ * predate the stamp still carries the answer in its own timestamps, so the
+ * latest start decides. Null only for a feed with no dated event at all,
+ * which is a feed with nothing worth labelling.
+ */
+export function feedYear(feed: EventFeed): number | null {
+  if (feed.year) return feed.year;
+  let latest = '';
+  for (const event of feed.events) {
+    if (event.start > latest) latest = event.start;
+  }
+  const year = Number(latest.slice(0, 4));
+  return Number.isFinite(year) && year > 0 ? year : null;
+}
+
 /* ------------------------------------------------------------------ matching */
 
 /** Lowercases and strips punctuation so location strings compare sensibly. */

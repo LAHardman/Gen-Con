@@ -1,0 +1,27 @@
+{
+  "_readme": [
+    "Deadlines the season check cannot discover for itself: they are facts about",
+    "accounts only their owner can see. Each entry is {what, due, note}, with due",
+    "as YYYY-MM-DD or null for 'not filled in yet' — null makes the check nag",
+    "gently until the real date is put in. When one is dealt with, move its due",
+    "forward a year; the probe goes quiet on its own. The check warns from 60",
+    "days out and fails once the date has passed."
+  ],
+  "deadlines": [
+    {
+      "what": "Apple Developer membership renewal",
+      "due": null,
+      "note": "The renewal date is on https://developer.apple.com/account under Membership details. A lapse removes the app from the App Store outright."
+    },
+    {
+      "what": "Google Play target API level review",
+      "due": null,
+      "note": "Google ratchets the required target API level yearly, with deadlines usually at the end of August — https://developer.android.com/google/play/requirements/target-sdk says the current one. Falling behind first hides the app from new users on current Android. The fix is the annual maintenance release: bump targetSdkVersion, build, submit."
+    },
+    {
+      "what": "Android upload keystore backup verified",
+      "due": null,
+      "note": "Not a renewal — a yearly reminder to confirm the keystore still exists in both places it should (repository secrets and the offline copy). It is the one unrecoverable secret; set due to a convenient annual date."
+    }
+  ]
+}

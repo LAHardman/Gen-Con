@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { expandFeed, indexEvents, type ConEvent } from './events';
+import { expandFeed, feedYear, indexEvents, type ConEvent } from './events';
 
 const source = { name: 'Gen Con event catalogue', url: 'https://www.gencon.com/events', fetchedAt: '2026-08-09T00:00:00Z' };
 
@@ -180,5 +180,30 @@ describe('still reading the shape that came before it', () => {
     // programme", which is indistinguishable from a source outage.
     expect(() => expandFeed({ format: 'columns-9', keys: {}, columns: {}, count: 0 })).toThrow(/columns-9/);
     expect(() => expandFeed({ nonsense: true })).toThrow();
+  });
+});
+
+describe('which year a feed belongs to', () => {
+  // The label a frozen copy shows for ever: "the 2026 schedule". Wrong here
+  // means either nagging about a current catalogue or presenting a years-old
+  // one as this year's — opposite failures, both silent.
+  const dated = (start: string) => ({ id: 'BGM26ND1', title: 'x', locationText: 'ICC', start });
+
+  it('trusts the importer’s own stamp first', () => {
+    expect(feedYear({ source, year: 2026, events: [dated('2027-07-29T09:00:00-04:00')] })).toBe(2026);
+  });
+
+  it('reads an unstamped feed off its own timestamps, latest deciding', () => {
+    expect(
+      feedYear({
+        source,
+        events: [dated('2025-08-01T10:00:00-04:00'), dated('2026-07-30T10:00:00-04:00')],
+      }),
+    ).toBe(2026);
+  });
+
+  it('answers null for a feed with nothing dated, which has nothing to label', () => {
+    expect(feedYear({ source, events: [] })).toBeNull();
+    expect(feedYear({ source, events: [{ ...dated(''), start: '' }] })).toBeNull();
   });
 });

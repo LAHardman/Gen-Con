@@ -119,6 +119,11 @@ jobs:
         if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         run: npm run check
 
+      # No auto-merge here, deliberately: the body above says "worth reading
+      # rather than merging on sight", and it means it — which sources answered
+      # and where the walk floor moved are judgement calls. The season check's
+      # data-prs probe nags if this sits unread past a fortnight, which is the
+      # safety net for it stalling silently.
       - name: Open a pull request
         if: ${{ inputs.dry != true && inputs.probe != true && inputs.verify == 'no' }}
         uses: peter-evans/create-pull-request@v6

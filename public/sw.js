@@ -158,6 +158,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.origin !== self.location.origin) return;
+  // The data pack is the page's own affair: `pack-store.ts` fetches it with
+  // its own freshness rules, verifies it against its manifest, and keeps it
+  // in its own cache to apply on the next launch. Answering these from the
+  // app cache would hand that refresher the very staleness it exists to
+  // beat, and store every table twice.
+  if (url.pathname.includes('/pack/')) return;
   event.respondWith(request.mode === 'navigate' ? shell(request, event) : app(request, event));
 });
 

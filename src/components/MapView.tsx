@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import {
   CATEGORY_STYLES,
@@ -17,7 +17,7 @@ import {
 } from '../data/venues';
 import { PLAN_CREDIT, PLAN_LEVELS, type PlanRing } from '../data/plan-geometry';
 import { VENUE_HALLS } from '../data/venue-plan';
-import { BASEMAPS, type BasemapId } from '../data/basemaps';
+import { BASEMAPS, BASEMAP_RESCUES, nextRescue, type BasemapId } from '../data/basemaps';
 import { AMENITIES } from '../data/amenities';
 import type { Pin } from '../data/offsite';
 import { PLACED_BOOTHS } from '../data/booth-place';
@@ -302,13 +302,28 @@ export function MapView({
   }, [allBounds]);
 
   /* --------------------------------------------------------------- basemap */
+  /*
+   * Which rung of the rescue ladder the current tileset has fallen to, if
+   * any. A copy of this app that is never updated keeps its tile URLs for
+   * ever, so a provider retiring a style must not be the end of the map:
+   * a layer that is online and has never loaded a single tile is dead, and
+   * the map walks down `BASEMAP_RESCUES` instead of drawing rooms on a
+   * void. `nextRescue` holds the judgement (and its tests hold *it*) —
+   * failures while offline or after any success never trigger it, because
+   * there the cache is still the best map anybody has.
+   */
+  const [rescue, setRescue] = useState<number | null>(null);
+  useEffect(() => setRescue(null), [basemapId]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const basemap = BASEMAPS[basemapId] ?? BASEMAPS.dark;
+    const basemap =
+      rescue !== null ? BASEMAP_RESCUES[rescue] : (BASEMAPS[basemapId] ?? BASEMAPS.dark);
     tileLayerRef.current?.remove();
     labelLayerRef.current?.remove();
+    labelLayerRef.current = null;
 
     const layer = L.tileLayer(basemap.url, {
       attribution: basemap.attribution,
@@ -324,28 +339,43 @@ export function MapView({
       // that are already there instead of onto blank squares.
       keepBuffer: 4,
     });
+    let failures = 0;
+    let anyLoaded = false;
+    layer.on('tileload', () => {
+      anyLoaded = true;
+    });
+    layer.on('tileerror', () => {
+      failures += 1;
+      const fallen = nextRescue(rescue, anyLoaded, failures, navigator.onLine !== false);
+      if (fallen !== rescue) setRescue(fallen);
+    });
     layer.addTo(map);
     layer.bringToBack();
     tileLayerRef.current = layer;
 
-    const labels = L.tileLayer(basemap.labelsUrl, {
-      maxZoom: 21,
-      // Street names arrive when you are close enough for them to mean
-      // something. Over the whole campus they are a screenful of type telling
-      // you what you already know — that this is downtown Indianapolis — and
-      // they bury the buildings, which at that zoom is the only thing to pick.
-      minZoom: LABEL_MIN_ZOOM,
-      maxNativeZoom: basemap.maxNativeZoom,
-      subdomains: basemap.subdomains ?? 'abc',
-      // Not the id class: the writing is already legible and doesn't want
-      // whatever is being done to the map underneath it.
-      className: 'map__tiles',
-      pane: 'labels',
-      keepBuffer: 4,
-    });
-    labels.addTo(map);
-    labelLayerRef.current = labels;
-  }, [basemapId]);
+    // A rescue tileset bakes its names into the tile, so there is no label
+    // half to draw over the buildings — the split is a luxury of the styles
+    // chosen on purpose, not something a fallback can promise.
+    if (basemap.labelsUrl) {
+      const labels = L.tileLayer(basemap.labelsUrl, {
+        maxZoom: 21,
+        // Street names arrive when you are close enough for them to mean
+        // something. Over the whole campus they are a screenful of type telling
+        // you what you already know — that this is downtown Indianapolis — and
+        // they bury the buildings, which at that zoom is the only thing to pick.
+        minZoom: LABEL_MIN_ZOOM,
+        maxNativeZoom: basemap.maxNativeZoom,
+        subdomains: basemap.subdomains ?? 'abc',
+        // Not the id class: the writing is already legible and doesn't want
+        // whatever is being done to the map underneath it.
+        className: 'map__tiles',
+        pane: 'labels',
+        keepBuffer: 4,
+      });
+      labels.addTo(map);
+      labelLayerRef.current = labels;
+    }
+  }, [basemapId, rescue]);
 
   /* -------------------------------------------------- floor-plan geometry */
   /*

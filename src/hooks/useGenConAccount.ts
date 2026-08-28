@@ -16,6 +16,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { CONFIG } from '../data/config';
+import { isNative } from '../platform';
 
 export interface Profile {
   username?: string;
@@ -50,13 +52,40 @@ const problem = (reason: string, says: string): AuthState => {
   return { status: 'broken', says };
 };
 
+/**
+ * Where the sign-in endpoints are.
+ *
+ * Same-origin on the web, where `functions/gencon/` serves them — a browser
+ * needs that server, because gencon.com sends no CORS header, its session
+ * cookie is `HttpOnly`, and it is `SameSite=Lax`: three walls, all
+ * deliberate. A native shell is served from `file://` and has no origin to
+ * be relative to, so it needs a host named; without one, signing in is a
+ * web-app feature and the panel says so rather than offering a form that
+ * cannot work.
+ *
+ * (A native shell has none of those three walls and could one day sign in
+ * to gencon.com directly, retiring the Worker rather than needing it. That
+ * is worth doing and is not done here: a half-built credential path is the
+ * one thing worse than an honest "not here yet".)
+ */
+export function accountBase(): string | null {
+  const configured = (CONFIG.accountHost ?? '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+  return isNative() ? null : '';
+}
+
+/** Whether this copy can sign in at all. */
+export const canSignIn = (): boolean => accountBase() !== null;
+
 export function useGenConAccount() {
   const [state, setState] = useState<AuthState>({ status: 'unknown' });
 
   /** Ask the server who the cookie belongs to. Cheap, and the only source. */
   const refresh = useCallback(async (): Promise<AuthState> => {
     try {
-      const response = await fetch('/gencon/whoami', { credentials: 'same-origin' });
+      const base = accountBase();
+      if (base === null) return { status: 'out' };
+      const response = await fetch(`${base}/gencon/whoami`, { credentials: 'same-origin' });
       const body = await response.json();
       const next: AuthState = body.ok
         ? {
@@ -87,7 +116,11 @@ export function useGenConAccount() {
     async (username: string, password: string): Promise<AuthState> => {
       setState({ status: 'busy' });
       try {
-        const response = await fetch('/gencon/login', {
+        const base = accountBase();
+        if (base === null) {
+          return { status: 'broken', says: 'Signing in is not available in the app; use the website.' };
+        }
+        const response = await fetch(`${base}/gencon/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
@@ -115,7 +148,10 @@ export function useGenConAccount() {
     // possible for a bad network to keep somebody signed in.
     setState({ status: 'out' });
     try {
-      await fetch('/gencon/logout', { method: 'POST', credentials: 'same-origin' });
+      const base = accountBase();
+      if (base !== null) {
+        await fetch(`${base}/gencon/logout`, { method: 'POST', credentials: 'same-origin' });
+      }
     } catch {
       /* The cookie is what matters, and the next reload will re-ask. */
     }

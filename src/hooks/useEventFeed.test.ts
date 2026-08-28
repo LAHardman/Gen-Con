@@ -97,3 +97,58 @@ describe('when the host it came from is gone', () => {
     expect(result.current.feed?.events).toHaveLength(9);
   });
 });
+
+describe('a schedule the device imported for itself', () => {
+  /** Put a feed in the store the way `runDeviceImport` would have. */
+  const stored = (fetchedAt: string, events = 5) => {
+    const held = new Map<string, string>([
+      ['events.json', JSON.stringify({ ...feed(events), source: { name: 'own', url: 'y', fetchedAt } })],
+    ]);
+    vi.stubGlobal('caches', {
+      open: async () => ({
+        match: async (key: string) => {
+          const body = held.get(key);
+          return body ? new Response(body, { headers: { 'content-type': 'application/json' } }) : undefined;
+        },
+        put: async () => undefined,
+      }),
+    });
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('wins when it is newer than what the host served', async () => {
+    // The state this exists for: hosting stopped answering months ago, the
+    // app imported the catalogue itself, and the file it shipped with is
+    // the older of the two.
+    stored('2026-08-01T00:00:00Z', 5);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ok({ ...feed(3), source: { name: 'host', url: 'y', fetchedAt: '2026-01-01T00:00:00Z' } })),
+    );
+    const { result } = renderHook(() => useEventFeed());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.index?.total).toBe(5);
+  });
+
+  it('gives way when the host has something newer, rather than living on itself for ever', async () => {
+    stored('2026-01-01T00:00:00Z', 5);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ok({ ...feed(3), source: { name: 'host', url: 'y', fetchedAt: '2026-08-01T00:00:00Z' } })),
+    );
+    const { result } = renderHook(() => useEventFeed());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.index?.total).toBe(3);
+  });
+
+  it('answers alone when every host is gone', async () => {
+    // No deploy, no mirror, nothing. A copy holding its own import must show
+    // that schedule rather than an error over the top of it.
+    stored('2026-08-01T00:00:00Z', 5);
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('gone'))));
+    const { result } = renderHook(() => useEventFeed());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.index?.total).toBe(5);
+  });
+});

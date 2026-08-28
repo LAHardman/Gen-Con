@@ -61,7 +61,12 @@ const indexOf = (sessions: ConEvent[], roomId = 'hall-a'): EventSearchIndex => (
 const opened = vi.fn();
 const openedEntry = vi.fn();
 
-const show = (plan: Plan, events: EventSearchIndex = indexOf([]), nowMs = SATURDAY_AFTERNOON) =>
+const show = (
+  plan: Plan,
+  events: EventSearchIndex = indexOf([]),
+  nowMs = SATURDAY_AFTERNOON,
+  feedVintage: number | null = null,
+) =>
   render(
     <PlanView
       plan={plan}
@@ -70,6 +75,7 @@ const show = (plan: Plan, events: EventSearchIndex = indexOf([]), nowMs = SATURD
       choices={filterChoices(events.entries.map((entry) => entry.event))}
       offsetMinutes={-240}
       nowMs={nowMs}
+      feedVintage={feedVintage}
       onOpenEvent={opened}
       onOpenEntry={openedEntry}
     />,
@@ -452,5 +458,21 @@ describe('an empty plan', () => {
     // No ruler at all with nothing to rule: one empty state rather than four.
     expect(document.querySelector('.plan__grid')).toBeNull();
     expect(screen.getByText(/nothing planned yet/i)).toBeTruthy();
+  });
+});
+
+describe('an old catalogue', () => {
+  // A copy that can no longer fetch keeps its last schedule for ever, and
+  // every autumn the newest catalogue is last year's. Both are worth showing;
+  // neither is worth showing unlabelled — the schedule page is where somebody
+  // commits a year's plans around these sessions.
+  it('says which year the sessions are from', () => {
+    show(planOf([morning]), indexOf([]), SATURDAY_AFTERNOON, 2026);
+    expect(document.querySelector('.plan__vintage')!.textContent).toContain('2026 catalogue');
+  });
+
+  it('says nothing when the catalogue is the year being planned', () => {
+    show(planOf([morning]));
+    expect(document.querySelector('.plan__vintage')).toBeNull();
   });
 });

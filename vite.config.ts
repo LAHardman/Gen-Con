@@ -58,7 +58,7 @@ export default defineConfig({
           if (id.includes('node_modules/react')) return 'react';
           if (/src\/data\/(route|pavements|walkable|vertical)\.ts/.test(id)) return 'routing';
           if (/src\/data\/(venue-plan|plan-geometry)\.ts/.test(id)) return 'plans';
-          if (/src\/data\/exhibitors\.ts/.test(id)) return 'exhibitors';
+          if (/src\/data\/exhibitors\.(ts|json)/.test(id)) return 'exhibitors';
           // 839 street addresses, and 80 KB of them. They are what makes an
           // event at a steakhouse walkable, and nothing on the first screen
           // needs one — so they load beside the campus rather than in front

@@ -31,10 +31,23 @@
  * thing that stops being true when a convention gets bigger.
  *
  * About 1,100 requests, against 27,000.
+ *
+ * THE PAGING AND THE MAPPING NOW LIVE IN `src/lib/import-events.ts`, because
+ * a native shell runs the same import on the phone when this project's own
+ * hosting can no longer answer, and two importers that agree until the day
+ * they quietly don't is the failure this whole file is careful about. Node
+ * strips the types, Vite compiles them; both callers really do run those
+ * lines. What stays here is what only a build machine does: the CLI, the
+ * column packing, and writing the file.
  */
 
 import { mkdir, writeFile, stat } from 'node:fs/promises';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  AGENT,
+  PAUSE_MS as DEFAULT_PAUSE,
+  importCatalogue,
+} from '../src/lib/import-events.ts';
+import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,84 +58,12 @@ const SOURCE = {
   url: 'https://www.gencon.com/events',
 };
 
-const API = 'https://www.gencon.com/api/event_search';
-/** Their server. Node's default user-agent is refused. */
-const AGENT = 'gen-con-trip/0.1 (personal trip planner; contact via repository)';
-/** Between requests. Eleven hundred of them, so be a good guest. */
-const PAUSE = 150;
-/** What the endpoint returns per page, whatever `per_page` is set to. */
-const PER_PAGE = 25;
-/** Elasticsearch's default result window. Every slice has to fit inside it. */
-const WINDOW = 10_000;
-
 const args = process.argv.slice(2);
 const value = (name, fallback) => {
   const at = args.indexOf(`--${name}`);
   return at === -1 ? fallback : args[at + 1];
 };
-const PAUSE_MS = Number(value('delay', PAUSE));
-
-const wait = (ms) => new Promise((done) => setTimeout(done, ms));
-
-async function get(query, tries = 4) {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      const response = await fetch(`${API}?${query}`, { headers: { 'User-Agent': AGENT } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      if (attempt >= tries) throw error;
-      // Backing off rather than hammering: a run of eleven hundred requests
-      // will meet a blip, and a blip is not a reason to lose the whole pull.
-      await wait(500 * 2 ** attempt);
-    }
-  }
-}
-
-/** The days the catalogue is spread over, from the source rather than a guess. */
-async function days() {
-  const response = await fetch(`${API}/meta_days`, { headers: { 'User-Agent': AGENT } });
-  if (!response.ok) throw new Error(`could not read the convention's days: HTTP ${response.status}`);
-  const named = await response.json();
-  return Object.keys(named).map(Number);
-}
-
-/**
- * Gen Con's record for one event, as this app's `ConEvent`.
- *
- * Undefined rather than empty for anything missing, because the feed is a file
- * a phone downloads before it can show a single session and `"tableText":""`
- * 27,000 times is not free.
- */
-export function shape(source) {
-  const blank = (v) => (v === undefined || v === null || v === '' ? undefined : v);
-  const number = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
-  // Gen Con sends `2026-07-29T09:00:00.000-04:00`. The milliseconds are always
-  // zero, they are 220 KB across the catalogue, and this is a file a phone
-  // downloads before it can show a single session.
-  const when = (v) => (typeof v === 'string' ? v.replace(/\.000(?=[-+Z])/, '') : undefined);
-  return {
-    // The printed code, which is what the old feed used and what `eventUrl`
-    // takes the event's number back off the end of.
-    id: blank(source.game_code) ?? String(source.id),
-    title: source.title,
-    // `event_type` arrives as "BGM - Board Game", and the app wants the code.
-    type: blank(String(source.event_type ?? '').split(' - ')[0]),
-    gameSystem: blank(source.game_system),
-    locationText: blank(source.location) ?? '',
-    roomText: blank(source.room_name),
-    tableText: blank(String(source.table_number ?? '')),
-    start: when(source.start_date),
-    end: when(blank(source.end_date)),
-    durationMinutes: number(source.event_duration) ? number(source.event_duration) * 60 : undefined,
-    cost: number(source.event_cost),
-    ticketsAvailable: number(source.tickets_available),
-    ageRequirement: blank(source.age_requirement_short),
-  };
-}
+const PAUSE_MS = Number(value('delay', DEFAULT_PAUSE));
 
 /**
  * The feed, as columns with the repetition taken out.
@@ -185,61 +126,40 @@ function pack(events, source, roomOf) {
 
 async function main() {
   const started = Date.now();
-  const whole = await get('page=1');
-  const expected = whole.total_count;
-  if (!expected) throw new Error('the catalogue reported no events at all');
+  let said = 0;
+
+  // The shared importer does the paging, the shaping and the arithmetic that
+  // proves the day slices still partition the catalogue. Everything it can
+  // refuse, it refuses by throwing — a short schedule that looks complete is
+  // the one answer nobody could detect.
+  const { events: usable, expected } = await importCatalogue({
+    fetchJson: async (url) => {
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          const response = await fetch(url, { headers: { 'User-Agent': AGENT } });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return { status: response.status, body: await response.json() };
+        } catch (error) {
+          if (attempt >= 4) throw error;
+          // Backing off rather than hammering: a run of eleven hundred requests
+          // will meet a blip, and a blip is not a reason to lose the whole pull.
+          await new Promise((done) => setTimeout(done, 500 * 2 ** attempt));
+        }
+      }
+    },
+    pauseMs: PAUSE_MS,
+    // Every thousand *crossed*, not every thousand landed on exactly: an
+    // event skipped as a duplicate shifts the count off the round numbers
+    // for good, and a progress line that then goes quiet for six minutes
+    // looks exactly like a run that has hung.
+    onProgress: ({ got, expected: all, day }) => {
+      if (got < said + 1000) return;
+      said = got - (got % 1000);
+      console.log(`  day ${day}: ${said.toLocaleString('en')} of ${all.toLocaleString('en')}`);
+    },
+  });
   console.log(`the catalogue reports ${expected.toLocaleString('en')} events`);
 
-  const spread = await days();
-  console.log(`spread over ${spread.length} days: ${spread.join(', ')}`);
-
-  const events = [];
-  const seen = new Set();
-  let counted = 0;
-  for (const day of spread) {
-    const first = await get(`day[]=${day}&page=1`);
-    const total = first.total_count;
-    counted += total;
-    if (total >= WINDOW) {
-      throw new Error(
-        `day ${day} has ${total} events, which is at or past the ${WINDOW} the endpoint will page through. `
-        + 'Slicing by day alone is no longer enough — partition further, by event type as well.',
-      );
-    }
-    const pages = Math.ceil(total / PER_PAGE);
-    for (let page = 1; page <= pages; page += 1) {
-      const body = page === 1 ? first : await get(`day[]=${day}&page=${page}`);
-      for (const record of body.records ?? []) {
-        const event = shape(record._source);
-        // A day boundary is a start time, so nothing should appear twice — but
-        // this is cheap and the alternative is silently double-counting.
-        if (seen.has(event.id)) continue;
-        seen.add(event.id);
-        events.push(event);
-      }
-      if (page > 1) await wait(PAUSE_MS);
-      if (page % 40 === 0) console.log(`  day ${day}: ${page}/${pages} pages`);
-    }
-    console.log(`  day ${day}: ${total.toLocaleString('en')} events`);
-  }
-
-  // The identity the whole method rests on. If the slices ever stop adding up
-  // to the whole, this is quietly returning a partial schedule, and a partial
-  // schedule looks exactly like a complete one.
-  if (counted !== expected) {
-    throw new Error(
-      `the days add up to ${counted} but the catalogue reports ${expected}. `
-      + 'The day slices no longer partition it, so this pull would be missing events.',
-    );
-  }
-
-  const usable = events.filter((event) => event && event.title && event.start);
-  if (!usable.length) throw new Error('no event had both a title and a start time');
-  if (usable.length < expected * 0.98) {
-    throw new Error(`only ${usable.length} of ${expected} events came back usable; refusing to write a short schedule`);
-  }
-
-  usable.sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
   // Which room each event is in, decided here instead of 27,467 times on a
   // phone. The matcher is `events.ts`'s own and the room table is `venues.ts`'s
   // own, both from this same checkout — so the answer cannot drift from what
@@ -259,11 +179,17 @@ async function main() {
   );
 }
 
-// Only when run, not when imported for its `shape` — which is the one piece
-// here worth testing and the one piece that has no network in it.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
-    console.error(error.message);
-    process.exitCode = 1;
-  });
-}
+// Run, unconditionally.
+//
+// There used to be a guard here — "only when invoked directly, not when
+// imported for its `shape`" — and it could not survive the move to
+// `vite-node`, which strips the script path out of `process.argv`
+// altogether. A guard that silently answers false is the worst shape a bug
+// can take: this fetched the whole catalogue and then exited 0 having
+// written nothing. The mapping is tested where it now lives,
+// `src/lib/import-events.ts`, so nothing needs to import this file any more
+// and there is nothing left to guard against.
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

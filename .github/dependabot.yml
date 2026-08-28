@@ -1,0 +1,24 @@
+# The slow rot this covers: action pins and npm dependencies age quietly and
+# break loudly, always at a bad time — usually the first CI run after months
+# of nothing, which in this repository is exactly when the data refreshes
+# matter. Monthly, grouped, so it is one small PR to read rather than a
+# drizzle of twelve.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]

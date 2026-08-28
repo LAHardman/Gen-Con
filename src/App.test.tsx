@@ -13,7 +13,7 @@
  * keeps these about the map rather than about 27,000 events.
  */
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
@@ -62,6 +62,32 @@ describe('starting up', () => {
     expect(document.querySelectorAll('path.map__venue')).toHaveLength(16);
     expect(openRooms()).toHaveLength(0);
     expect(floors()).toHaveLength(0);
+  });
+});
+
+describe('an old schedule', () => {
+  it('is shown, and the header says which year it is', async () => {
+    // A copy that can no longer fetch keeps its last schedule for ever, and
+    // last year's sessions labelled beat an empty map — but only labelled:
+    // unlabelled they are this year's sessions, at times that are wrong.
+    const year = new Date().getFullYear() - 1;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify({
+          source: { name: 'test', url: 'x', fetchedAt: `${year}-08-01T00:00:00Z` },
+          year,
+          events: [
+            { id: 'BGM1', title: 'A game', locationText: 'ICC', start: `${year}-07-31T10:00:00-04:00` },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+    render(<App />);
+    await waitFor(() =>
+      expect(document.querySelector('.app__brand p')!.textContent).toContain(`${year} schedule`),
+    );
   });
 });
 

@@ -2614,6 +2614,15 @@ body {
   font-size: 13px;
 }
 
+/* An old catalogue saying so. Muted rather than alarmed: it is a normal state
+   every autumn, and the permanent state of a copy that can no longer fetch —
+   in both, last year's schedule labelled beats no schedule at all. */
+.plan__vintage {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .plan__empty--column {
   margin: 8px 0 0;
   font-size: 12px;
@@ -4622,4 +4631,23 @@ body {
   font-size: 12px;
   font-style: italic;
   font-weight: 400;
+}
+
+/* Asking for the direct import, beside the notice that says why you might.
+   A link rather than a button proper: it sits inside a sentence, and it is
+   the sentence that explains it. */
+.plan__import {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.plan__import:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  text-decoration: none;
 }

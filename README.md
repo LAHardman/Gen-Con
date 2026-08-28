@@ -89,6 +89,16 @@ invalidates 15 KB. On a *first* visit the split buys nothing (every chunk is
 preloaded, and eight files cost marginally more than one); it is the second
 visit it is for.
 
+**And it ages as gracefully as it can, for the copy that never updates
+again.** Stale-but-labelled beats blank: an old schedule still draws, with
+the header and the schedule page saying which year it is; the key dates are
+derived from the convention's own rule, so they answer for any year without
+ever being fetched; and if a basemap provider retires a tileset out from
+under a frozen copy, the map walks down a built-in rescue ladder — ending on
+OpenStreetMap's own raster, a different host entirely — rather than drawing
+rooms on a void. The retreat refuses to trigger offline or after any tile
+has loaded, because there the cache is the best map the phone has.
+
 Nothing is precached by name — the built filenames carry a content hash, so a
 list would be wrong on the next deploy. Instead the page tells the worker what
 it just loaded. That hand-over is not a nicety: a worker does not control the
@@ -129,10 +139,52 @@ want to see it on a real device.
 | `npm run fetch:events -- --limit 500` | Stops after 500 event pages; the rest resume next run |
 | `npm run fetch:events -- --no-details` | Catalogue only — fast, but events get no location |
 | `npm run events:sample` | Writes an obviously-fake schedule for offline development |
+| `npm run season:check` | Probes everything that can go stale — feeds, pages, tiles, deadlines — and writes `docs/season-report.md` with fixes; `-- --fix` lets probes run their own repairs |
+| `npm run sync` | Builds and copies the result into the iOS and Android shells |
+| `npm run open:android` / `open:ios` | Opens the native project in Android Studio or Xcode |
 
 `dist/` is fully self-contained and uses relative paths, so it also works
-dropped on any static host, or bundled into a native shell with Capacitor if it
-ever needs app-store distribution.
+dropped on any static host — and that is exactly how the store apps are built.
+
+### The store apps
+
+`ios/` and `android/` are [Capacitor](https://capacitorjs.com) shells around
+the same `dist/`: one codebase, three outputs, no second implementation of
+anything. `npm run sync` builds and copies it in; `npm run open:android` and
+`npm run open:ios` open the native projects. Building an actual binary needs
+the platform's own toolchain — Android Studio, or Xcode on a Mac — and
+`.github/workflows/release.yml` does both in CI, on a manual run, so the
+release that should be rare is still cheap when an OS deprecation forces one.
+Run it once with **upload off**: it builds both apps and hands them back as
+artifacts without touching either store, which is how you find out the
+signing material is right without publishing anything.
+
+**What a shell adds is deliberately small.** Everything visible — the map,
+the search, the router, the schedule, the hotels — is the same code the
+website runs. Three things genuinely differ, and each lives behind
+`src/platform/` and nowhere else:
+
+- **Native requests have no CORS.** gencon.com sends no
+  `Access-Control-Allow-Origin`, which is why a browser can never read it and
+  why the schedule is imported by a build machine. A native request leaves
+  from native code, where that does not apply — so an installed app can page
+  Gen Con's own catalogue itself. That is the insurance behind *this
+  repository going quiet for a year*, and it is the last thing tried, not the
+  first: one published file against about 1,100 polite requests. The rule for
+  when it may run at all is `shouldDeviceImport`, and it is tested case by
+  case, because both wrong answers are invisible from here — too eager is a
+  swarm on somebody else's server, too shy is insurance that never fires.
+- **Storage the system does not evict.** A browser may reclaim an origin's
+  caches under disk pressure. An installed copy's last good data must outlive
+  a low-disk morning, so on native it is a file.
+- **Signing in gets simpler, not harder.** The Cloudflare Worker exists only
+  because of three browser walls (CORS, `HttpOnly`, `SameSite`). A native
+  shell has none of them, so it can sign in directly and the Worker stays a
+  web-only concern.
+
+A first launch works with **no network at all** — the schedule and the data
+pack are both bundled — which is more than the website's first visit can
+promise.
 
 ### Tests
 
@@ -330,7 +382,7 @@ ties break on the shorter name. Arrow keys move, Enter picks, Escape closes.
 
 `npm run fetch:exhibitors` reads Gen Con's own exhibitor browser —
 `https://www.gencon.com/api/v1/exhibitor_profiles`, public and paginated — into
-`src/data/exhibitors.ts`: **845 locations, 779 exhibitors, 793 of them
+`src/data/exhibitors.json` (read by `exhibitors.ts`): **845 locations, 779 exhibitors, 793 of them
 numbered**. One row per *place* rather than per exhibitor, because a publisher
 with four booths, a demo hall and a meeting room is six places somebody might
 be looking for.
@@ -753,7 +805,7 @@ look alike:
 The **Gen Con block** tab carries real published rates. `gencon.com/gen-con-indy/hotelmap`
 lists the whole block — 74 hotels across five regions, each with its nightly
 rate, its distance to the convention centre, and whether a skywalk reaches it —
-and `scripts/fetch-block-rates.mjs` reads it into `src/data/partners.ts`.
+and `scripts/fetch-block-rates.mjs` reads it into `src/data/partners.json` (read by `partners.ts`).
 
 Gen Con's own two caveats travel with every figure: they are **starting prices**
 that "vary by room type and occupancy", and they are **before** local sales and
@@ -2091,7 +2143,7 @@ src/
     events.ts        Event types, venue/room matching, schedule helpers
     event-kinds.ts   Gen Con's nineteen type codes, read off its own API
     amenities.ts     Restrooms, from the plans that draw them
-    exhibitors.ts    Every stand, its booth, its tags and its site (generated)
+    exhibitors.json  Every stand, its booth, its tags and its site (generated)
     booths.ts        Booth numbers to halls, and the aisle grid
     food.ts          Trucks and restaurants as one list, and what they sell
     hours.ts         When somewhere is open, including reading OSM's own format

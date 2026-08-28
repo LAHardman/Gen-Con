@@ -14,6 +14,8 @@
  * map that already has them is also what keeps every name drawn exactly once.
  */
 
+import { CONFIG } from './config';
+
 export interface Basemap {
   id: string;
   label: string;
@@ -34,7 +36,7 @@ const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION}, &copy; <a href="https://carto.com
 
 export type BasemapId = 'dark' | 'light' | 'streets';
 
-export const BASEMAPS: Record<BasemapId, Basemap> = {
+const COMPILED: Record<BasemapId, Basemap> = {
   dark: {
     id: 'dark',
     label: 'Dark',
@@ -64,4 +66,93 @@ export const BASEMAPS: Record<BasemapId, Basemap> = {
   },
 };
 
+/**
+ * The compiled styles, with any overrides the pack's config carries laid on
+ * top. The override channel exists for exactly one story: a provider
+ * retires a style out from under installed copies, and the repair is a
+ * config edit and a deploy rather than an app release. With the config
+ * empty — the ordinary case — this is `COMPILED`, byte for byte.
+ */
+export const BASEMAPS: Record<BasemapId, Basemap> = Object.fromEntries(
+  (Object.keys(COMPILED) as BasemapId[]).map((id) => [
+    id,
+    { ...COMPILED[id], ...CONFIG.basemaps[id] },
+  ]),
+) as Record<BasemapId, Basemap>;
+
 export const BASEMAP_IDS = Object.keys(BASEMAPS) as BasemapId[];
+
+/* ------------------------------------------------------------------ rescue */
+
+/**
+ * Where the map goes when a tileset dies under an app nobody can update.
+ *
+ * A copy installed on a phone keeps these URLs for ever, and a provider
+ * retiring a style would otherwise leave rooms drawn on a void — the one
+ * hard-coded thing that could quietly end every frozen copy at once. So the
+ * map carries its own line of retreat: the same provider's plain styles
+ * first (labels baked into the tile — the split-label trick is lost, but the
+ * map survives), then OpenStreetMap's own raster, which is the tileset most
+ * likely to outlive everything else here.
+ *
+ * `labelsUrl` is null throughout because every rescue bakes its names in;
+ * the map skips its label layer rather than fetching one that isn't there.
+ */
+export interface RescueBasemap {
+  id: string;
+  url: string;
+  labelsUrl: null;
+  attribution: string;
+  maxNativeZoom: number;
+  subdomains?: string;
+}
+
+const COMPILED_RESCUES: readonly RescueBasemap[] = [
+  {
+    id: 'rescue-voyager',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    labelsUrl: null,
+    attribution: CARTO_ATTRIBUTION,
+    maxNativeZoom: 20,
+  },
+  {
+    id: 'rescue-osm',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    labelsUrl: null,
+    attribution: OSM_ATTRIBUTION,
+    maxNativeZoom: 19,
+  },
+];
+
+/**
+ * The ladder in force: the pack's replacement when its config carries one,
+ * else the compiled rungs. A replacement is all-or-nothing — the ladder is
+ * an ordered argument about where to retreat, and splicing two arguments
+ * makes neither.
+ */
+export const BASEMAP_RESCUES: readonly RescueBasemap[] =
+  CONFIG.rescues?.map((rescue, at) => ({ id: `rescue-config-${at}`, labelsUrl: null, ...rescue })) ??
+  COMPILED_RESCUES;
+
+/**
+ * Whether a run of tile failures means the tileset is dead, and where to go.
+ *
+ * The judgement worth being careful about: failures alone prove nothing. A
+ * phone in a concrete hall fails every fetch, and swapping tilesets there
+ * would throw away the cache that is the only thing still drawing the map.
+ * So a retreat needs all three — the browser believes it is online, not one
+ * tile of this layer has ever loaded, and the failures have piled up past
+ * doubt. Anything less returns `current` unchanged, and so does running out
+ * of rescues: a broken layer is still a map frame, and the cache may yet
+ * answer.
+ */
+export function nextRescue(
+  current: number | null,
+  anyLoaded: boolean,
+  failures: number,
+  online: boolean,
+): number | null {
+  if (anyLoaded || !online || failures < 6) return current;
+  const next = current === null ? 0 : current + 1;
+  return next < BASEMAP_RESCUES.length ? next : current;
+}
