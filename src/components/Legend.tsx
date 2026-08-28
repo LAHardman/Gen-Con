@@ -43,6 +43,21 @@ export function Legend({ showAmenities, onToggleAmenities }: Props) {
               </li>
             );
           })}
+          {/*
+            * The two conventions that are about how much the map knows, rather
+            * than about what a room is for. Without them the inside of a hotel
+            * is a set of boxes with a lighter box running through it, and no
+            * way to tell that one of those is measured and the others are
+            * placed — which is exactly what made a floor plan hard to read.
+            */}
+          <li className="legend__hall">
+            <span className="legend__hall-mark" aria-hidden="true" />
+            Hallway — traced from the building&rsquo;s plan
+          </li>
+          <li className="legend__approx">
+            <span className="legend__approx-mark" aria-hidden="true" />
+            Room drawn about here; its outline is not on the plan
+          </li>
           <li className="legend__link">
             <span className="legend__link-mark" aria-hidden="true" />
             Skywalk or tunnel

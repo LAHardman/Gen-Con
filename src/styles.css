@@ -272,12 +272,25 @@ body {
  * the route and the rooms are what it passes. So it reads as open floor, a step
  * lighter and warmer than the fabric around it, with an edge you can follow.
  */
+/*
+ * The hallway, drawn as the thing you walk on.
+ *
+ * It is now painted OVER the rooms rather than under them (see the
+ * `circulation` pane in MapView), because most hotel rooms are approximate
+ * rectangles and the corridor is traced off the building's own plan — where
+ * an estimate and a measurement overlap, the measurement should be the one
+ * you can see. That puts a burden on this rule it did not carry before: it
+ * has to read as a route rather than as one more filled box, so it is
+ * lighter than any room, and its edge is the brightest line inside a
+ * building.
+ */
 .map__plan--circulation {
-  fill: #46506f;
-  fill-opacity: 0.6;
-  stroke: #9aa5cb;
-  stroke-width: 1.6;
-  stroke-opacity: 0.95;
+  fill: #7c88b4;
+  fill-opacity: 0.34;
+  stroke: #c3cbe8;
+  stroke-width: 1.8;
+  stroke-opacity: 0.9;
+  stroke-linejoin: round;
 }
 
 .map__plan--service {
@@ -351,6 +364,31 @@ body {
 
 .map__room:hover {
   fill-opacity: 0.58;
+}
+
+/*
+ * A room whose outline is the venue's schematic grid rather than a tracing of
+ * its plan — most rooms in most hotels, because Gen Con's sheets give up their
+ * hallways by colour more readily than their rooms.
+ *
+ * Drawn as a sketch on purpose: a dashed edge and a thinner fill. The box is
+ * true about which floor of which building the room is on and roughly where
+ * along it; it is not true about the room's shape, and where it crosses a
+ * corridor that *was* traced, the corridor is the one that is right. A dash is
+ * the oldest convention there is for "about here", and it costs nothing to
+ * read.
+ */
+.map__room--approx {
+  fill-opacity: 0.22;
+  stroke: #8f9ac2;
+  stroke-opacity: 0.55;
+  stroke-width: 1.4;
+  stroke-dasharray: 6 4;
+}
+
+.map__room--approx:hover {
+  fill-opacity: 0.4;
+  stroke-opacity: 0.9;
 }
 
 .map__room--selected {
@@ -822,7 +860,14 @@ body {
 
 /* Phone layout: the dialog becomes a bottom sheet. */
 @media (max-width: 560px) {
-  .app__basemaps {
+  /*
+   * Scoped to the header. The switch does not fit beside the search box on a
+   * phone, so the header drops it — but for a while that was the whole of it,
+   * and a phone simply had no way to change the map's style at all. The same
+   * control is rendered inside the menu drawer, which is where a phone's
+   * settings belong, and that copy must not be caught by this rule.
+   */
+  .app__tools .app__basemaps {
     display: none;
   }
 
@@ -854,7 +899,18 @@ body {
    read as "not this floor" and stop swallowing clicks meant for the floor plan
    underneath. */
 .map__room--other-floor {
-  opacity: 0.12;
+  /*
+   * Outline only. Filled at 12% these still read as rooms — a building full
+   * of pale boxes stacked over the floor you are actually on, which is most
+   * of what made the inside of one hard to parse. A thin edge says "there is
+   * another storey here" without drawing a second floor plan on top of the
+   * first.
+   */
+  fill-opacity: 0 !important;
+  stroke: #6f7ba6 !important;
+  stroke-opacity: 0.3 !important;
+  stroke-width: 1 !important;
+  stroke-dasharray: 3 5;
   pointer-events: none;
 }
 
@@ -1250,6 +1306,26 @@ body {
 }
 
 /* The same line the map draws, at legend size. */
+/* The corridor swatch: the same fill and edge the map draws it with. */
+.legend__hall-mark {
+  width: 16px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 1.5px solid #c3cbe8;
+  border-radius: 2px;
+  background: rgba(124, 136, 180, 0.34);
+}
+
+/* And the dashed edge that says a room is placed rather than traced. */
+.legend__approx-mark {
+  width: 16px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 1.5px dashed #8f9ac2;
+  border-radius: 2px;
+  background: rgba(143, 154, 194, 0.22);
+}
+
 .legend__link-mark {
   width: 16px;
   height: 5px;
@@ -1884,6 +1960,41 @@ body {
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/*
+ * Settings under the pages: what the header cannot fit on a phone.
+ *
+ * Separated by a rule rather than a heading alone, because a drawer whose
+ * items are all buttons needs to say where "go somewhere" stops and "change
+ * something" starts.
+ */
+.menu__extra {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.menu__extra-title {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Full width in the drawer, where there is room and a thumb to hit it with. */
+.menu__extra .app__basemaps {
+  display: flex;
+  width: 100%;
+}
+
+.menu__extra .app__basemap {
+  flex: 1;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 
 /* -------------------------------------------------------------- key dates */
 

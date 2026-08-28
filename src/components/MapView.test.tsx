@@ -125,6 +125,65 @@ describe('what is on the map', () => {
   });
 });
 
+describe('telling a measured room from a placed one', () => {
+  /*
+   * The bug these hold, which shipped and was reported: inside a hotel the
+   * map was a heap of overlapping boxes with no readable hallway. Two causes,
+   * one root. Most hotel rooms have no traced outline, so they are drawn as
+   * rectangles off the venue's schematic grid — and those approximations were
+   * painted over the corridor, which *is* traced off the building's own plan.
+   * Estimated geometry was hiding measured geometry, and nothing on screen
+   * said which was which.
+   */
+  const corridors = () => [
+    ...(document.querySelector('.leaflet-circulation-pane')?.querySelectorAll('path') ?? []),
+  ];
+
+  const marked = (id: string) =>
+    (document.querySelector(`path.map__room[data-room="${id}"]`) ?? null)?.classList.contains(
+      'map__room--approx',
+    );
+
+  it('marks a room whose outline is a guess, and leaves a traced one unmarked', () => {
+    /*
+     * Two named rooms, one of each kind, rather than a count — a count moves
+     * whenever a plan is traced and would have to be edited to stay true,
+     * which is how an assertion stops meaning anything.
+     */
+    const { rerender } = setup({ openVenueId: 'jw-marriott' });
+    // The JW gives up its hallways to the colour reader but not its rooms, so
+    // its ballroom is a rectangle placed on the venue's grid.
+    expect(marked('jw-white-river-ghij')).toBe(true);
+
+    // The convention centre's plans are vector PDFs and the Sagamore is traced
+    // out of one, so it must not claim to be a guess.
+    rerender({ openVenueId: 'icc', levels: { icc: 'Level 2' } });
+    expect(marked('sagamore-ballroom')).toBe(false);
+  });
+
+  it('puts the corridor in its own pane, above the rooms drawn over it', () => {
+    /*
+     * The whole fix, as a fact about the DOM: a pane at a higher z-index than
+     * the overlay pane the rooms live in. Asserted on the panes rather than on
+     * a screenshot, because a stacking order is exactly the kind of thing that
+     * looks fine until somebody moves one line.
+     */
+    setup({ openVenueId: 'jw-marriott' });
+    expect(corridors().length).toBeGreaterThan(0);
+    const pane = document.querySelector('.leaflet-circulation-pane') as HTMLElement;
+    const overlay = document.querySelector('.leaflet-overlay-pane') as HTMLElement;
+    expect(Number(pane.style.zIndex)).toBeGreaterThan(Number(overlay.style.zIndex) || 400);
+    // And it is not clickable: a hallway is something to look at, and taking
+    // taps meant for the room underneath would be worse than not drawing it.
+    expect(pane.style.pointerEvents).toBe('none');
+  });
+
+  it('draws no corridor for a building nobody has opened', () => {
+    setup();
+    expect(corridors()).toHaveLength(0);
+  });
+});
+
 describe('which skywalks belong to the floor you are on', () => {
   it('draws them all with nothing open, and only the right ones with something open', () => {
     // The rule that is invisible unless you happen to open that building on
