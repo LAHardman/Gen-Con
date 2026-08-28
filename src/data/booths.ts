@@ -35,6 +35,7 @@
  */
 
 import { ROOMS_BY_ID } from './venues';
+import { fromPack } from './pack-runtime';
 
 /**
  * The walls that run between two aisles, as the booth numbers either side.
@@ -44,9 +45,19 @@ import { ROOMS_BY_ID } from './venues';
  * H" is a sentence somebody can agree or disagree with, where "hall-h is
  * 1400–2299" is a derived fact with a fencepost in it.
  */
-export const HALL_DIVIDES: ReadonlyArray<{
-  /** The last booth number on the low side of the wall. */
-  readonly under: number;
+const COMPILED_HALL_DIVIDES: ReadonlyArray<{
+  /**
+   * The last booth number on the low side of the wall, or null for the top
+   * of the grid, where there is no wall above.
+   *
+   * Null rather than `Infinity`, which is not a thing JSON can carry:
+   * serialised it becomes `null` anyway, and read back as a *number* it
+   * fails every `<=` against it — so every booth above the last wall would
+   * quietly have no hall at all. Since the value has to survive the pack,
+   * it is written as the thing that survives, and the comparison below
+   * spells out what it means.
+   */
+  readonly under: number | null;
   /** The hall below it, or null where another wall decides it. */
   readonly hall: string | null;
 }> = [
@@ -59,8 +70,8 @@ export const HALL_DIVIDES: ReadonlyArray<{
   // 2300–2723. "Between 2727 and 2723 is the divide between hall G and hall F"
   // — the only *between-aisle* wall that falls inside an aisle's numbering.
   { under: 2723, hall: 'hall-g' },
-  // 2727 and up.
-  { under: Infinity, hall: 'hall-f' },
+  // 2727 and up. No wall above it; see `under`.
+  { under: null, hall: 'hall-f' },
 ];
 
 /**
@@ -82,7 +93,7 @@ export const HALL_DIVIDES: ReadonlyArray<{
  * be wrong about them: a stand on the wall is in both halls, and walking to
  * either finds it.
  */
-export const ACROSS_THE_AISLES = {
+const COMPILED_ACROSS_THE_AISLES = {
   /** Booths under this are in the stretch the cross wall divides. */
   within: 600,
   /** Positions from here up are on the far side. */
@@ -108,7 +119,8 @@ export function hallForBooth(booth: string | number | null | undefined): string 
     return named(along >= ACROSS_THE_AISLES.at ? ACROSS_THE_AISLES.beyond : ACROSS_THE_AISLES.before);
   }
   for (const { under, hall } of HALL_DIVIDES) {
-    if (number <= under) return named(hall);
+    // A null bound is the top of the grid: nothing is above it.
+    if (under === null || number <= under) return named(hall);
   }
   return null;
 }
@@ -125,3 +137,18 @@ export function boothIn(text: string | undefined): string | null {
   const found = /\bbooths?\s*#?\s*([0-9]{3,4})\b/i.exec(text);
   return found ? found[1] : null;
 }
+
+/**
+ * The pack's copy of this table where one is held, else what was built.
+ *
+ * Laid over per constant, so a refresh can carry one of these and
+ * leave the rest alone, and a key that arrives the wrong shape leaves
+ * the compiled value standing. See `fromPack`.
+ */
+const PACKED = fromPack('booths', {
+  HALL_DIVIDES: COMPILED_HALL_DIVIDES,
+  ACROSS_THE_AISLES: COMPILED_ACROSS_THE_AISLES,
+});
+
+export const HALL_DIVIDES = PACKED.HALL_DIVIDES;
+export const ACROSS_THE_AISLES = PACKED.ACROSS_THE_AISLES;

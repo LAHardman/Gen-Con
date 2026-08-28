@@ -1,4 +1,6 @@
-/**
+
+
+import { fromPack } from './pack-runtime';/**
  * Floor-plan geometry, in real coordinates. GENERATED — do not edit.
  *
  * Run `node scripts/plan-to-geometry.mjs` to rebuild this from the plans in
@@ -163,7 +165,7 @@ const RINGS: PlanRing[] = [
  * the shape the architect drew. Rooms sharing one shape, as a block of meeting
  * rooms divided by airwalls does, resolve to the same ring.
  */
-export const PLAN_SHAPES: Record<string, PlanRing> = {
+const COMPILED_PLAN_SHAPES: Record<string, PlanRing> = {
   'icc/Level 1/EXHIBIT HALL A': RINGS[0],
   'icc/Level 1/HALL A': RINGS[0],
   'icc/Level 1/EXHIBIT HALL B': RINGS[1],
@@ -301,7 +303,7 @@ export const PLAN_SHAPES: Record<string, PlanRing> = {
  * prefunction space, service cores, restrooms and airwall lines between them.
  * Drawn as the building's fabric beneath the rooms.
  */
-export const PLAN_DETAIL: Record<string, readonly PlanDetail[]> = {
+const COMPILED_PLAN_DETAIL: Record<string, readonly PlanDetail[]> = {
   'icc/Level 1': [
     { kind: 'room', ring: RINGS[0], named: true },
     { kind: 'room', ring: RINGS[1], named: true },
@@ -441,7 +443,7 @@ export const PLAN_DETAIL: Record<string, readonly PlanDetail[]> = {
 };
 
 /** The levels each venue has plans for, ground floor first. */
-export const PLAN_LEVELS: Record<string, readonly string[]> = {
+const COMPILED_PLAN_LEVELS: Record<string, readonly string[]> = {
   'icc': ['Level 1', 'Level 2'],
 };
 
@@ -453,9 +455,28 @@ export const PLAN_LEVELS: Record<string, readonly string[]> = {
  * and agree. The OSM outline stays in `footprints.ts` as the surveyed shape of
  * the building from above, and is still what every other venue is drawn as.
  */
-export const PLAN_OUTLINE: Record<string, PlanRing> = {
+const COMPILED_PLAN_OUTLINE: Record<string, PlanRing> = {
   'icc': [[39.765706, -86.162128], [39.765652, -86.162058], [39.765652, -86.162023], [39.765594, -86.162023], [39.765589, -86.161977], [39.765387, -86.161977], [39.765383, -86.162023], [39.76532, -86.162029], [39.765234, -86.162175], [39.765136, -86.162251], [39.765122, -86.162362], [39.765082, -86.162362], [39.765077, -86.162245], [39.764727, -86.162245], [39.764727, -86.162339], [39.764655, -86.162345], [39.764651, -86.161977], [39.76452, -86.161982], [39.764516, -86.162088], [39.764471, -86.162088], [39.764466, -86.162035], [39.7643, -86.162035], [39.764296, -86.162093], [39.764246, -86.162088], [39.764246, -86.161977], [39.762989, -86.161977], [39.762984, -86.162023], [39.762517, -86.162023], [39.762526, -86.16214], [39.762867, -86.16214], [39.762872, -86.16221], [39.762917, -86.16221], [39.762921, -86.162216], [39.762926, -86.162222], [39.762921, -86.162491], [39.762845, -86.162613], [39.762733, -86.162654], [39.762746, -86.162707], [39.762881, -86.162672], [39.762894, -86.162713], [39.762885, -86.162771], [39.762814, -86.162789], [39.762791, -86.162835], [39.762939, -86.162958], [39.763025, -86.16342], [39.76302, -86.163472], [39.762894, -86.163513], [39.762908, -86.163566], [39.763002, -86.163537], [39.763047, -86.163543], [39.763056, -86.163624], [39.762962, -86.163648], [39.762939, -86.163694], [39.763097, -86.163817], [39.763182, -86.164285], [39.763177, -86.164331], [39.763047, -86.164372], [39.763047, -86.16439], [39.763056, -86.164431], [39.763168, -86.164396], [39.763204, -86.164407], [39.763209, -86.164489], [39.763123, -86.164507], [39.763097, -86.164559], [39.763249, -86.164682], [39.763348, -86.165138], [39.763344, -86.16519], [39.763209, -86.165231], [39.763218, -86.16529], [39.763326, -86.165255], [39.763366, -86.165255], [39.763384, -86.165307], [39.763375, -86.165354], [39.76329, -86.165371], [39.763258, -86.165418], [39.763308, -86.165658], [39.763474, -86.165874], [39.76355, -86.165886], [39.76355, -86.165991], [39.76373, -86.165991], [39.763734, -86.16557], [39.76421, -86.16557], [39.764215, -86.165745], [39.76439, -86.165745], [39.764395, -86.166832], [39.764583, -86.166832], [39.764588, -86.166756], [39.765297, -86.166756], [39.765302, -86.166862], [39.765365, -86.166862], [39.765365, -86.166447], [39.765405, -86.166441], [39.765437, -86.166505], [39.765549, -86.166412], [39.765495, -86.166301], [39.7655, -86.16626], [39.765661, -86.16626], [39.765661, -86.16564], [39.765589, -86.165634], [39.765589, -86.165477], [39.765661, -86.165471], [39.765661, -86.163805], [39.765576, -86.1638], [39.765571, -86.163694], [39.765652, -86.163689], [39.765652, -86.162199]],
 };
 
 /** Whose drawings these are. Named on the map, next to the basemap's credit. */
 export const PLAN_CREDIT = 'Indianapolis Convention & Visitors Association';
+
+/**
+ * The pack's copy of this table where one is held, else what was built.
+ *
+ * Laid over per constant, so a refresh can carry one of these and
+ * leave the rest alone, and a key that arrives the wrong shape leaves
+ * the compiled value standing. See `fromPack`.
+ */
+const PACKED = fromPack('plan-geometry', {
+  PLAN_SHAPES: COMPILED_PLAN_SHAPES,
+  PLAN_DETAIL: COMPILED_PLAN_DETAIL,
+  PLAN_LEVELS: COMPILED_PLAN_LEVELS,
+  PLAN_OUTLINE: COMPILED_PLAN_OUTLINE,
+});
+
+export const PLAN_SHAPES = PACKED.PLAN_SHAPES;
+export const PLAN_DETAIL = PACKED.PLAN_DETAIL;
+export const PLAN_LEVELS = PACKED.PLAN_LEVELS;
+export const PLAN_OUTLINE = PACKED.PLAN_OUTLINE;

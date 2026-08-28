@@ -159,6 +159,17 @@ Run it once with **upload off**: it builds both apps and hands them back as
 artifacts without touching either store, which is how you find out the
 signing material is right without publishing anything.
 
+**The data is a pack, not part of the binary.** Fifteen tables — the stand
+list, the floor plans, the booth grid, the hotels, the pavements, the hall
+divides — are published beside the app at `/pack/` with a manifest of
+content hashes. A running copy checks that manifest (a few hundred bytes),
+fetches only what moved, verifies it against its hash, and applies it on
+the next launch. So a new exhibitor list or a re-read floor plan reaches
+installed apps without a store release; only *code* changes need one. Every
+table also ships compiled into the binary, and that snapshot is the floor:
+a manifest that will not read, a schema from the future, or bytes that fail
+their hash all mean "keep what you have".
+
 **What a shell adds is deliberately small.** Everything visible — the map,
 the search, the router, the schedule, the hotels — is the same code the
 website runs. Three things genuinely differ, and each lives behind

@@ -1,4 +1,6 @@
-/**
+
+
+import { fromPack } from './pack-runtime';/**
  * Surveyed venue footprints, taken from OpenStreetMap.
  *
  * Each entry is the outer ring of the building's real footprint as [latitude,
@@ -22,7 +24,7 @@
 /** A closed ring of [latitude, longitude] pairs; the last point joins the first. */
 export type FootprintRing = ReadonlyArray<readonly [number, number]>;
 
-export const VENUE_FOOTPRINTS: Record<string, FootprintRing> = {
+const COMPILED_VENUE_FOOTPRINTS: Record<string, FootprintRing> = {
   // Indiana Convention Center — OSM relation/9680937 (72 of 155 points kept)
   icc: [
     [39.765552, -86.161985], [39.765525, -86.161985], [39.765524, -86.161944], [39.765326, -86.161951],
@@ -180,3 +182,16 @@ export const VENUE_FOOTPRINTS: Record<string, FootprintRing> = {
   ],
 
 };
+
+/**
+ * The pack's copy of this table where one is held, else what was built.
+ *
+ * Laid over per constant, so a refresh can carry one of these and
+ * leave the rest alone, and a key that arrives the wrong shape leaves
+ * the compiled value standing. See `fromPack`.
+ */
+const PACKED = fromPack('footprints', {
+  VENUE_FOOTPRINTS: COMPILED_VENUE_FOOTPRINTS,
+});
+
+export const VENUE_FOOTPRINTS = PACKED.VENUE_FOOTPRINTS;
