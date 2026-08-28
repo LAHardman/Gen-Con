@@ -237,10 +237,13 @@ describe('the three things you can do', () => {
     expect(screen.getByRole('button', { name: 'Remove from schedule' })).toBeTruthy();
   });
 
-  it('shows it on the map', () => {
+  it('shows it on the map, by its room and nothing finer', () => {
+    // An event is in a room and that is the whole address it has, so no
+    // booth travels with it — the second argument is the exhibit hall's
+    // case, not this one.
     const { onShowOnMap } = show();
     fireEvent.click(screen.getByRole('button', { name: 'Show on map' }));
-    expect(onShowOnMap).toHaveBeenCalledWith('hall-a');
+    expect(onShowOnMap).toHaveBeenCalledWith('hall-a', undefined);
   });
 
   it('starts directions to it', () => {
@@ -287,6 +290,20 @@ describe('a vendor rather than an event', () => {
     const inTheHall = EXHIBITORS.find((one) => one.area === 'Exhibit Hall')!;
     open({ kind: 'vendor', exhibitor: inTheHall, room: ROOMS_BY_ID['hall-a'] });
     expect(screen.queryByText('Open')).toBeNull();
+  });
+
+  it('shows a stand by its booth, not just by the hall it is in', () => {
+    // The hall is four hundred metres of floor and the booth number is the
+    // address that floor actually uses, so the number has to reach the map
+    // — passing the room alone is what sent it to the middle of Hall A.
+    const inTheHall = EXHIBITORS.find((one) => one.area === 'Exhibit Hall' && one.booth)!;
+    const { onShowOnMap } = open({
+      kind: 'vendor',
+      exhibitor: inTheHall,
+      room: ROOMS_BY_ID['hall-a'],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Show on map' }));
+    expect(onShowOnMap).toHaveBeenCalledWith('hall-a', inTheHall.booth);
   });
 
   it('splits what they sell into the three questions', () => {
