@@ -93,9 +93,11 @@ visit it is for.
 again.** Stale-but-labelled beats blank: an old schedule still draws, with
 the header and the schedule page saying which year it is; the key dates are
 derived from the convention's own rule, so they answer for any year without
-ever being fetched; badge prices keep the year they were published for and
-are shown with it, because a price a few dollars out beats an empty column
-and beats implying it is current; and if a basemap provider retires a tileset out from
+ever being fetched; badge prices and Gen Con's hotel block both keep the year
+they were published for and show an estimate beside it, carried forward at
+the rate that price has actually risen across the years on file — a figure a
+few dollars out beats an empty column, and printing the published price under
+the estimate keeps the fact and the guess apart; and if a basemap provider retires a tileset out from
 under a frozen copy, the map walks down a built-in rescue ladder — ending on
 OpenStreetMap's own raster, a different host entirely — rather than drawing
 rooms on a void. The retreat refuses to trigger offline or after any tile
@@ -2180,7 +2182,7 @@ src/
     plan.ts          The four days, stops, travel, lanes and the shared axis
     key-dates.ts     Badges, housing and tickets — the rule and its provenance
     badges.ts        Which days a badge lets somebody in, derived from the rule
-    badge-prices.ts  Gen Con's rate card, with the year it was published for
+    badge-prices.ts  Every published rate card, and the trend it estimates the next one from
     parking.ts       Gen Con's official lots and the downtown garages, priced apart
     navigation.ts    Route ends, distances and what a straight line can claim
     connections.ts   Skywalks and the tunnel, and which floor each belongs to

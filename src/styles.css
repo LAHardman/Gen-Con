@@ -4222,10 +4222,29 @@ body {
  */
 .budget__badge-price {
   grid-area: price;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
   color: var(--text-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/*
+ * The estimate and the fact it was derived from, stacked rather than joined
+ * into one sentence. They are different kinds of number and the smaller,
+ * dimmer one underneath is the published price — a reader who wants to know
+ * what is actually known can find it without reading prose.
+ */
+.budget__estimate {
+  color: var(--text);
+}
+
+.budget__confirmed {
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 .budget__person-total {

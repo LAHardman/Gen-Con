@@ -23,7 +23,12 @@ import {
 import { splitHourProse } from './probes/blockparty-hours';
 import { guessFacet } from './probes/food-tags';
 import { dollarFigures, eventOptions, linksIn, lotPrices } from './probes/parking';
-import { asCentsLines, parseBadgeTable, splitBadgePrices } from './probes/badge-prices';
+import {
+  asHistoryEntry,
+  badgeAnnouncements,
+  parseBadgeTable,
+  splitBadgePrices,
+} from './probes/badge-prices';
 
 describe('hour prose', () => {
   it('reads the food trucks line exactly as food.ts holds it', () => {
@@ -229,15 +234,36 @@ describe('the badge rate card', () => {
     });
   });
 
-  it('emits the exact lines badge-prices.ts is written in', () => {
-    expect(asCentsLines({ 'four-day': 16_400, sunday: 4_100 }, 2027)).toEqual([
-      'const COMPILED_YEAR = 2027;',
-      'const COMPILED_CENTS: Record<BadgeKind, number | null> = {',
-      "  'four-day': 16_400,",
-      '  sunday: 4_100,',
-      '  none: null,',
-      '};',
+  it('emits the exact entry badge-prices.ts is written in', () => {
+    expect(asHistoryEntry({ 'four-day': 16_400, sunday: 4_100 }, 2027, 'https://example.test/pr')).toEqual([
+      '  {',
+      '    year: 2027,',
+      "    cents: { 'four-day': 16_400, sunday: 4_100, none: null },",
+      "    source: 'https://example.test/pr',",
+      '  },',
     ]);
+  });
+
+  it('finds the announcements by their titles, because the slugs have no pattern', () => {
+    /*
+     * 2022 and 2023 are `gen-con-20XX-badge-registration`, 2025 has
+     * `-chairman` on the end, and 2024's URL serves an unrelated release
+     * about a sponsor. Guessing a slug would have quietly mis-filed that
+     * one; following the titles found the hole instead.
+     */
+    const index = `
+      <li><a href="https://www.gencon.com/press/2026-reg-dates-and-badge-prices">Gen
+        Con Announces 2026 Registration Dates, Badge Prices</a></li>
+      <li><a href="https://www.gencon.com/press/2025-reg-dates-and-badge-prices-chairman">Gen Con
+        Announces 2025 Registration Dates, Badge Prices, New Chairperson of the Board</a></li>
+      <li><a href="https://www.gencon.com/press/gen-con-2022-badge-registration">Gen Con Announces
+        2022 Registration Dates, Badge Prices, and Vaccination and Masking Requirements</a></li>
+      <li><a href="https://www.gencon.com/press/2026-charity-partners-press-release">Gen Con
+        Announces Charity Partners for 2026 Convention</a></li>`;
+    expect(badgeAnnouncements(index).map((one) => one.year)).toEqual([2026, 2025, 2022]);
+    expect(badgeAnnouncements(index)[0].url).toBe(
+      'https://www.gencon.com/press/2026-reg-dates-and-badge-prices',
+    );
   });
 });
 

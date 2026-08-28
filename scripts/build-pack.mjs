@@ -63,13 +63,11 @@ const MODULE_TABLES = {
   // the figures that change every year, on pages anybody can read, and a
   // phone that can no longer be updated through a store can still take them
   // from a pack refresh.
-  'badge-prices': [
-    'BADGE_CENTS',
-    'BADGE_PRICE_YEAR',
-    'BADGE_PRICES_CHECKED',
-    'ADMISSIONS_TAX',
-    'SHIPPING_CENTS',
-  ],
+  // The *history* travels, not the latest card: the current price, the base
+  // year and the trend the app estimates next year's price with are all
+  // derived from it, so a pack carrying one more year moves all three at once
+  // and they cannot end up disagreeing.
+  'badge-prices': ['BADGE_HISTORY', 'BADGE_PRICES_CHECKED', 'ADMISSIONS_TAX', 'SHIPPING_CENTS'],
   parking: ['GARAGES', 'CHECKED'],
 };
 

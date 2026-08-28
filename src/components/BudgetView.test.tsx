@@ -304,14 +304,25 @@ describe('what a badge costs', () => {
   const setBadge = (name: string, label: string) =>
     fireEvent.change(screen.getByLabelText(`Badge for ${name}`), { target: { value: label } });
 
-  it('prices the badge beside the person, with the county\'s tax on it', () => {
-    // $164 for a 4-day, plus Marion County's 10%, is $180.40 — and the tax is
-    // stated under Gen Con's table rather than in it, so a page that showed
-    // $164.00 would be showing a figure nobody is ever charged.
+  it('shows the estimate and the published price it came from, not one or the other', () => {
+    /*
+     * The planning year is 2027 and Gen Con has only announced through 2026,
+     * so both numbers are on screen: ≈$193.60 is what to budget, $180.40 in
+     * 2026 is the only part of it that is a fact. Showing just the estimate
+     * would launder a projection into a price; showing just the published
+     * one would be a year out and say nothing about it.
+     *
+     * $164 for a 4-day carried forward at 7.15% is $176, and Marion County's
+     * 10% on top of that is $193.60. The tax is stated under Gen Con's table
+     * rather than in it, so a page showing $176 would be showing a figure
+     * nobody is ever charged.
+     */
     render(<Budget />);
     addPerson('Anna');
     setBadge('Anna', 'four-day');
-    expect(section('Who is going').textContent).toMatch(/\$180\.40 with tax/);
+    const where = section('Who is going');
+    expect(where.textContent).toMatch(/≈\$193\.60/);
+    expect(where.textContent).toMatch(/\$180\.40 in 2026/);
   });
 
   it('prices nothing for somebody who has not bought one', () => {
@@ -334,22 +345,26 @@ describe('what a badge costs', () => {
     // appeared the moment a badge was picked would be a line nobody typed.
     expect(lineTotals('Badges')).toEqual([]);
     fireEvent.click(within(section('Who is going')).getByRole('button', { name: /Add 2 badges/ }));
-    // $180.40 and $91.30 — each pinned to the person whose badge it is.
-    expect(lineTotals('Badges')).toEqual(['$180.40', '$91.30']);
-    expect(tableRow('Badges')).toEqual(['$180.40', '$91.30', '$271.70']);
+    // The 2027 estimates, taxed — each pinned to the person whose badge it is.
+    // A budget is a forecast, so it is seeded with what the trip will cost
+    // rather than with what last year's badge cost.
+    expect(lineTotals('Badges')).toEqual(['$193.60', '$96.80']);
+    expect(tableRow('Badges')).toEqual(['$193.60', '$96.80', '$290.40']);
   });
 
-  it('says which year the prices are, and that they are last year\'s', () => {
+  it('says the estimate is one, and how it was arrived at', () => {
     /*
-     * The whole point of keeping a price after it goes stale. Gen Con
-     * publishes the next card months after the convention, so for most of the
-     * year the honest thing to show is the old figure with its year on it —
-     * a few dollars out beats an empty column, and saying which year it is
-     * beats implying it is this one.
+     * The whole point of keeping a price after it goes stale, and of saying
+     * where the newer number came from. Gen Con announces the next card
+     * months after the convention, so for most of the year the honest thing
+     * is the old figure plus this card's own measured trend — stated as a
+     * trend, with the rate quoted, so a reader can disbelieve it on purpose.
      */
     render(<Budget />);
     const where = section('Who is going');
-    expect(where.textContent).toMatch(/These are 2026's prices; Gen Con has not published 2027's yet/);
+    expect(where.textContent).toMatch(/has not announced 2027’s prices yet/);
+    expect(where.textContent).toMatch(/carried forward at the rate that badge has actually risen/);
+    expect(where.textContent).toMatch(/across 4 announced years \(about 7\.2% a year\)/);
     expect(where.textContent).toMatch(/10% admissions tax/);
     expect(where.textContent).toMatch(/type over it with what you actually paid/);
   });
@@ -359,7 +374,8 @@ describe('what a badge costs', () => {
     addPerson('Anna');
     setBadge('Anna', 'sunday');
     fireEvent.click(within(section('Who is going')).getByRole('button', { name: /Add 1 badge/ }));
-    const box = within(section('Badges')).getByDisplayValue('45.10');
+    // $41 carried forward at 6.25% is $44, and the tax makes it $48.40.
+    const box = within(section('Badges')).getByDisplayValue('48.40');
     fireEvent.change(box, { target: { value: '60' } });
     expect(lineTotals('Badges')).toEqual(['$60.00']);
   });

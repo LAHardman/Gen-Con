@@ -28,10 +28,12 @@ import { useMemo, useState } from 'react';
 import { BADGE_KINDS, BADGE_NAMES, type BadgeKind } from '../data/badges';
 import {
   ADMISSIONS_TAX,
+  BADGE_HISTORY,
   BADGE_PRICE_YEAR,
   SOURCE as BADGE_SOURCE,
-  badgeCentsWithTax,
-  pricesArePrevious,
+  badgeEstimateWithTax,
+  withTax,
+  type BadgeEstimate,
 } from '../data/badge-prices';
 import {
   budgetFor,
@@ -169,12 +171,25 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
    * Kept as a list rather than a count so the button can add the lines it
    * counted, and cannot drift from them.
    */
+  /**
+   * A representative projected estimate, for the note that explains the ≈.
+   *
+   * Taken from the four-day badge because it is the one everybody recognises
+   * and the one most people are buying; the growth rates across kinds sit
+   * within a point or so of each other, so quoting one is not misleading and
+   * quoting six would be unreadable.
+   */
+  const estimated = useMemo(() => {
+    const four = badgeEstimateWithTax('four-day', year);
+    return four?.projected ? four : null;
+  }, [year]);
+
   const priceable = useMemo(
     () =>
       party
-        .map((person) => ({ person, price: badgeCentsWithTax(budget.badgeOf(person.id)) }))
-        .filter((one): one is { person: Person; price: number } => one.price !== null),
-    [party, badges, budget],
+        .map((person) => ({ person, price: badgeEstimateWithTax(budget.badgeOf(person.id), year) }))
+        .filter((one): one is { person: Person; price: BadgeEstimate } => one.price !== null),
+    [party, badges, budget, year],
   );
 
   const [naming, setNaming] = useState('');
@@ -244,8 +259,21 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
                 </label>
                 <span className="budget__badge-price">
                   {(() => {
-                    const price = badgeCentsWithTax(budget.badgeOf(person.id));
-                    return price === null ? '' : `${dollars(price)} with tax`;
+                    const price = badgeEstimateWithTax(budget.badgeOf(person.id), year);
+                    if (price === null) return '';
+                    // Both figures, always, when one of them is a guess: the
+                    // estimate is what to budget and the published price is
+                    // the only part of it that is a fact.
+                    return price.projected ? (
+                      <>
+                        <span className="budget__estimate">≈{dollars(price.cents)}</span>
+                        <span className="budget__confirmed">
+                          {dollars(withTax(price.from.cents))} in {price.from.year}
+                        </span>
+                      </>
+                    ) : (
+                      `${dollars(price.cents)} with tax`
+                    );
                   })()}
                 </span>
                 <span className="budget__person-total">{dollars(column?.total ?? 0)}</span>
@@ -288,7 +316,7 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
               budget.addLine({
                 category: 'badge',
                 label: `${BADGE_NAMES[budget.badgeOf(person.id)]} · ${person.name}`,
-                cents: price,
+                cents: price.cents,
                 times: 1,
                 who: [person.id],
               });
@@ -301,12 +329,23 @@ export function BudgetView({ nowMs, budget, bookings, plan }: Props) {
         </button>
         <p className="budget__note">
           A badge decides which days somebody can be in the hall, and that is checked against the
-          schedule below. The prices are Gen Con&rsquo;s own, off its badge page, with Marion
-          County&rsquo;s {Math.round(ADMISSIONS_TAX * 100)}% admissions tax added — the tax is not in
-          their table and is charged on every badge type.{' '}
-          {pricesArePrevious(year)
-            ? `These are ${BADGE_PRICE_YEAR}'s prices; Gen Con has not published ${year}'s yet, and they usually move by a few dollars. `
-            : `These are ${BADGE_PRICE_YEAR}'s prices. `}
+          schedule below. The prices are Gen Con&rsquo;s own, off its January announcements, with
+          Marion County&rsquo;s {Math.round(ADMISSIONS_TAX * 100)}% admissions tax added — the tax
+          is not in their table and is charged on every badge type.{' '}
+          {estimated ? (
+            <>
+              Gen Con has not announced {year}&rsquo;s prices yet, so the figure with a{' '}
+              <span className="budget__estimate">≈</span> is an estimate: {BADGE_PRICE_YEAR}
+              &rsquo;s published price carried forward at the rate that badge has actually risen
+              across {BADGE_HISTORY.length} announced years ({estimated.growth === null
+                ? ''
+                : `about ${(estimated.growth * 100).toFixed(1)}% a year`}
+              ). The published price it came from is printed under it, because that is the only
+              part of it that is a fact.{' '}
+            </>
+          ) : (
+            <>These are {BADGE_PRICE_YEAR}&rsquo;s published prices. </>
+          )}
           Every line stays editable, so type over it with what you actually paid.{' '}
           <a href={BADGE_SOURCE} target="_blank" rel="noreferrer noopener">
             Gen Con&rsquo;s badge page ↗
