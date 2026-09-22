@@ -1,4 +1,4 @@
-# Season report — 2026-W38
+# Season report — 2026-W39
 
 Written by `npm run season:check` (see `scripts/season/`). Regenerated weekly
 by the season workflow; the commit is also what keeps the scheduled workflows
@@ -6,10 +6,10 @@ inside GitHub's 60-day activity window.
 
 | Probe | Status | Summary |
 | --- | --- | --- |
-| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 309 days out; Google Play target API level review: due date passed 16 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
+| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 302 days out; Google Play target API level review: due date passed 23 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
-| Parking figures | ✓ ok | checked 2026-08-28, 18 days ago — 7 entries, Gen Con's own among them |
+| Parking figures | ✓ ok | checked 2026-08-28, 25 days ago — 7 entries, Gen Con's own among them |
 | Badge prices | ⚠ warn | 2027's prices are not published yet; the app shows 2026's, labelled, with an estimate from 4 cards beside it |
 | Event feed fields | ✓ ok | all 14 fields the importer reads are on the feed |
 | Key dates vs the API | ✓ ok | the rule reproduces all 4 published milestones for 2027 on, to the instant |
@@ -27,7 +27,7 @@ inside GitHub's 60-day activity window.
 
 ### Store account deadlines — ✗ FAIL
 
-Apple Developer membership renewal: due 2027-07-22, 309 days out; Google Play target API level review: due date passed 16 days ago (2026-08-31); Android upload keystore backup verified: no date on file
+Apple Developer membership renewal: due 2027-07-22, 302 days out; Google Play target API level review: due date passed 23 days ago (2026-08-31); Android upload keystore backup verified: no date on file
 
 To fix:
 
