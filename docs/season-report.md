@@ -1,4 +1,4 @@
-# Season report — 2026-W40
+# Season report — 2026-W41
 
 Written by `npm run season:check` (see `scripts/season/`). Regenerated weekly
 by the season workflow; the commit is also what keeps the scheduled workflows
@@ -6,10 +6,10 @@ inside GitHub's 60-day activity window.
 
 | Probe | Status | Summary |
 | --- | --- | --- |
-| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 295 days out; Google Play target API level review: due date passed 30 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
+| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 288 days out; Google Play target API level review: due date passed 37 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
-| Parking figures | ✓ ok | checked 2026-08-28, 32 days ago — 7 entries, Gen Con's own among them |
+| Parking figures | ✓ ok | checked 2026-08-28, 39 days ago — 7 entries, Gen Con's own among them |
 | Badge prices | ⚠ warn | 2027's prices are not published yet; the app shows 2026's, labelled, with an estimate from 4 cards beside it |
 | Event feed fields | ✓ ok | all 14 fields the importer reads are on the feed |
 | Key dates vs the API | ✓ ok | the rule reproduces all 4 published milestones for 2027 on, to the instant |
@@ -20,14 +20,14 @@ inside GitHub's 60-day activity window.
 | Events landing in rooms | ✓ ok | 27,468 events read from https://lahardman.github.io/Gen-Con/events.json; 11 without a room (0.04%), which is the healthy floor |
 | Events mirror | – skip | no mirror is configured |
 | Scheduled workflows still enabled | ✓ ok | all 6 workflows are enabled |
-| Automation pull requests being merged | ✓ ok | no automation pull requests are waiting |
+| Automation pull requests being merged | ✓ ok | 1 automation PR open, none older than a fortnight |
 | Booth grid agreement | ✓ ok | the stand list, the placed grid and the hall divides all still agree |
 
 ## Needs attention
 
 ### Store account deadlines — ✗ FAIL
 
-Apple Developer membership renewal: due 2027-07-22, 295 days out; Google Play target API level review: due date passed 30 days ago (2026-08-31); Android upload keystore backup verified: no date on file
+Apple Developer membership renewal: due 2027-07-22, 288 days out; Google Play target API level review: due date passed 37 days ago (2026-08-31); Android upload keystore backup verified: no date on file
 
 To fix:
 
