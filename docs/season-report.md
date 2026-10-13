@@ -1,4 +1,4 @@
-# Season report — 2026-W41
+# Season report — 2026-W42
 
 Written by `npm run season:check` (see `scripts/season/`). Regenerated weekly
 by the season workflow; the commit is also what keeps the scheduled workflows
@@ -6,18 +6,18 @@ inside GitHub's 60-day activity window.
 
 | Probe | Status | Summary |
 | --- | --- | --- |
-| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 288 days out; Google Play target API level review: due date passed 37 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
+| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 281 days out; Google Play target API level review: due date passed 44 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
-| Parking figures | ✓ ok | checked 2026-08-28, 39 days ago — 7 entries, Gen Con's own among them |
+| Parking figures | ✓ ok | checked 2026-08-28, 46 days ago — 7 entries, Gen Con's own among them |
 | Badge prices | ⚠ warn | 2027's prices are not published yet; the app shows 2026's, labelled, with an estimate from 4 cards beside it |
-| Event feed fields | ✓ ok | all 14 fields the importer reads are on the feed |
+| Event feed fields | ✗ FAIL | event_search answered 200 but no event records were recognised in the response |
 | Key dates vs the API | ✓ ok | the rule reproduces all 4 published milestones for 2027 on, to the instant |
 | Hotel block year | ✓ ok | the block on file is 2025's, which is still the one Gen Con publishes — 2027's usually appears when housing opens, 157 days before the show |
 | Block Party hours | ⚠ warn | hours on file are 2025's and the page shows none yet — 2027's are still commented out |
 | Gen Con floor-plan tiles | ✓ ok | maps/v9 is still the newest generation the CDN serves |
 | Basemap tile providers | ✓ ok | every configured tileset served a real tile of downtown |
-| Events landing in rooms | ✓ ok | 27,468 events read from https://lahardman.github.io/Gen-Con/events.json; 11 without a room (0.04%), which is the healthy floor |
+| Events landing in rooms | ✓ ok | 27,442 events read from https://lahardman.github.io/Gen-Con/events.json; 11 without a room (0.04%), which is the healthy floor |
 | Events mirror | – skip | no mirror is configured |
 | Scheduled workflows still enabled | ✓ ok | all 6 workflows are enabled |
 | Automation pull requests being merged | ✓ ok | 1 automation PR open, none older than a fortnight |
@@ -27,7 +27,7 @@ inside GitHub's 60-day activity window.
 
 ### Store account deadlines — ✗ FAIL
 
-Apple Developer membership renewal: due 2027-07-22, 288 days out; Google Play target API level review: due date passed 37 days ago (2026-08-31); Android upload keystore backup verified: no date on file
+Apple Developer membership renewal: due 2027-07-22, 281 days out; Google Play target API level review: due date passed 44 days ago (2026-08-31); Android upload keystore backup verified: no date on file
 
 To fix:
 
@@ -59,6 +59,20 @@ To fix:
 4. Check the small print under the page's table too: the Marion County admissions tax (`COMPILED_TAX`) and the USPS packet fee (`COMPILED_SHIPPING_CENTS`) are stated there and are not in the table.
 5. Prices found inside an HTML comment on the badge page are last cycle's, left there while the new one is written — never ship those as the new year's.
 6. Then `npm run check`: `badge-prices.test.ts` holds the shape and the trend, and `npm run build:pack` puts the new card where installed copies can take it without a release.
+
+### Event feed fields — ✗ FAIL
+
+event_search answered 200 but no event records were recognised in the response
+
+What was seen:
+
+- Top-level shape: object
+
+To fix:
+
+1. The fields `shape()` reads live in `scripts/fetch-events.mjs`; change the source names there to the renames reported above.
+2. Then run `npm run fetch:events -- --limit 100` and open a few rows of `public/events.json` — the fields must be populated, not merely absent of errors.
+3. `npm run check` runs the import tests, which read recorded pages and will say if the shape moved further than a rename.
 
 ### Block Party hours — ⚠ warn
 
