@@ -1,4 +1,4 @@
-# Season report — 2026-W42
+# Season report — 2026-W43
 
 Written by `npm run season:check` (see `scripts/season/`). Regenerated weekly
 by the season workflow; the commit is also what keeps the scheduled workflows
@@ -6,10 +6,10 @@ inside GitHub's 60-day activity window.
 
 | Probe | Status | Summary |
 | --- | --- | --- |
-| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 281 days out; Google Play target API level review: due date passed 44 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
+| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 274 days out; Google Play target API level review: due date passed 51 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
-| Parking figures | ✓ ok | checked 2026-08-28, 46 days ago — 7 entries, Gen Con's own among them |
+| Parking figures | ✓ ok | checked 2026-08-28, 53 days ago — 7 entries, Gen Con's own among them |
 | Badge prices | ⚠ warn | 2027's prices are not published yet; the app shows 2026's, labelled, with an estimate from 4 cards beside it |
 | Event feed fields | ✗ FAIL | event_search answered 200 but no event records were recognised in the response |
 | Key dates vs the API | ✓ ok | the rule reproduces all 4 published milestones for 2027 on, to the instant |
@@ -17,17 +17,17 @@ inside GitHub's 60-day activity window.
 | Block Party hours | ⚠ warn | hours on file are 2025's and the page shows none yet — 2027's are still commented out |
 | Gen Con floor-plan tiles | ✓ ok | maps/v9 is still the newest generation the CDN serves |
 | Basemap tile providers | ✓ ok | every configured tileset served a real tile of downtown |
-| Events landing in rooms | ✓ ok | 27,442 events read from https://lahardman.github.io/Gen-Con/events.json; 11 without a room (0.04%), which is the healthy floor |
+| Events landing in rooms | ✗ FAIL | the deployed schedule answered HTTP 404 at https://lahardman.github.io/Gen-Con/events.json |
 | Events mirror | – skip | no mirror is configured |
 | Scheduled workflows still enabled | ✓ ok | all 6 workflows are enabled |
-| Automation pull requests being merged | ✓ ok | 1 automation PR open, none older than a fortnight |
+| Automation pull requests being merged | ⚠ warn | 1 automation PR have waited more than a fortnight — the data in them is stalling |
 | Booth grid agreement | ✓ ok | the stand list, the placed grid and the hall divides all still agree |
 
 ## Needs attention
 
 ### Store account deadlines — ✗ FAIL
 
-Apple Developer membership renewal: due 2027-07-22, 281 days out; Google Play target API level review: due date passed 44 days ago (2026-08-31); Android upload keystore backup verified: no date on file
+Apple Developer membership renewal: due 2027-07-22, 274 days out; Google Play target API level review: due date passed 51 days ago (2026-08-31); Android upload keystore backup verified: no date on file
 
 To fix:
 
@@ -92,4 +92,26 @@ To fix:
 3. Gen Con states them in prose on https://www.gencon.com/gen-con-indy/block-party ("Thursday - Saturday, 9am - 9pm / Sunday, 9am - 4pm"); the beer garden's (Sun King) are usually a separate line.
 4. Check whether the hours are in the visible page or still in an HTML comment — commented-out hours are last year's, left there while the new page is written, and must not be shipped as this year's.
 5. Then `npm run check`: `food.test.ts` holds the shape.
+
+### Events landing in rooms — ✗ FAIL
+
+the deployed schedule answered HTTP 404 at https://lahardman.github.io/Gen-Con/events.json
+
+To fix:
+
+1. If the site has moved, set the `SEASON_SITE` repository variable to its new address.
+2. If the deploy is broken, the Actions tab of the repository says which step; `deploy.yml` builds and publishes it weekly.
+
+### Automation pull requests being merged — ⚠ warn
+
+1 automation PR have waited more than a fortnight — the data in them is stalling
+
+What was seen:
+
+- 18 days: Refresh the stand list from Gen Con — https://github.com/LAHardman/Gen-Con/pull/35
+
+To fix:
+
+1. Merge them if their checks pass; the refresh workflows already enable auto-merge on a passing refresh, so one waiting this long usually has a failing check worth reading — that failure is how a new year announces itself.
+2. Auto-merge needs "Allow auto-merge" ticked once, under repository Settings → General → Pull Requests.
 
