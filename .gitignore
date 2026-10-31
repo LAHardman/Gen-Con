@@ -21,3 +21,6 @@ plans/campus
 # quota being spent, and the first thing scrapers grep for.
 .env
 .env.*
+
+# Unrelated game-asset bundles; never belong in this repo
+*.mtga
