@@ -114,6 +114,11 @@ export default defineConfig({
     ],
     // A stubbed geolocation or timer in one file must not leak into the next.
     restoreMocks: true,
+    // Newer Node ships its own `localStorage`, which hides jsdom's. Older Node
+    // doesn't know the flag, so it is only passed where it exists.
+    execArgv: process.allowedNodeEnvironmentFlags.has('--experimental-webstorage')
+      ? ['--no-experimental-webstorage']
+      : [],
     unstubGlobals: true,
   },
 });
