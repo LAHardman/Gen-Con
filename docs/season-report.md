@@ -6,7 +6,6 @@ inside GitHub's 60-day activity window.
 
 | Probe | Status | Summary |
 | --- | --- | --- |
-| Store account deadlines | ✗ FAIL | Apple Developer membership renewal: due 2027-07-22, 267 days out; Google Play target API level review: due date passed 58 days ago (2026-08-31); Android upload keystore backup verified: no date on file |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
 | Parking figures | ✓ ok | checked 2026-08-28, 60 days ago — 7 entries, Gen Con's own among them |
@@ -24,17 +23,6 @@ inside GitHub's 60-day activity window.
 | Booth grid agreement | ✓ ok | the stand list, the placed grid and the hall divides all still agree |
 
 ## Needs attention
-
-### Store account deadlines — ✗ FAIL
-
-Apple Developer membership renewal: due 2027-07-22, 267 days out; Google Play target API level review: due date passed 58 days ago (2026-08-31); Android upload keystore backup verified: no date on file
-
-To fix:
-
-1. When it is dealt with, move `due` forward a year in `scripts/season/store-dates.json` — the probe goes quiet on its own.
-2. Google ratchets the required target API level yearly, with deadlines usually at the end of August — https://developer.android.com/google/play/requirements/target-sdk says the current one. Falling behind first hides the app from new users on current Android. The fix is the annual maintenance release: bump targetSdkVersion, build, submit.
-3. Put the real date into `scripts/season/store-dates.json` as `"due": "YYYY-MM-DD"` on the "Android upload keystore backup verified" row.
-4. Only applies once an upload keystore exists — it is generated when you first sign an Android release, not before, so leave this null until then. After that: a yearly reminder to confirm it is still in both places it should be (the ANDROID_KEYSTORE_BASE64 repository secret and an offline copy). It is the one secret here that cannot be reissued — Apple certificates reissue and Play can reset an upload key, but a lost keystore ends that app's update path for good.
 
 ### Badge prices — ⚠ warn
 
@@ -114,4 +102,3 @@ To fix:
 
 1. Merge them if their checks pass; the refresh workflows already enable auto-merge on a passing refresh, so one waiting this long usually has a failing check worth reading — that failure is how a new year announces itself.
 2. Auto-merge needs "Allow auto-merge" ticked once, under repository Settings → General → Pull Requests.
-

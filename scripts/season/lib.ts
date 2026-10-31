@@ -1,6 +1,6 @@
 /**
  * The season check's shared parts: what a probe is, how it reaches the
- * network, and the pure readings (hour prose, name similarity, deadlines)
+ * network, and the pure readings (hour prose and name similarity)
  * that the tests can hold still.
  *
  * THE CONTRACT EVERY PROBE KEEPS. A probe answers one question about one
@@ -325,74 +325,6 @@ export function asOpeningLines(year: number, spans: ProseHours[]): string[] {
     ),
     '  ],',
   ];
-}
-
-/* -------------------------------------------------------- deadlines */
-
-export interface Deadline {
-  what: string;
-  /** `YYYY-MM-DD`, or null for "not filled in yet". */
-  due: string | null;
-  note?: string;
-}
-
-/**
- * A `due` value as a date, or null if it is not one.
- *
- * `2027-07-22` is read at noon UTC so a timezone cannot slide it a day, and
- * anything else is handed to the platform's own parser — because the person
- * filling this in is reading a renewal date off a web page, and "July 22,
- * 2027" is what they will naturally type. Demanding one format of a human
- * to save three lines here is the wrong trade.
- */
-export function parseDue(due: string): Date | null {
-  const iso = /^\d{4}-\d{2}-\d{2}$/.test(due) ? Date.parse(`${due}T12:00:00Z`) : Date.parse(due);
-  return Number.isFinite(iso) ? new Date(iso) : null;
-}
-
-export function readDeadline(deadline: Deadline, now: Date): ProbeResult {
-  const file = 'scripts/season/store-dates.json';
-  if (!deadline.due) {
-    return {
-      status: 'warn',
-      summary: `${deadline.what}: no date on file`,
-      instructions: [
-        `Put the real date into \`${file}\` as \`"due": "YYYY-MM-DD"\` on the "${deadline.what}" row.`,
-        ...(deadline.note ? [deadline.note] : []),
-      ],
-    };
-  }
-  const due = parseDue(deadline.due);
-  if (!due) {
-    return {
-      status: 'fail',
-      summary: `${deadline.what}: "${deadline.due}" is not a date this can read`,
-      instructions: [
-        `Put a readable date in \`${file}\` — \`"2027-07-22"\` is the tidiest form, and anything a date parser knows works too.`,
-        'It must be in quotes: JSON has no bare dates, and an unquoted one makes the whole file unreadable rather than just that row.',
-      ],
-    };
-  }
-  const days = daysBetween(now, due);
-  const renew = [
-    `When it is dealt with, move \`due\` forward a year in \`${file}\` — the probe goes quiet on its own.`,
-    ...(deadline.note ? [deadline.note] : []),
-  ];
-  if (days < 0) {
-    return {
-      status: 'fail',
-      summary: `${deadline.what}: due date passed ${-days} day${days === -1 ? '' : 's'} ago (${deadline.due})`,
-      instructions: renew,
-    };
-  }
-  if (days <= 60) {
-    return {
-      status: 'warn',
-      summary: `${deadline.what}: due in ${days} day${days === 1 ? '' : 's'} (${deadline.due})`,
-      instructions: renew,
-    };
-  }
-  return { status: 'ok', summary: `${deadline.what}: due ${deadline.due}, ${days} days out` };
 }
 
 /* -------------------------------------------------- field renames */
