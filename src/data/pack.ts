@@ -5,7 +5,7 @@
  * `scripts/build-pack.mjs` is the writing half — it assembles `public/pack/`
  * from the same JSON files the bundle compiles in as its snapshot. This is
  * the reading half, used by any copy of the app checking whether the pack
- * on its origin (or, one day, on the native shells' pack host) carries
+ * on its origin or a separately configured host carries
  * newer tables than the ones it holds.
  *
  * THE RULE UNDERNEATH EVERYTHING: the snapshot is the floor, never taken

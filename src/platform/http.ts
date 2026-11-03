@@ -1,23 +1,3 @@
-/**
- * Fetching, from whichever side of the bridge this copy is on.
- *
- * THE ONE DIFFERENCE THAT MATTERS. A browser will not read gencon.com: it
- * sends no `Access-Control-Allow-Origin`, so the schedule has to be
- * imported by a build machine and served from this project's own host. A
- * native request leaves from native code, where the same-origin policy does
- * not apply — so an installed app can page Gen Con's own API directly, and
- * keeps working when every piece of this project's infrastructure is gone.
- * That is the difference this module exists to expose, and the only one.
- *
- * Both implementations answer the same shape, and both treat a refused
- * network as a thrown error rather than an empty answer — the callers here
- * all have a "keep what you have" branch, and an outage that reads as an
- * empty catalogue is the one failure mode that would silently empty an app.
- */
-
-import { CapacitorHttp } from '@capacitor/core';
-import { isNative } from './index';
-
 export interface TextResponse {
   status: number;
   body: string;
@@ -28,13 +8,6 @@ export async function fetchText(
   url: string,
   headers: Record<string, string> = {},
 ): Promise<TextResponse> {
-  if (isNative()) {
-    const response = await CapacitorHttp.get({ url, headers, responseType: 'text' });
-    return {
-      status: response.status,
-      body: typeof response.data === 'string' ? response.data : JSON.stringify(response.data),
-    };
-  }
   const response = await fetch(url, { headers, cache: 'no-cache' });
   return { status: response.status, body: await response.text() };
 }

@@ -19,7 +19,7 @@ import react from '@vitejs/plugin-react';
 export const GENCON_PROXY = '/gencon';
 
 // `base: './'` keeps the build portable: it works when served from a domain
-// root, from a sub-path (GitHub Pages), or from a native shell's file:// bundle.
+// root, or from a sub-path (GitHub Pages).
 export default defineConfig({
   plugins: [react()],
   base: './',

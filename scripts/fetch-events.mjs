@@ -32,12 +32,8 @@
  *
  * About 1,100 requests, against 27,000.
  *
- * THE PAGING AND THE MAPPING NOW LIVE IN `src/lib/import-events.ts`, because
- * a native shell runs the same import on the phone when this project's own
- * hosting can no longer answer, and two importers that agree until the day
- * they quietly don't is the failure this whole file is careful about. Node
- * strips the types, Vite compiles them; both callers really do run those
- * lines. What stays here is what only a build machine does: the CLI, the
+ * THE PAGING AND THE MAPPING NOW LIVE IN `src/lib/import-events.ts`, so the
+ * mapping can be tested and typed in one place. Node strips the types. What stays here is what only a build machine does: the CLI, the
  * column packing, and writing the file.
  */
 
