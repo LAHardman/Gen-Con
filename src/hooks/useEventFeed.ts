@@ -27,7 +27,7 @@ const EMPTY_INDEX: EventIndex = {
  * that has not asked for one. `worker/` is what serves it.
  *
  * The pack's config wins over the build's, because it is newer: a mirror
- * that moves after the last release can still reach installed copies, which
+ * that moves after the last deploy can still reach installed copies, which
  * is the whole reason the mirror exists. Exported for the tests that hold
  * that precedence.
  */

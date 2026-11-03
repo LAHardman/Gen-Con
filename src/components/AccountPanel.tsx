@@ -77,9 +77,8 @@ export function AccountPanel({ state, onSignIn, onSignOut }: Props) {
     );
   }
 
-  // A shell with no sign-in host has no server to sign in through, and a
-  // form that cannot work is worse than an absent one — it looks like the
-  // password was wrong. See `accountBase`.
+  // With no sign-in server, a form that cannot work is worse than an absent
+  // one — it looks like the password was wrong.
   if (!canSignIn()) {
     return (
       <section className="account" aria-label="Gen Con account">

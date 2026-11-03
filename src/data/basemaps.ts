@@ -142,7 +142,7 @@ const COMPILED: Record<BasemapId, Basemap> = {
  * The compiled styles, with any overrides the pack's config carries laid on
  * top. The override channel exists for exactly one story: a provider
  * retires a style out from under installed copies, and the repair is a
- * config edit and a deploy rather than an app release. With the config
+ * config edit and a deploy rather than a code change. With the config
  * empty — the ordinary case — this is `COMPILED`, byte for byte.
  */
 export const BASEMAPS: Record<BasemapId, Basemap> = Object.fromEntries(
