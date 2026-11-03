@@ -1,0 +1,23 @@
+name: Probe eventdb (temporary)
+on:
+  push:
+    branches: [eventdb-import]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sample one hour page
+        run: |
+          curl -sS -m 60 -A "Gen-Con-trip-planner (personal project)" -o /tmp/t.html "https://gencon.eventdb.us/dayTime.php?StartDate=2026-07-30%2010:00:00"
+          python3 - <<'PY'
+          import re
+          t=open('/tmp/t.html',errors='replace').read()
+          i=t.find("<div class='indentXS"); 
+          print("first-heading-at",i,"headings:",len(re.findall(r"indentXS",t)),"event links:",t.count("event.php?GameCode="))
+          print(t[i:i+2600])
+          print("=== a later stretch"); j=t.find("indentXS",i+20000); print(t[j-200:j+1500])
+          print("=== distinct classes:",sorted(set(re.findall(r"class='(indent[A-Za-z ]*)'",t))))
+          print("=== sample with extra markers:", re.findall(r"<i class='(icon-[a-z-]+)'",t)[:0], sorted(set(re.findall(r"<i class='(icon-[a-z-]+)'",t))))
+          PY
