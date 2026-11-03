@@ -143,7 +143,7 @@ const INSTRUCTIONS = [
   `Gen Con announces each card at ${PRESS_INDEX} in January, and repeats it as a table on ${SOURCE}. Take it from the release — its title names the year, and the page's table does not.`,
   'Check the small print under the page\'s table too: the Marion County admissions tax (`COMPILED_TAX`) and the USPS packet fee (`COMPILED_SHIPPING_CENTS`) are stated there and are not in the table.',
   'Prices found inside an HTML comment on the badge page are last cycle\'s, left there while the new one is written — never ship those as the new year\'s.',
-  'Then `npm run check`: `badge-prices.test.ts` holds the shape and the trend, and `npm run build:pack` puts the new card where installed copies can take it without a release.',
+  'Then `npm run check`: `badge-prices.test.ts` holds the shape and the trend, and `npm run build:pack` puts the new card where installed copies can take it without a new deploy of the app code.',
 ];
 
 export const probe: Probe = {

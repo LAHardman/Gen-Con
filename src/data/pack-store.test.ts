@@ -146,10 +146,9 @@ describe('where the pack is fetched from', () => {
     expect(packBase()).toBe('./pack/');
   });
 
-  it('takes the config’s host, slash or no slash, for a shell with no origin', async () => {
-    // A native shell is served from file://, where a relative path finds
-    // only what was baked into the bundle. The config can move this host
-    // later, which is what keeps a moved pack from stranding installed copies.
+  it('takes the config’s host, slash or no slash', async () => {
+    // The config can move this host later, which keeps a moved pack from
+    // stranding copies already installed.
     stashPack({ config: { basemaps: {}, rescues: null, eventsMirror: null, packHost: 'https://pack.example' } });
     vi.resetModules();
     const { packBase } = await import('./pack-store');

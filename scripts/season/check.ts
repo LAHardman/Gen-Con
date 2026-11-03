@@ -38,12 +38,10 @@ import { probe as osmAge } from './probes/osm-age';
 import { probe as foodTags } from './probes/food-tags';
 import { probe as mirror } from './probes/mirror';
 import { workflowsProbe, openDataPrsProbe } from './probes/automation';
-import { probe as storeDates } from './probes/store-dates';
 import { probe as boothAgreement } from './probes/booth-agreement';
 
 /** Slowest and network-heaviest last, local file reads first. */
 const PROBES: Probe[] = [
-  storeDates,
   foodTags,
   osmAge,
   parking,

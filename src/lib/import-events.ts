@@ -1,14 +1,9 @@
 /**
- * Importing Gen Con's catalogue — the one implementation, for both callers.
+ * Importing Gen Con's catalogue.
  *
  * `scripts/fetch-events.mjs` runs this on a build machine and writes
- * `events.json`; a native shell runs the identical code on the phone when
- * this project's own hosting can no longer answer. Two callers, one
- * implementation, because the alternative is two importers that agree until
- * the day they quietly don't — and the failure they would share is the
- * quiet one: a feed of exactly the right length in which nothing can be
- * found. (Node strips the types and Vite compiles them, so both really do
- * run these lines.)
+ * `events.json`. Beware the quiet failure: a feed of exactly the right length
+ * in which nothing can be found.
  *
  * THE OBSTACLE, and how it is got round. The endpoint pages 25 at a time
  * and stops at page 400 — a 10,000-record window, which is Elasticsearch's
@@ -19,12 +14,8 @@
  * stops being true when a convention gets bigger — and a partial schedule
  * looks precisely like a complete one.
  *
- * WHY A PHONE MAY DO THIS AT ALL. A browser cannot: gencon.com sends no
- * `Access-Control-Allow-Origin`. A native request leaves from native code,
- * where that does not apply. It is about 1,100 requests at a polite pace,
- * so it is the *insurance*, not the ordinary path — see `deviceImport` in
- * `src/data/schedule-import.ts` for the rules about when it is allowed to
- * run at all.
+ * WHY ONLY A BUILD MACHINE RUNS THIS. A browser cannot: gencon.com sends no
+ * `Access-Control-Allow-Origin`. It is about 1,100 requests at a polite pace.
  */
 
 import type { ConEvent } from '../data/events';

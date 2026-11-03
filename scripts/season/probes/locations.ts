@@ -105,7 +105,7 @@ function assess(raw: unknown, source: string): ProbeResult {
     instructions: [
       'Each alias added recovers every event that uses the wording; start from the biggest counts above.',
       'Then `npm run check` — `events.test.ts` runs the matcher over every distinct location string and holds the floor.',
-      'A wording that names a building the map has never drawn is the yearly "new venue" case: docs/mobile.md §8 and the venue block in `venues.ts` are the path.',
+      'A wording that names a building the map has never drawn is the yearly "new venue" case; add it to the venue aliases in `venues.ts`.',
     ],
   };
 }

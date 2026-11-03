@@ -6,8 +6,7 @@
  * that moves. Each of those lives here as a pack table of *overrides*,
  * empty in the ordinary case, so the repair for something external dying
  * under a copy nobody can update is one edit to `config.json` and a deploy:
- * every running copy picks it up with its next pack refresh, web and
- * (eventually) native alike.
+ * every running copy picks it up with its next pack refresh.
  *
  * The compiled snapshot of this file is the floor, like every pack table —
  * a copy that never reaches a pack again behaves exactly as built — and the
@@ -42,20 +41,9 @@ export interface RuntimeConfig {
   rescues: RescueOverride[] | null;
   /** Where a schedule can be fetched when the main host is gone, or null. */
   eventsMirror: string | null;
-  /**
-   * Where the pack is published, for a copy with no origin of its own to be
-   * relative to. Null means "beside the app", which is right on the web and
-   * never right in a native shell, where the compiled-in default takes over.
-   */
+  /** Where the pack is published; null means beside the app. */
   packHost: string | null;
-  /**
-   * Where the sign-in endpoints live, for a shell with no server of its own.
-   *
-   * Null — the default — means signing in is a web-app feature and the
-   * native panel says so plainly, rather than offering a form that cannot
-   * work. Pointed at a deployed Worker, the native app signs in through it
-   * exactly as the website does.
-   */
+  /** Where the sign-in endpoints live; null means same-origin. */
   accountHost: string | null;
 }
 

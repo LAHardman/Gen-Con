@@ -19,7 +19,7 @@ import react from '@vitejs/plugin-react';
 export const GENCON_PROXY = '/gencon';
 
 // `base: './'` keeps the build portable: it works when served from a domain
-// root, from a sub-path (GitHub Pages), or from a native shell's file:// bundle.
+// root, or from a sub-path (GitHub Pages).
 export default defineConfig({
   plugins: [react()],
   base: './',
@@ -114,6 +114,11 @@ export default defineConfig({
     ],
     // A stubbed geolocation or timer in one file must not leak into the next.
     restoreMocks: true,
+    // Newer Node ships its own `localStorage`, which hides jsdom's. Older Node
+    // doesn't know the flag, so it is only passed where it exists.
+    execArgv: process.allowedNodeEnvironmentFlags.has('--experimental-webstorage')
+      ? ['--no-experimental-webstorage']
+      : [],
     unstubGlobals: true,
   },
 });

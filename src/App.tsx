@@ -19,7 +19,6 @@ import { ROOMS_BY_ID, defaultLevel, type Room } from './data/venues';
 import { boothAt } from './data/booth-place';
 import { BASEMAPS, BASEMAP_IDS, type BasemapId } from './data/basemaps';
 import { useEventFeed } from './hooks/useEventFeed';
-import { useDeviceImport } from './hooks/useDeviceImport';
 import { useFollowedRoute } from './hooks/useFollowedRoute';
 import { useDeviceLocation, useLocationGranted } from './hooks/useDeviceLocation';
 import { useWarmCampus } from './hooks/useWarmCampus';
@@ -124,8 +123,6 @@ export default function App() {
   const [pickOnMap, setPickOnMap] = useState(false);
 
   const { status, feed, index } = useEventFeed();
-  // Almost always decides not to run; see `shouldDeviceImport`.
-  const deviceImport = useDeviceImport(feed);
 
   // Somebody's own schedule, kept on the device. Read once on load and written
   // on every change — see `usePlan` for why it lives nowhere else.
@@ -569,9 +566,7 @@ export default function App() {
                 showing is part of the same sentence. */}
             <p>
               <span className="app__page">{PAGES.find((page) => page.id === tab)?.label}</span>
-              {deviceImport.running
-                ? `Importing the schedule from Gen Con${deviceImport.expected ? ` · ${deviceImport.got.toLocaleString()} of ${deviceImport.expected.toLocaleString()}` : '…'}`
-                : status === 'ready' && index
+              {status === 'ready' && index
                 ? `${index.total.toLocaleString()} events${feedVintage !== null ? ` · ${feedVintage} schedule` : ''}${liveCount > 0 ? ` · ${liveCount} on now` : ''}`
                 : status === 'absent'
                   ? 'Venue map · no event data'
@@ -658,8 +653,6 @@ export default function App() {
             offsetMinutes={offsetMinutes}
             nowMs={nowMs}
             feedVintage={feedVintage}
-            onImport={deviceImport.last?.status === 'refused' && deviceImport.last.because.includes('installed app') ? undefined : deviceImport.start}
-            importing={deviceImport.running}
             onOpenEvent={(hit) =>
               setOpenDetail({ kind: 'event', event: hit.event, room: hit.room, pin: hit.pin })
             }

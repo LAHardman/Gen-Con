@@ -17,7 +17,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { CONFIG } from '../data/config';
-import { isNative } from '../platform';
 
 export interface Profile {
   username?: string;
@@ -53,29 +52,17 @@ const problem = (reason: string, says: string): AuthState => {
 };
 
 /**
- * Where the sign-in endpoints are.
+ * The sign-in endpoints use the same origin unless a host is configured.
  *
- * Same-origin on the web, where `functions/gencon/` serves them — a browser
- * needs that server, because gencon.com sends no CORS header, its session
- * cookie is `HttpOnly`, and it is `SameSite=Lax`: three walls, all
- * deliberate. A native shell is served from `file://` and has no origin to
- * be relative to, so it needs a host named; without one, signing in is a
- * web-app feature and the panel says so rather than offering a form that
- * cannot work.
- *
- * (A native shell has none of those three walls and could one day sign in
- * to gencon.com directly, retiring the Worker rather than needing it. That
- * is worth doing and is not done here: a half-built credential path is the
- * one thing worse than an honest "not here yet".)
+ * Sign-in needs this project's own small server, because gencon.com sends no
+ * CORS header, its session cookie is `HttpOnly`, and it is `SameSite=Lax`.
+ * A configured `accountHost` can point at a separately deployed Worker.
  */
-export function accountBase(): string | null {
+export function accountBase(): string {
   const configured = (CONFIG.accountHost ?? '').trim();
   if (configured) return configured.replace(/\/$/, '');
-  return isNative() ? null : '';
+  return '';
 }
-
-/** Whether this copy can sign in at all. */
-export const canSignIn = (): boolean => accountBase() !== null;
 
 export function useGenConAccount() {
   const [state, setState] = useState<AuthState>({ status: 'unknown' });
@@ -84,7 +71,6 @@ export function useGenConAccount() {
   const refresh = useCallback(async (): Promise<AuthState> => {
     try {
       const base = accountBase();
-      if (base === null) return { status: 'out' };
       const response = await fetch(`${base}/gencon/whoami`, { credentials: 'same-origin' });
       const body = await response.json();
       const next: AuthState = body.ok
@@ -117,9 +103,6 @@ export function useGenConAccount() {
       setState({ status: 'busy' });
       try {
         const base = accountBase();
-        if (base === null) {
-          return { status: 'broken', says: 'Signing in is not available in the app; use the website.' };
-        }
         const response = await fetch(`${base}/gencon/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

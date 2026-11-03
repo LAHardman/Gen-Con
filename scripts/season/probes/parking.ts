@@ -96,7 +96,7 @@ const INSTRUCTIONS = [
   'The official entry (`ipark-lucas-oil`) takes a single published figure in both `lowCents` and `highCents` while booking is open, and `null` in both once iPark takes the event down again — null prints as "priced when booking opens", which is true, and zero would print as free, which is not.',
   'The downtown garages are ranges, not points: printing a single figure would invent a precision nobody has, which is the file\'s own rule. Convention-week prices come from attendee reports on gencon.com/forums.',
   `If Gen Con's help-centre article names a different partner, change \`OFFICIAL_SOURCE\` and \`IPARK_EVENTS\` to match — the article is the authority, not this file.`,
-  'Then `npm run check`, and `npm run build:pack` so installed copies can take the new figures without a release.',
+  'Then `npm run check`, and `npm run build:pack` so installed copies can take the new figures without a new deploy of the app code.',
 ];
 
 export const probe: Probe = {

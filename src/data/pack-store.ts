@@ -17,12 +17,8 @@
  * installed copy that can never update again has no way back from a
  * misread.
  *
- * Web and native differ in exactly two places, both behind `src/platform/`:
- * where the bytes are kept (an evictable cache; a file that outlives a
- * low-disk morning) and where they are fetched from — a native shell has no
- * origin of its own to be relative to, so it needs a pack host, and because
- * that host could one day move under copies nobody can update, the config
- * table can rewrite it.
+ * The pack normally lives beside the web app. `packHost` can point at a
+ * separate static host if the files need to be served elsewhere.
  */
 
 import { CONFIG } from './config';
@@ -35,11 +31,8 @@ const MANIFEST = 'manifest.json';
 /**
  * Where this copy's pack lives.
  *
- * Beside the app on the web, which is both right and free. A native shell
- * is served from `file://`, where a relative path would find only the
- * tables baked into the bundle — so it takes the host compiled in at build
- * time (`VITE_PACK_HOST`), and the config table can override that later for
- * the day the pack moves house.
+ * Beside the app by default; a build-time or runtime override can point to
+ * a separately hosted pack.
  */
 export function packBase(): string {
   const configured = CONFIG.packHost ?? import.meta.env.VITE_PACK_HOST ?? '';

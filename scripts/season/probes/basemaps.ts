@@ -121,7 +121,7 @@ export const probe: Probe = {
         : ['None of the known substitutes answered either — this looks network-wide rather than a retired style.'],
       instructions: [
         'Swap the dead URL in `src/data/basemaps.ts` for a working substitute above; each entry needs its `url` and `labelsUrl` pair, and the attribution its terms require must stay.',
-        'For installed apps this is why the plan moves these URLs into `pack/config.json` — once that ships, the same fix is a pack publish instead of a release.',
+        'These URLs can also be overridden in `pack/config.json`, which fixes installed copies with a pack publish instead of a code change.',
         'The three-provider layout and the split-label reasoning are documented at the top of `basemaps.ts`; keep any replacement to the same shape.',
       ],
     };
