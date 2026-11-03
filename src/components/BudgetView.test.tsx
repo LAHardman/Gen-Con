@@ -442,6 +442,29 @@ describe('parking', () => {
     fireEvent.change(box, { target: { value: '52' } });
     expect(lineTotals('Getting there')).toEqual(['$208.00']);
   });
+
+  it('keeps the parking estimate and the assigned driver after reopening the budget', () => {
+    const first = render(<Budget />);
+    addPerson('Jordan');
+    addPerson('Sam');
+    const where = section('Getting there');
+    fireEvent.click(within(where).getByRole('button', { name: 'Add parking' }));
+    fireEvent.change(within(where).getByLabelText('Days'), { target: { value: '4' } });
+    fireEvent.click(within(where).getByRole('button', { name: /Circle Centre Mall/ }));
+    fireEvent.click(within(section('Getting there')).getByRole('button', { name: 'Jordan' }));
+
+    expect(tableRow('Getting there')).toEqual(['$148.00', '$0.00', '$148.00']);
+    first.unmount();
+
+    render(<Budget />);
+    const reopened = section('Getting there');
+    expect(within(reopened).getByText('Parking · Circle Centre Mall')).toBeTruthy();
+    expect(within(reopened).getByDisplayValue('37.00')).toBeTruthy();
+    expect(lineTotals('Getting there')).toEqual(['$148.00']);
+    expect(tableRow('Getting there')).toEqual(['$148.00', '$0.00', '$148.00']);
+    expect(within(reopened).getByRole('button', { name: 'Jordan' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(reopened).getByRole('button', { name: 'Sam' }).getAttribute('aria-pressed')).toBe('false');
+  });
 });
 
 describe('what cannot both be true', () => {
