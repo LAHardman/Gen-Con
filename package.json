@@ -17,6 +17,7 @@
     "plans:venues": "node scripts/venue-plans.mjs",
     "plans:campus": "node scripts/gencon-tiles.mjs",
     "fetch:events": "tsx scripts/fetch-events.mjs",
+    "fetch:events:mirror": "tsx scripts/fetch-events-eventdb.mjs",
     "fetch:pavements": "node scripts/fetch-pavements.mjs",
     "fetch:exhibitors": "node scripts/fetch-exhibitors.mjs",
     "data:distances": "node scripts/build-distances.mjs",

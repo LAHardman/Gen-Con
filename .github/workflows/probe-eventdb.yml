@@ -8,16 +8,20 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Sample one hour page
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:events:mirror
+      - name: What was written
         run: |
-          curl -sS -m 60 -A "Gen-Con-trip-planner (personal project)" -o /tmp/t.html "https://gencon.eventdb.us/dayTime.php?StartDate=2026-07-30%2010:00:00"
-          python3 - <<'PY'
-          import re
-          t=open('/tmp/t.html',errors='replace').read()
-          i=t.find("<div class='indentXS"); 
-          print("first-heading-at",i,"headings:",len(re.findall(r"indentXS",t)),"event links:",t.count("event.php?GameCode="))
-          print(t[i:i+2600])
-          print("=== a later stretch"); j=t.find("indentXS",i+20000); print(t[j-200:j+1500])
-          print("=== distinct classes:",sorted(set(re.findall(r"class='(indent[A-Za-z ]*)'",t))))
-          print("=== sample with extra markers:", re.findall(r"<i class='(icon-[a-z-]+)'",t)[:0], sorted(set(re.findall(r"<i class='(icon-[a-z-]+)'",t))))
-          PY
+          ls -la public/events.json
+          node -e "
+          const {expandFeed}=0; const f=JSON.parse(require('fs').readFileSync('public/events.json','utf8'));
+          console.log('format',f.format,'count',f.count,'year',f.year,JSON.stringify(f.source));
+          console.log('types',JSON.stringify(f.keys.type));
+          console.log('first',f.columns.title.slice(0,3),f.keys.start.slice(0,2),f.keys.start.slice(-2));
+          console.log('cost sample',f.columns.cost.slice(0,8),'tickets',f.columns.ticketsAvailable.slice(0,8));
+          "

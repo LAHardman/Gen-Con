@@ -101,6 +101,15 @@ jobs:
         continue-on-error: true
         run: npm run fetch:events -- --delay ${{ inputs.request_delay || 150 }}
 
+      # Between conventions Gen Con's catalogue is empty. If there is still no
+      # schedule at all (no import, no earlier published copy), read the last
+      # convention from the community mirror, so there is a draft to plan from.
+      # Skipped whenever a schedule exists, so the mirror is asked at most once.
+      - name: Fall back to the community mirror
+        if: hashFiles('public/events.json') == ''
+        continue-on-error: true
+        run: npm run fetch:events:mirror
+
       # Push the snapshot to the mirror, if one is configured. Inert until the
       # EVENTS_MIRROR_URL variable and EVENTS_MIRROR_TOKEN secret are set, and
       # never fatal — a mirror that cannot be reached is not a reason to stop
