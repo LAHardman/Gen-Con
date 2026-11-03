@@ -58,14 +58,11 @@ const problem = (reason: string, says: string): AuthState => {
  * CORS header, its session cookie is `HttpOnly`, and it is `SameSite=Lax`.
  * A configured `accountHost` can point at a separately deployed Worker.
  */
-export function accountBase(): string | null {
+export function accountBase(): string {
   const configured = (CONFIG.accountHost ?? '').trim();
   if (configured) return configured.replace(/\/$/, '');
   return '';
 }
-
-/** Whether this copy can sign in at all. */
-export const canSignIn = (): boolean => accountBase() !== null;
 
 export function useGenConAccount() {
   const [state, setState] = useState<AuthState>({ status: 'unknown' });
@@ -74,7 +71,6 @@ export function useGenConAccount() {
   const refresh = useCallback(async (): Promise<AuthState> => {
     try {
       const base = accountBase();
-      if (base === null) return { status: 'out' };
       const response = await fetch(`${base}/gencon/whoami`, { credentials: 'same-origin' });
       const body = await response.json();
       const next: AuthState = body.ok
@@ -107,9 +103,6 @@ export function useGenConAccount() {
       setState({ status: 'busy' });
       try {
         const base = accountBase();
-        if (base === null) {
-          return { status: 'broken', says: 'Signing in is not available in the app; use the website.' };
-        }
         const response = await fetch(`${base}/gencon/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

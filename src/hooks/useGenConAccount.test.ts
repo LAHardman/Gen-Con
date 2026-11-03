@@ -15,9 +15,8 @@ async function load() {
 
 describe('where the sign-in endpoints are', () => {
   it('are same-origin by default', async () => {
-    const { accountBase, canSignIn } = await load();
+    const { accountBase } = await load();
     expect(accountBase()).toBe('');
-    expect(canSignIn()).toBe(true);
   });
 
   it('are wherever the config says', async () => {
@@ -30,9 +29,8 @@ describe('where the sign-in endpoints are', () => {
         accountHost: 'https://gencontrip.example/',
       },
     });
-    const { accountBase, canSignIn } = await load();
+    const { accountBase } = await load();
     // Trailing slash trimmed, because every caller appends one.
     expect(accountBase()).toBe('https://gencontrip.example');
-    expect(canSignIn()).toBe(true);
   });
 });
