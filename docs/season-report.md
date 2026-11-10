@@ -1,4 +1,4 @@
-# Season report — 2026-W45
+# Season report — 2026-W46
 
 Written by `npm run season:check` (see `scripts/season/`). Regenerated weekly
 by the season workflow; the commit is also what keeps the scheduled workflows
@@ -8,7 +8,7 @@ inside GitHub's 60-day activity window.
 | --- | --- | --- |
 | Food tag vocabulary | ✓ ok | all 49 tags the food vendors carry are filed or deliberately absent |
 | OpenStreetMap table ages | ✓ ok | every OSM-sourced table is inside its shelf life |
-| Parking figures | ✓ ok | checked 2026-08-28, 67 days ago — 7 entries, Gen Con's own among them |
+| Parking figures | ✓ ok | checked 2026-08-28, 74 days ago — 7 entries, Gen Con's own among them |
 | Badge prices | ⚠ warn | 2027's prices are not published yet; the app shows 2026's, labelled, with an estimate from 4 cards beside it |
 | Event feed fields | ✗ FAIL | event_search answered 200 but no event records were recognised in the response |
 | Key dates vs the API | ✓ ok | the rule reproduces all 4 published milestones for 2027 on, to the instant |
@@ -96,7 +96,7 @@ To fix:
 
 What was seen:
 
-- 33 days: Refresh the stand list from Gen Con — https://github.com/LAHardman/Gen-Con/pull/35
+- 40 days: Refresh the stand list from Gen Con — https://github.com/LAHardman/Gen-Con/pull/35
 
 To fix:
 
